@@ -1,0 +1,22 @@
+export const INVENTORY_ITEMS = [
+    { id: 'IPAD_001', name: 'iPad_001', storageLocation: 'MCIC AV Roller Shutter', status: 'Available', user: '-' },
+    { id: 'IPAD_002', name: 'iPad_002', storageLocation: 'MCIC AV Roller Shutter', status: 'Available', user: '-' },
+    { id: 'IPAD_003', name: 'iPad_003', storageLocation: 'MCIC AV Roller Shutter', status: 'Borrowed', user: 'Sarah Jenkins (Business)' },
+    { id: 'MAC_001', name: 'Mac Laptop_001', storageLocation: 'Fishbowl', status: 'Available', user: '-' },
+    { id: 'MAC_002', name: 'Mac Laptop_002', storageLocation: 'Fishbowl', status: 'Available', user: '-' },
+    { id: 'DELL_003', name: 'Dell Laptop_003', storageLocation: 'Fishbowl', status: 'Available', user: '-' },
+    { id: 'DELL_004', name: 'Dell Laptop_004', storageLocation: 'Fishbowl', status: 'Available', user: '-' },
+    { id: 'DELL_005', name: 'Dell Laptop_005', storageLocation: 'Fishbowl', status: 'Available', user: '-' },
+    { id: 'DELL_007', name: 'Dell Laptop_007', storageLocation: 'Fishbowl', status: 'Available', user: '-' },
+    { id: 'DELL_008', name: 'Dell Laptop_008', storageLocation: 'Fishbowl', status: 'Available', user: '-' },
+    { id: 'DELL_009', name: 'Dell Laptop_009', storageLocation: 'Fishbowl', status: 'Borrowed', user: 'Alex Smith (Engineering)' },
+    { id: 'MAC_010', name: 'Mac Laptop_010', storageLocation: 'Fishbowl', status: 'Available', user: '-' },
+    { id: 'MAC_011', name: 'Mac Laptop _11', storageLocation: 'Fishbowl', status: 'Available', user: '-' },
+    { id: 'WHEEL_01', name: 'Lottery Wheel', storageLocation: 'Fishbowl', status: 'Available', user: '-' },
+    { id: 'LECTERN_01', name: 'Lectern', storageLocation: 'Fishbowl', status: 'Available', user: '-' },
+    { id: 'TV_001', name: 'Portable TV on Stand #001', storageLocation: 'Fishbowl', status: 'Available', user: '-' },
+    { id: 'TV_002', name: 'Portable TV on Stand #002', storageLocation: 'Fishbowl', status: 'Available', user: '-' },
+    { id: 'TV_003', name: 'Portable TV on Stand #003', storageLocation: 'Fishbowl', status: 'Available', user: '-' },
+    { id: 'STANDS_A3', name: '15 x A3 Plastic Stands (Pool)', storageLocation: 'MCIC Storage Roller Shutter', status: 'Available', user: '-' },
+    { id: 'KEYS_L5', name: '5 x Level 5 Room Keys', storageLocation: 'Coordinator Desk', status: 'Available', user: '-' }
+];
