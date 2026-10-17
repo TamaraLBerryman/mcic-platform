@@ -26,9 +26,10 @@ export default function BorrowPage({ params }) {
     const [bookingStartTime, setBookingStartTime] = useState('');
     const [bookingEndTime, setBookingEndTime] = useState('');
 
-    // Reporting Broken / Damaged Asset States
+    // Reporting Low Stock / Broken Asset States
+    const [reportType, setReportType] = useState('broken'); // 'broken' | 'stock'
     const [reportDescription, setReportDescription] = useState('');
-    const [supplyAlert, setSupplyAlert] = useState(false);
+    const [supplyAlert, setSupplyAlert] = useState(null);
 
     // Fetch item document from Firebase Firestore
     useEffect(() => {
@@ -119,14 +120,16 @@ export default function BorrowPage({ params }) {
         }
     };
 
-    // Report Damaged Asset Handler (Uses known item name and storage location)
+    // Report Low Stock or Maintenance/Damage Handler
     const handleReportSubmit = async (e) => {
         e.preventDefault();
         if (!itemDetails || !reportDescription.trim()) return;
 
+        const actionTag = reportType === 'broken' ? 'Maintenance / Damaged Asset' : 'Low Stock Alert';
+
         try {
             await addDoc(collection(db, "alerts"), {
-                type: 'Maintenance / Damaged Asset',
+                type: actionTag,
                 itemId: itemDetails.id,
                 item: itemDetails.name,
                 location: itemDetails.storageLocation || 'Unknown Location',
@@ -135,11 +138,11 @@ export default function BorrowPage({ params }) {
                 createdAt: new Date().toISOString()
             });
 
-            setSupplyAlert(true);
+            setSupplyAlert(`${actionTag} for ${itemDetails.name}`);
             setReportDescription('');
         } catch (err) {
-            console.error("Error logging damage report to Firebase:", err);
-            alert("Failed to submit damage report.");
+            console.error("Error logging report to Firebase:", err);
+            alert("Failed to submit report.");
         }
     };
 
@@ -206,7 +209,7 @@ export default function BorrowPage({ params }) {
 
                     {actionSuccess ? (
                         <div className={`p-4 font-bold text-xs text-center uppercase tracking-wider rounded-sm animate-pulse ${actionSuccess === 'reservation' ? 'bg-black text-[#EAD64D]' :
-                                actionSuccess === 'borrow' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-[#EAD64D] text-black'
+                            actionSuccess === 'borrow' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-[#EAD64D] text-black'
                             }`}>
                             {actionSuccess === 'reservation' && "📅 Future Asset Reservation Logged"}
                             {actionSuccess === 'borrow' && "✓ Asset Returned to Stock"}
@@ -226,8 +229,8 @@ export default function BorrowPage({ params }) {
                                             type="button"
                                             onClick={() => setCheckoutIntent('now')}
                                             className={`p-2.5 text-[10px] font-bold uppercase tracking-wider rounded-sm border transition-colors cursor-pointer ${checkoutIntent === 'now'
-                                                    ? 'bg-black text-[#EAD64D] border-black'
-                                                    : 'bg-white text-gray-600 border-gray-200 hover:bg-neutral-50'
+                                                ? 'bg-black text-[#EAD64D] border-black'
+                                                : 'bg-white text-gray-600 border-gray-200 hover:bg-neutral-50'
                                                 }`}
                                         >
                                             Checkout Now
@@ -236,8 +239,8 @@ export default function BorrowPage({ params }) {
                                             type="button"
                                             onClick={() => setCheckoutIntent('future')}
                                             className={`p-2.5 text-[10px] font-bold uppercase tracking-wider rounded-sm border transition-colors cursor-pointer ${checkoutIntent === 'future'
-                                                    ? 'bg-black text-[#EAD64D] border-black'
-                                                    : 'bg-white text-gray-600 border-gray-200 hover:bg-neutral-50'
+                                                ? 'bg-black text-[#EAD64D] border-black'
+                                                : 'bg-white text-gray-600 border-gray-200 hover:bg-neutral-50'
                                                 }`}
                                         >
                                             Book Future Date 📅
@@ -258,8 +261,8 @@ export default function BorrowPage({ params }) {
                                                 type="button"
                                                 onClick={() => setDateSelectionType('single')}
                                                 className={`p-2 text-[10px] font-bold uppercase tracking-wider rounded-sm border transition-colors cursor-pointer ${dateSelectionType === 'single'
-                                                        ? 'bg-neutral-800 text-white border-neutral-800'
-                                                        : 'bg-white text-gray-600 border-gray-200'
+                                                    ? 'bg-neutral-800 text-white border-neutral-800'
+                                                    : 'bg-white text-gray-600 border-gray-200'
                                                     }`}
                                             >
                                                 Individual Date
@@ -268,8 +271,8 @@ export default function BorrowPage({ params }) {
                                                 type="button"
                                                 onClick={() => setDateSelectionType('range')}
                                                 className={`p-2 text-[10px] font-bold uppercase tracking-wider rounded-sm border transition-colors cursor-pointer ${dateSelectionType === 'range'
-                                                        ? 'bg-neutral-800 text-white border-neutral-800'
-                                                        : 'bg-white text-gray-600 border-gray-200'
+                                                    ? 'bg-neutral-800 text-white border-neutral-800'
+                                                    : 'bg-white text-gray-600 border-gray-200'
                                                     }`}
                                             >
                                                 Date Range
@@ -374,8 +377,8 @@ export default function BorrowPage({ params }) {
                                                 type="button"
                                                 onClick={() => setIsUnswFoundersTeam('yes')}
                                                 className={`p-2.5 text-[10px] font-bold uppercase tracking-wider rounded-sm border transition-colors cursor-pointer ${isUnswFoundersTeam === 'yes'
-                                                        ? 'bg-black text-[#EAD64D] border-black'
-                                                        : 'bg-white text-gray-600 border-gray-200 hover:bg-neutral-50'
+                                                    ? 'bg-black text-[#EAD64D] border-black'
+                                                    : 'bg-white text-gray-600 border-gray-200 hover:bg-neutral-50'
                                                     }`}
                                             >
                                                 Yes
@@ -384,8 +387,8 @@ export default function BorrowPage({ params }) {
                                                 type="button"
                                                 onClick={() => setIsUnswFoundersTeam('no')}
                                                 className={`p-2.5 text-[10px] font-bold uppercase tracking-wider rounded-sm border transition-colors cursor-pointer ${isUnswFoundersTeam === 'no'
-                                                        ? 'bg-black text-[#EAD64D] border-black'
-                                                        : 'bg-white text-gray-600 border-gray-200 hover:bg-neutral-50'
+                                                    ? 'bg-black text-[#EAD64D] border-black'
+                                                    : 'bg-white text-gray-600 border-gray-200 hover:bg-neutral-50'
                                                     }`}
                                             >
                                                 No
@@ -432,14 +435,14 @@ export default function BorrowPage({ params }) {
                     )}
                 </div>
 
-                {/* REPORT ITEM BROKEN / DAMAGED SECTION */}
+                {/* REPORT LOW STOCK OR BROKEN ITEM SECTION */}
                 <div className="bg-white border border-gray-200 p-6 sm:p-8 rounded-sm shadow-sm space-y-6">
                     <div className="border-b border-gray-100 pb-4 space-y-1">
                         <h2 className="text-xl font-extrabold uppercase text-black tracking-tight">
-                            Report Item Broken / Damaged
+                            Report Issue / Low Stock
                         </h2>
                         <p className="text-xs text-gray-500 font-normal">
-                            Noticed an issue or damage with <span className="font-bold text-black">{itemDetails.name}</span>? Submit a maintenance ticket directly to operations.
+                            Is <span className="font-bold text-black">{itemDetails.name}</span> damaged or running low in stock? Send a ticket directly to operations.
                         </p>
                     </div>
 
@@ -447,11 +450,11 @@ export default function BorrowPage({ params }) {
                         <div className="p-4 bg-[#EAD64D] text-black font-bold text-xs rounded-xs flex justify-between items-center shadow-xs border border-black animate-in fade-in duration-150">
                             <div className="flex items-center gap-2.5">
                                 <span className="text-base">✓</span>
-                                <span>Damage report for <strong>{itemDetails.name}</strong> sent to MCIC Ops!</span>
+                                <span>Report for <strong>{supplyAlert}</strong> sent to MCIC Ops!</span>
                             </div>
                             <button
                                 type="button"
-                                onClick={() => setSupplyAlert(false)}
+                                onClick={() => setSupplyAlert(null)}
                                 className="text-black font-extrabold px-2 py-0.5 hover:bg-black hover:text-white rounded-xs transition-colors cursor-pointer"
                             >
                                 ✕
@@ -461,13 +464,41 @@ export default function BorrowPage({ params }) {
 
                     <form onSubmit={handleReportSubmit} className="space-y-4">
                         <div className="space-y-1.5">
+                            <label className="text-[10px] font-bold uppercase tracking-wider text-gray-500 block">
+                                Report Type
+                            </label>
+                            <div className="grid grid-cols-2 gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setReportType('broken')}
+                                    className={`p-2.5 text-[10px] font-bold uppercase tracking-wider rounded-sm border transition-colors cursor-pointer ${reportType === 'broken'
+                                        ? 'bg-black text-[#EAD64D] border-black'
+                                        : 'bg-white text-gray-600 border-gray-200 hover:bg-neutral-50'
+                                        }`}
+                                >
+                                    🔧 Broken / Damaged
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setReportType('stock')}
+                                    className={`p-2.5 text-[10px] font-bold uppercase tracking-wider rounded-sm border transition-colors cursor-pointer ${reportType === 'stock'
+                                        ? 'bg-black text-[#EAD64D] border-black'
+                                        : 'bg-white text-gray-600 border-gray-200 hover:bg-neutral-50'
+                                        }`}
+                                >
+                                    ⚠️ Low Stock / Empty
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="space-y-1.5">
                             <label className="font-extrabold text-black uppercase text-xs tracking-wide block">
-                                Describe the issue or damage *
+                                {reportType === 'broken' ? 'Describe the issue or damage *' : 'Describe the stock status *'}
                             </label>
                             <textarea
                                 required
                                 rows="3"
-                                placeholder="e.g. Screen flickering, cable frayed, hinge loose..."
+                                placeholder={reportType === 'broken' ? "e.g. Screen flickering, cable frayed, missing part..." : "e.g. Only 1 left in box, completely empty..."}
                                 value={reportDescription}
                                 onChange={(e) => setReportDescription(e.target.value)}
                                 className="w-full p-3.5 border border-neutral-300 bg-white text-xs font-medium rounded-xs outline-none focus:border-black text-black placeholder-gray-400"
@@ -478,7 +509,7 @@ export default function BorrowPage({ params }) {
                             type="submit"
                             className="w-full bg-black text-[#EAD64D] font-extrabold py-3.5 text-xs uppercase tracking-wider rounded-xs hover:bg-[#EAD64D] hover:text-black transition-colors cursor-pointer"
                         >
-                            Submit Damage Report 🔧
+                            {reportType === 'broken' ? 'Submit Damage Report 🔧' : 'Report Low Stock ⚠️'}
                         </button>
                     </form>
                 </div>

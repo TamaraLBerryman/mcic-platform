@@ -21,6 +21,9 @@ export default function AddInventoryItemPage() {
     const [includedItems, setIncludedItems] = useState('');
     const [quantity, setQuantity] = useState('1');
 
+    // Single-Use vs Re-usable State
+    const [itemType, setItemType] = useState('reusable'); // 'reusable' | 'single-use'
+
     // Multi-photo State (up to 4 photos)
     const [imageFiles, setImageFiles] = useState([]);
     const [imagePreviews, setImagePreviews] = useState([]);
@@ -95,6 +98,7 @@ export default function AddInventoryItemPage() {
                 dimensions: dimensions.trim(),
                 includedItems: includedItems.trim(),
                 quantity: parseInt(quantity, 10) || 1,
+                itemType: itemType, // 'reusable' or 'single-use'
                 status: 'Available',
                 user: '-',
                 image: uploadedUrls[0] || '', // Primary thumbnail photo
@@ -113,10 +117,11 @@ export default function AddInventoryItemPage() {
             setDimensions('');
             setIncludedItems('');
             setQuantity('1');
+            setItemType('reusable');
             setImageFiles([]);
             setImagePreviews([]);
 
-            // Redirect back to inventory after 2 seconds
+            // Redirect back to inventory after 1.8 seconds
             setTimeout(() => {
                 router.push('/inventory');
             }, 1800);
@@ -254,7 +259,39 @@ export default function AddInventoryItemPage() {
                                 />
                             </div>
 
-                            {/* 6. ASSET ID */}
+                            {/* 6. SINGLE-USE VS RE-USABLE QUESTION */}
+                            <div className="space-y-1.5">
+                                <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-500">
+                                    Is this Single-Use or Re-usable? *
+                                </label>
+                                <div className="grid grid-cols-2 gap-2.5">
+                                    <button
+                                        type="button"
+                                        onClick={() => setItemType('reusable')}
+                                        className={`p-3 text-[11px] font-bold uppercase tracking-wider rounded-sm border transition-all cursor-pointer flex items-center justify-between ${itemType === 'reusable'
+                                            ? 'bg-black text-[#EAD64D] border-black shadow-xs'
+                                            : 'bg-neutral-50 text-neutral-700 border-gray-200 hover:border-black'
+                                            }`}
+                                    >
+                                        <span>🔄 Re-usable Asset</span>
+                                        {itemType === 'reusable' && <span className="text-[10px]">✓</span>}
+                                    </button>
+
+                                    <button
+                                        type="button"
+                                        onClick={() => setItemType('single-use')}
+                                        className={`p-3 text-[11px] font-bold uppercase tracking-wider rounded-sm border transition-all cursor-pointer flex items-center justify-between ${itemType === 'single-use'
+                                            ? 'bg-black text-[#EAD64D] border-black shadow-xs'
+                                            : 'bg-neutral-50 text-neutral-700 border-gray-200 hover:border-black'
+                                            }`}
+                                    >
+                                        <span>📦 Single-Use / Consumable</span>
+                                        {itemType === 'single-use' && <span className="text-[10px]">✓</span>}
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* 7. ASSET ID */}
                             <div className="space-y-1.5">
                                 <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-500">
                                     Asset ID (if relevant)
@@ -268,7 +305,7 @@ export default function AddInventoryItemPage() {
                                 />
                             </div>
 
-                            {/* 7. MULTI-PHOTO UPLOAD SECTION (4 MAX) */}
+                            {/* 8. MULTI-PHOTO UPLOAD SECTION (4 MAX) */}
                             <div className="space-y-3 pt-2 border-t border-gray-100">
                                 <div className="flex items-center justify-between text-[11px] text-gray-500 font-bold uppercase tracking-wider">
                                     <span>Upload Photos (4 max)</span>
