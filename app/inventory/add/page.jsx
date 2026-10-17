@@ -119,7 +119,7 @@ export default function AddInventoryItemPage() {
 
     return (
         <main className="min-h-screen bg-[#F9F9F9] text-black font-sans antialiased selection:bg-[#EAD64D]">
-            <div className="max-w-xl mx-auto px-6 py-16 space-y-8">
+            <div className="max-w-2xl mx-auto px-6 py-16 space-y-8">
 
                 <header className="space-y-2">
                     <h1 className="text-3xl font-extrabold tracking-tight text-black">
@@ -127,7 +127,7 @@ export default function AddInventoryItemPage() {
                     </h1>
                 </header>
 
-                <div className="bg-white border border-gray-200 p-6 rounded-sm shadow-xs space-y-6">
+                <div className="bg-white border border-gray-200 p-6 md:p-8 rounded-sm shadow-xs space-y-6">
 
                     {successMessage ? (
                         <div className="p-4 bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-bold uppercase tracking-wider text-center rounded-sm animate-pulse">
@@ -151,20 +151,20 @@ export default function AddInventoryItemPage() {
                                 />
                             </div>
 
-                            {/* LOCATION SECTION (HEADER OUTSIDE THE GREY BOX) */}
+                            {/* LOCATION SECTION (UNBOXED HEADER) */}
                             <div className="space-y-2">
                                 <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-500">
                                     Location
                                 </label>
 
-                                <div className="border border-gray-200 p-4 bg-neutral-50/50 rounded-sm space-y-4">
+                                <div className="border border-gray-200 p-5 bg-neutral-50/50 rounded-sm space-y-5">
 
-                                    {/* ROOM SELECTION PILLS */}
+                                    {/* EVEN 2-COLUMN ROOM PILLS */}
                                     <div className="space-y-2">
                                         <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-400">
                                             Room *
                                         </label>
-                                        <div className="flex flex-wrap gap-2">
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                                             {roomOptions.map((room) => {
                                                 const isSelected = selectedRoom === room;
                                                 return (
@@ -172,12 +172,13 @@ export default function AddInventoryItemPage() {
                                                         key={room}
                                                         type="button"
                                                         onClick={() => setSelectedRoom(room)}
-                                                        className={`px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider rounded-sm border transition-all cursor-pointer ${isSelected
+                                                        className={`p-3 text-[11px] font-bold uppercase tracking-wider rounded-sm border transition-all cursor-pointer text-left flex items-center justify-between ${isSelected
                                                                 ? 'bg-black text-[#EAD64D] border-black shadow-xs'
                                                                 : 'bg-white text-neutral-700 border-gray-200 hover:border-black hover:bg-neutral-100'
                                                             }`}
                                                     >
-                                                        {room}
+                                                        <span>{room}</span>
+                                                        {isSelected && <span className="text-[10px]">✓</span>}
                                                     </button>
                                                 );
                                             })}
@@ -185,7 +186,7 @@ export default function AddInventoryItemPage() {
                                     </div>
 
                                     {/* STORAGE POINT INPUT */}
-                                    <div className="space-y-1.5 pt-1">
+                                    <div className="space-y-1.5 pt-2 border-t border-gray-200/60">
                                         <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-400">
                                             Storage Point
                                         </label>
