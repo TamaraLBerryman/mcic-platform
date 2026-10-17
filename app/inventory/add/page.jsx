@@ -16,6 +16,11 @@ export default function AddInventoryItemPage() {
     const [selectedRoom, setSelectedRoom] = useState('MCIC Event Space');
     const [specificLocation, setSpecificLocation] = useState('');
 
+    // Additional Specification Details
+    const [dimensions, setDimensions] = useState('');
+    const [quantity, setQuantity] = useState('1');
+    const [includedItems, setIncludedItems] = useState('');
+
     // Multi-photo State (up to 4 photos)
     const [imageFiles, setImageFiles] = useState([]);
     const [imagePreviews, setImagePreviews] = useState([]);
@@ -87,6 +92,9 @@ export default function AddInventoryItemPage() {
                 room: selectedRoom,
                 specificLocation: specificLocation.trim(),
                 storageLocation: fullStorageLocation,
+                dimensions: dimensions.trim(),
+                quantity: parseInt(quantity, 10) || 1,
+                includedItems: includedItems.trim(),
                 status: 'Available',
                 user: '-',
                 image: uploadedUrls[0] || '', // Primary thumbnail photo
@@ -102,6 +110,9 @@ export default function AddInventoryItemPage() {
             setName('');
             setSelectedRoom('MCIC Event Space');
             setSpecificLocation('');
+            setDimensions('');
+            setQuantity('1');
+            setIncludedItems('');
             setImageFiles([]);
             setImagePreviews([]);
 
@@ -144,22 +155,20 @@ export default function AddInventoryItemPage() {
                                 <input
                                     type="text"
                                     required
-                                    placeholder="e.g. Guillotine, Banner..."
+                                    placeholder="Item Name"
                                     value={name}
                                     onChange={(e) => setName(e.target.value)}
                                     className="w-full bg-neutral-50 border border-gray-200 text-sm p-3.5 rounded-sm focus:outline-none focus:border-black font-medium text-black placeholder-gray-400"
                                 />
                             </div>
 
-                            {/* LOCATION SECTION (UNBOXED HEADER) */}
+                            {/* LOCATION SECTION */}
                             <div className="space-y-2">
                                 <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-500">
                                     Location
                                 </label>
 
                                 <div className="border border-gray-200 p-5 bg-neutral-50/50 rounded-sm space-y-5">
-
-                                    {/* EVEN 2-COLUMN ROOM PILLS */}
                                     <div className="space-y-2">
                                         <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-400">
                                             Room *
@@ -173,8 +182,8 @@ export default function AddInventoryItemPage() {
                                                         type="button"
                                                         onClick={() => setSelectedRoom(room)}
                                                         className={`p-3 text-[11px] font-bold uppercase tracking-wider rounded-sm border transition-all cursor-pointer text-left flex items-center justify-between ${isSelected
-                                                            ? 'bg-black text-[#EAD64D] border-black shadow-xs'
-                                                            : 'bg-white text-neutral-700 border-gray-200 hover:border-black hover:bg-neutral-100'
+                                                                ? 'bg-black text-[#EAD64D] border-black shadow-xs'
+                                                                : 'bg-white text-neutral-700 border-gray-200 hover:border-black hover:bg-neutral-100'
                                                             }`}
                                                     >
                                                         <span>{room}</span>
@@ -185,20 +194,62 @@ export default function AddInventoryItemPage() {
                                         </div>
                                     </div>
 
-                                    {/* STORAGE POINT INPUT */}
                                     <div className="space-y-1.5 pt-2 border-t border-gray-200/60">
                                         <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-400">
                                             Storage Point
                                         </label>
                                         <input
                                             type="text"
-                                            placeholder="e.g. Locker 50"
+                                            placeholder="Storage Point e.g. Locker 50"
                                             value={specificLocation}
                                             onChange={(e) => setSpecificLocation(e.target.value)}
                                             className="w-full bg-white border border-gray-200 text-sm p-3.5 rounded-sm focus:outline-none focus:border-black font-medium text-black placeholder-gray-400"
                                         />
                                     </div>
                                 </div>
+                            </div>
+
+                            {/* QUANTITY & DIMENSIONS / SIZE */}
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                <div className="space-y-1.5 sm:col-span-1">
+                                    <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-500">
+                                        Quantity / Count
+                                    </label>
+                                    <input
+                                        type="number"
+                                        min="1"
+                                        value={quantity}
+                                        onChange={(e) => setQuantity(e.target.value)}
+                                        className="w-full bg-neutral-50 border border-gray-200 text-sm p-3.5 rounded-sm focus:outline-none focus:border-black font-medium text-black"
+                                    />
+                                </div>
+
+                                <div className="space-y-1.5 sm:col-span-2">
+                                    <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-500">
+                                        Dimensions / Size (if relevant)
+                                    </label>
+                                    <input
+                                        type="text"
+                                        placeholder="e.g. 120cm x 60cm x 75cm or A3 Size"
+                                        value={dimensions}
+                                        onChange={(e) => setDimensions(e.target.value)}
+                                        className="w-full bg-neutral-50 border border-gray-200 text-sm p-3.5 rounded-sm focus:outline-none focus:border-black font-medium text-black placeholder-gray-400"
+                                    />
+                                </div>
+                            </div>
+
+                            {/* WHAT'S INCLUDED */}
+                            <div className="space-y-1.5">
+                                <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-500">
+                                    What's Included (Bundled Accessories)
+                                </label>
+                                <input
+                                    type="text"
+                                    placeholder="e.g. Power Cable, HDMI Cable, Remote Control, Protective Case"
+                                    value={includedItems}
+                                    onChange={(e) => setIncludedItems(e.target.value)}
+                                    className="w-full bg-neutral-50 border border-gray-200 text-sm p-3.5 rounded-sm focus:outline-none focus:border-black font-medium text-black placeholder-gray-400"
+                                />
                             </div>
 
                             {/* ASSET ID */}
