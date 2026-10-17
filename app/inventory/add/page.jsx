@@ -184,8 +184,8 @@ export default function AddInventoryItemPage() {
                                                         type="button"
                                                         onClick={() => setSelectedRoom(room)}
                                                         className={`p-3 text-[11px] font-bold uppercase tracking-wider rounded-sm border transition-all cursor-pointer text-left flex items-center justify-between ${isSelected
-                                                                ? 'bg-black text-[#EAD64D] border-black shadow-xs'
-                                                                : 'bg-white text-neutral-700 border-gray-200 hover:border-black hover:bg-neutral-100'
+                                                            ? 'bg-black text-[#EAD64D] border-black shadow-xs'
+                                                            : 'bg-white text-neutral-700 border-gray-200 hover:border-black hover:bg-neutral-100'
                                                             }`}
                                                     >
                                                         <span>{room}</span>
@@ -322,7 +322,7 @@ export default function AddInventoryItemPage() {
 
                 <div className="text-center">
                     <a href="/inventory" className="text-xs text-gray-400 hover:text-black font-bold tracking-wider uppercase transition-colors">
-                        ← Cancel & Return to Inventory List.
+                        ← Return to Inventory List.
                     </a>
                 </div>
 
