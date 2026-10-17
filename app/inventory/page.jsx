@@ -118,7 +118,7 @@ export default function InventoryPage() {
                                             className={`inline-block text-center w-full sm:w-auto px-5 py-2.5 text-[10px] font-bold uppercase tracking-wider rounded-sm transition-colors ${isAvailable ? 'bg-black text-white hover:bg-[#EAD64D] hover:text-black' : 'bg-neutral-900 text-white hover:bg-red-600'
                                                 }`}
                                         >
-                                            {isAvailable ? 'Checkout Item ↗' : 'Return Item ↩'}
+                                            {isAvailable ? 'Select Item ↗' : 'Return Item ↩'}
                                         </a>
                                     </div>
                                 </div>

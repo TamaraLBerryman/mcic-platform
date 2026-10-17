@@ -26,10 +26,22 @@ export default function BorrowPage({ params }) {
     const [bookingStartTime, setBookingStartTime] = useState('');
     const [bookingEndTime, setBookingEndTime] = useState('');
 
-    // Reporting Low Stock / Broken Asset States
+    // Reporting States & Visibility Toggle
+    const [showReportSection, setShowReportSection] = useState(false);
     const [reportType, setReportType] = useState('broken'); // 'broken' | 'stock'
     const [reportDescription, setReportDescription] = useState('');
     const [supplyAlert, setSupplyAlert] = useState(null);
+
+    // Edit Item Details Modal / Form States
+    const [isEditing, setIsEditing] = useState(false);
+    const [editName, setEditName] = useState('');
+    const [editLocation, setEditLocation] = useState('');
+    const [editDimensions, setEditDimensions] = useState('');
+    const [editIncludedItems, setEditIncludedItems] = useState('');
+    const [editQuantity, setEditQuantity] = useState('1');
+    const [editItemType, setEditItemType] = useState('reusable');
+    const [editImageUrl, setEditImageUrl] = useState('');
+    const [isSavingEdit, setIsSavingEdit] = useState(false);
 
     // Fetch item document from Firebase Firestore
     useEffect(() => {
@@ -40,7 +52,17 @@ export default function BorrowPage({ params }) {
                 const docSnap = await getDoc(docRef);
 
                 if (docSnap.exists()) {
-                    setItemDetails({ id: docSnap.id, ...docSnap.data() });
+                    const data = docSnap.data();
+                    setItemDetails({ id: docSnap.id, ...data });
+
+                    // Populate edit form states
+                    setEditName(data.name || '');
+                    setEditLocation(data.storageLocation || '');
+                    setEditDimensions(data.dimensions || '');
+                    setEditIncludedItems(data.includedItems || '');
+                    setEditQuantity(data.quantity ? String(data.quantity) : '1');
+                    setEditItemType(data.itemType || 'reusable');
+                    setEditImageUrl(data.image || '');
                 } else {
                     console.error("No matching document in Firebase!");
                 }
@@ -63,7 +85,6 @@ export default function BorrowPage({ params }) {
 
         try {
             if (checkoutIntent === 'future') {
-                // Log future reservation into Firestore
                 await addDoc(collection(db, "asset_reservations"), {
                     itemId: itemId,
                     itemName: itemDetails.name,
@@ -120,7 +141,6 @@ export default function BorrowPage({ params }) {
         }
     };
 
-    // Report Low Stock or Maintenance/Damage Handler
     const handleReportSubmit = async (e) => {
         e.preventDefault();
         if (!itemDetails || !reportDescription.trim()) return;
@@ -146,6 +166,38 @@ export default function BorrowPage({ params }) {
         }
     };
 
+    const handleSaveItemEdit = async (e) => {
+        e.preventDefault();
+        setIsSavingEdit(true);
+
+        try {
+            const docRef = doc(db, "items", itemId);
+            const updatedData = {
+                name: editName.trim(),
+                storageLocation: editLocation.trim(),
+                dimensions: editDimensions.trim(),
+                includedItems: editIncludedItems.trim(),
+                quantity: parseInt(editQuantity, 10) || 1,
+                itemType: editItemType,
+                image: editImageUrl.trim()
+            };
+
+            await updateDoc(docRef, updatedData);
+
+            setItemDetails(prev => ({
+                ...prev,
+                ...updatedData
+            }));
+
+            setIsEditing(false);
+        } catch (err) {
+            console.error("Error updating item specs in Firestore:", err);
+            alert("Failed to update item details. Please try again.");
+        } finally {
+            setIsSavingEdit(false);
+        }
+    };
+
     if (loading) {
         return (
             <main className="min-h-screen bg-[#F9F9F9] flex items-center justify-center p-6 text-xs font-bold uppercase tracking-wider text-gray-400">
@@ -167,26 +219,158 @@ export default function BorrowPage({ params }) {
 
     return (
         <main className="min-h-screen bg-[#F9F9F9] text-black font-sans antialiased selection:bg-[#EAD64D]">
-            <div className="max-w-md mx-auto px-6 py-16 space-y-8">
+            <div className="max-w-md mx-auto px-6 py-16">
 
-                <div className="bg-white border border-gray-200 p-6 rounded-sm shadow-sm space-y-6">
+                {/* SINGLE MAIN CONTAINER BOX */}
+                <div className="bg-white border border-gray-200 p-6 sm:p-8 rounded-sm shadow-sm space-y-6">
+
+                    {/* ITEM HEADER & SPECIFICATIONS */}
                     <div className="border-b border-gray-100 pb-4 space-y-3">
-
-                        <div className="flex items-center gap-4 pt-2">
-                            <div className="w-16 h-16 bg-neutral-100 border border-gray-200 rounded-sm shrink-0 overflow-hidden flex items-center justify-center">
-                                {itemDetails.image ? (
-                                    <img src={itemDetails.image} alt={itemDetails.name} className="w-full h-full object-cover" />
-                                ) : (
-                                    <span className="text-xl">📦</span>
-                                )}
-                            </div>
-                            <div>
-                                <h2 className="text-xl font-extrabold tracking-tight text-black">{itemDetails.name}</h2>
-                                <p className="text-xs text-gray-500 font-medium mt-0.5">
-                                    📍 Storage Location: <span className="text-neutral-800 font-bold">{itemDetails.storageLocation}</span>
-                                </p>
-                            </div>
+                        <div className="flex justify-between items-center text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                            <span>Asset Record</span>
+                            <button
+                                type="button"
+                                onClick={() => setIsEditing(!isEditing)}
+                                className="text-neutral-700 hover:text-black font-extrabold flex items-center gap-1 cursor-pointer bg-neutral-100 border border-neutral-200 px-2 py-0.5 rounded-xs transition-colors"
+                            >
+                                <span>{isEditing ? '✕ Cancel Edit' : '✏️ Edit Spec'}</span>
+                            </button>
                         </div>
+
+                        {isEditing ? (
+                            <form onSubmit={handleSaveItemEdit} className="p-4 bg-neutral-50 border border-neutral-200 rounded-sm space-y-3 animate-in fade-in duration-200">
+                                <span className="font-extrabold text-[11px] uppercase tracking-wider text-black block border-b pb-1">
+                                    Update Asset Details
+                                </span>
+
+                                <div className="space-y-1">
+                                    <label className="text-[9px] font-bold uppercase tracking-wider text-gray-500 block">Item Name</label>
+                                    <input
+                                        type="text"
+                                        required
+                                        value={editName}
+                                        onChange={(e) => setEditName(e.target.value)}
+                                        className="w-full p-2 border border-gray-200 bg-white text-xs font-medium rounded-xs outline-none focus:border-black text-black"
+                                    />
+                                </div>
+
+                                <div className="space-y-1">
+                                    <label className="text-[9px] font-bold uppercase tracking-wider text-gray-500 block">Storage Location</label>
+                                    <input
+                                        type="text"
+                                        required
+                                        value={editLocation}
+                                        onChange={(e) => setEditLocation(e.target.value)}
+                                        className="w-full p-2 border border-gray-200 bg-white text-xs font-medium rounded-xs outline-none focus:border-black text-black"
+                                    />
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-2">
+                                    <div className="space-y-1">
+                                        <label className="text-[9px] font-bold uppercase tracking-wider text-gray-500 block">Dimensions</label>
+                                        <input
+                                            type="text"
+                                            placeholder="e.g. 50cm x 30cm"
+                                            value={editDimensions}
+                                            onChange={(e) => setEditDimensions(e.target.value)}
+                                            className="w-full p-2 border border-gray-200 bg-white text-xs font-medium rounded-xs outline-none focus:border-black text-black"
+                                        />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <label className="text-[9px] font-bold uppercase tracking-wider text-gray-500 block">Quantity</label>
+                                        <input
+                                            type="number"
+                                            min="1"
+                                            value={editQuantity}
+                                            onChange={(e) => setEditQuantity(e.target.value)}
+                                            className="w-full p-2 border border-gray-200 bg-white text-xs font-medium rounded-xs outline-none focus:border-black text-black"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="space-y-1">
+                                    <label className="text-[9px] font-bold uppercase tracking-wider text-gray-500 block">What's Included</label>
+                                    <input
+                                        type="text"
+                                        placeholder="e.g. Power Cable, Case..."
+                                        value={editIncludedItems}
+                                        onChange={(e) => setEditIncludedItems(e.target.value)}
+                                        className="w-full p-2 border border-gray-200 bg-white text-xs font-medium rounded-xs outline-none focus:border-black text-black"
+                                    />
+                                </div>
+
+                                <div className="space-y-1">
+                                    <label className="text-[9px] font-bold uppercase tracking-wider text-gray-500 block">Asset Type</label>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => setEditItemType('reusable')}
+                                            className={`p-1.5 text-[9px] font-bold uppercase tracking-wider rounded-xs border transition-colors cursor-pointer ${editItemType === 'reusable' ? 'bg-black text-[#EAD64D] border-black' : 'bg-white text-gray-600 border-gray-200'}`}
+                                        >
+                                            🔄 Re-usable
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setEditItemType('single-use')}
+                                            className={`p-1.5 text-[9px] font-bold uppercase tracking-wider rounded-xs border transition-colors cursor-pointer ${editItemType === 'single-use' ? 'bg-black text-[#EAD64D] border-black' : 'bg-white text-gray-600 border-gray-200'}`}
+                                        >
+                                            📦 Single-Use
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-1">
+                                    <label className="text-[9px] font-bold uppercase tracking-wider text-gray-500 block">Image URL</label>
+                                    <input
+                                        type="text"
+                                        placeholder="https://..."
+                                        value={editImageUrl}
+                                        onChange={(e) => setEditImageUrl(e.target.value)}
+                                        className="w-full p-2 border border-gray-200 bg-white text-xs font-medium rounded-xs outline-none focus:border-black text-black"
+                                    />
+                                </div>
+
+                                <button
+                                    type="submit"
+                                    disabled={isSavingEdit}
+                                    className="w-full py-2 bg-black text-[#EAD64D] font-bold text-xs uppercase tracking-wider rounded-xs hover:bg-[#EAD64D] hover:text-black transition-colors cursor-pointer"
+                                >
+                                    {isSavingEdit ? 'Saving Updates...' : '💾 Save Changes'}
+                                </button>
+                            </form>
+                        ) : (
+                            <>
+                                <div className="flex items-center gap-4 pt-2">
+                                    <div className="w-16 h-16 bg-neutral-100 border border-gray-200 rounded-sm shrink-0 overflow-hidden flex items-center justify-center">
+                                        {itemDetails.image ? (
+                                            <img src={itemDetails.image} alt={itemDetails.name} className="w-full h-full object-cover" />
+                                        ) : (
+                                            <span className="text-xl">📦</span>
+                                        )}
+                                    </div>
+                                    <div>
+                                        <h2 className="text-xl font-extrabold tracking-tight text-black">{itemDetails.name}</h2>
+                                        <p className="text-xs text-gray-500 font-medium mt-0.5">
+                                            📍 Storage Location: <span className="text-neutral-800 font-bold">{itemDetails.storageLocation}</span>
+                                        </p>
+                                    </div>
+                                </div>
+
+                                {(itemDetails.dimensions || itemDetails.includedItems || itemDetails.itemType) && (
+                                    <div className="p-3 bg-neutral-50 border border-neutral-100 rounded-sm text-xs space-y-1 font-medium text-neutral-700">
+                                        {itemDetails.dimensions && (
+                                            <div>📐 <strong>Dimensions:</strong> {itemDetails.dimensions}</div>
+                                        )}
+                                        {itemDetails.includedItems && (
+                                            <div>🔌 <strong>Included:</strong> {itemDetails.includedItems}</div>
+                                        )}
+                                        {itemDetails.itemType && (
+                                            <div>🏷️ <strong>Type:</strong> {itemDetails.itemType === 'single-use' ? 'Single-Use Consumable' : 'Re-usable Asset'}</div>
+                                        )}
+                                    </div>
+                                )}
+                            </>
+                        )}
 
                         <div className="pt-2">
                             {isAvailable ? (
@@ -207,314 +391,327 @@ export default function BorrowPage({ params }) {
                         </div>
                     </div>
 
-                    {actionSuccess ? (
-                        <div className={`p-4 font-bold text-xs text-center uppercase tracking-wider rounded-sm animate-pulse ${actionSuccess === 'reservation' ? 'bg-black text-[#EAD64D]' :
-                            actionSuccess === 'borrow' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-[#EAD64D] text-black'
-                            }`}>
-                            {actionSuccess === 'reservation' && "📅 Future Asset Reservation Logged"}
-                            {actionSuccess === 'borrow' && "✓ Asset Returned to Stock"}
-                            {actionSuccess === 'return' && "🎟️ Asset Checkout Logged"}
-                        </div>
-                    ) : (
-                        <form onSubmit={handleCheckoutPipeline} className="space-y-4">
+                    {/* SECTION 1: CHECKOUT / RESERVATION SECTION */}
+                    <div className="p-4 sm:p-5 bg-neutral-50/60 border border-neutral-200/80 rounded-sm space-y-4">
+                        <span className="text-[11px] font-extrabold uppercase tracking-wider text-black block border-b border-neutral-200 pb-2">
+                            🎟️ Checkout or Reserve Item
+                        </span>
 
-                            {/* TOGGLE: CHECKOUT NOW VS BOOK FUTURE DATE */}
-                            {isAvailable && (
-                                <div className="space-y-1.5">
-                                    <label className="text-[10px] font-bold uppercase tracking-wider text-gray-500 block">
-                                        Checkout Intention
-                                    </label>
-                                    <div className="grid grid-cols-2 gap-2">
-                                        <button
-                                            type="button"
-                                            onClick={() => setCheckoutIntent('now')}
-                                            className={`p-2.5 text-[10px] font-bold uppercase tracking-wider rounded-sm border transition-colors cursor-pointer ${checkoutIntent === 'now'
-                                                ? 'bg-black text-[#EAD64D] border-black'
-                                                : 'bg-white text-gray-600 border-gray-200 hover:bg-neutral-50'
-                                                }`}
-                                        >
-                                            Checkout Now
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={() => setCheckoutIntent('future')}
-                                            className={`p-2.5 text-[10px] font-bold uppercase tracking-wider rounded-sm border transition-colors cursor-pointer ${checkoutIntent === 'future'
-                                                ? 'bg-black text-[#EAD64D] border-black'
-                                                : 'bg-white text-gray-600 border-gray-200 hover:bg-neutral-50'
-                                                }`}
-                                        >
-                                            Book Future Date 📅
-                                        </button>
-                                    </div>
-                                </div>
-                            )}
+                        {actionSuccess ? (
+                            <div className={`p-4 font-bold text-xs text-center uppercase tracking-wider rounded-sm animate-pulse ${actionSuccess === 'reservation' ? 'bg-black text-[#EAD64D]' :
+                                actionSuccess === 'borrow' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-[#EAD64D] text-black'
+                                }`}>
+                                {actionSuccess === 'reservation' && "📅 Future Asset Reservation Logged"}
+                                {actionSuccess === 'borrow' && "✓ Asset Returned to Stock"}
+                                {actionSuccess === 'return' && "🎟️ Asset Checkout Logged"}
+                            </div>
+                        ) : (
+                            <form onSubmit={handleCheckoutPipeline} className="space-y-4">
 
-                            {/* FUTURE BOOKING CONFIGURATION (SINGLE VS RANGE) */}
-                            {isAvailable && checkoutIntent === 'future' && (
-                                <div className="p-4 bg-neutral-50 border border-gray-200 rounded-sm space-y-4 animate-in fade-in duration-200">
+                                {isAvailable && (
                                     <div className="space-y-1.5">
                                         <label className="text-[10px] font-bold uppercase tracking-wider text-gray-500 block">
-                                            Date Option Type
+                                            Checkout Intention
                                         </label>
                                         <div className="grid grid-cols-2 gap-2">
                                             <button
                                                 type="button"
-                                                onClick={() => setDateSelectionType('single')}
-                                                className={`p-2 text-[10px] font-bold uppercase tracking-wider rounded-sm border transition-colors cursor-pointer ${dateSelectionType === 'single'
-                                                    ? 'bg-neutral-800 text-white border-neutral-800'
-                                                    : 'bg-white text-gray-600 border-gray-200'
+                                                onClick={() => setCheckoutIntent('now')}
+                                                className={`p-2.5 text-[10px] font-bold uppercase tracking-wider rounded-sm border transition-colors cursor-pointer ${checkoutIntent === 'now'
+                                                    ? 'bg-black text-[#EAD64D] border-black'
+                                                    : 'bg-white text-gray-600 border-gray-200 hover:bg-neutral-50'
                                                     }`}
                                             >
-                                                Individual Date
+                                                Checkout Now
                                             </button>
                                             <button
                                                 type="button"
-                                                onClick={() => setDateSelectionType('range')}
-                                                className={`p-2 text-[10px] font-bold uppercase tracking-wider rounded-sm border transition-colors cursor-pointer ${dateSelectionType === 'range'
-                                                    ? 'bg-neutral-800 text-white border-neutral-800'
-                                                    : 'bg-white text-gray-600 border-gray-200'
+                                                onClick={() => setCheckoutIntent('future')}
+                                                className={`p-2.5 text-[10px] font-bold uppercase tracking-wider rounded-sm border transition-colors cursor-pointer ${checkoutIntent === 'future'
+                                                    ? 'bg-black text-[#EAD64D] border-black'
+                                                    : 'bg-white text-gray-600 border-gray-200 hover:bg-neutral-50'
                                                     }`}
                                             >
-                                                Date Range
+                                                Book Future Date 📅
                                             </button>
                                         </div>
                                     </div>
+                                )}
 
-                                    {dateSelectionType === 'single' ? (
-                                        <div className="space-y-1">
+                                {isAvailable && checkoutIntent === 'future' && (
+                                    <div className="p-4 bg-white border border-gray-200 rounded-sm space-y-4 animate-in fade-in duration-200">
+                                        <div className="space-y-1.5">
                                             <label className="text-[10px] font-bold uppercase tracking-wider text-gray-500 block">
-                                                Select Date *
+                                                Date Option Type
                                             </label>
-                                            <input
-                                                type="date"
-                                                required
-                                                value={bookingDate}
-                                                onChange={(e) => setBookingDate(e.target.value)}
-                                                className="w-full p-2.5 border border-gray-200 bg-white text-xs font-semibold rounded-sm outline-none focus:border-black text-black"
-                                            />
+                                            <div className="grid grid-cols-2 gap-2">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setDateSelectionType('single')}
+                                                    className={`p-2 text-[10px] font-bold uppercase tracking-wider rounded-sm border transition-colors cursor-pointer ${dateSelectionType === 'single'
+                                                        ? 'bg-neutral-800 text-white border-neutral-800'
+                                                        : 'bg-white text-gray-600 border-gray-200'
+                                                        }`}
+                                                >
+                                                    Individual Date
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setDateSelectionType('range')}
+                                                    className={`p-2 text-[10px] font-bold uppercase tracking-wider rounded-sm border transition-colors cursor-pointer ${dateSelectionType === 'range'
+                                                        ? 'bg-neutral-800 text-white border-neutral-800'
+                                                        : 'bg-white text-gray-600 border-gray-200'
+                                                        }`}
+                                                >
+                                                    Date Range
+                                                </button>
+                                            </div>
                                         </div>
-                                    ) : (
+
+                                        {dateSelectionType === 'single' ? (
+                                            <div className="space-y-1">
+                                                <label className="text-[10px] font-bold uppercase tracking-wider text-gray-500 block">
+                                                    Select Date *
+                                                </label>
+                                                <input
+                                                    type="date"
+                                                    required
+                                                    value={bookingDate}
+                                                    onChange={(e) => setBookingDate(e.target.value)}
+                                                    className="w-full p-2.5 border border-gray-200 bg-white text-xs font-semibold rounded-sm outline-none focus:border-black text-black"
+                                                />
+                                            </div>
+                                        ) : (
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <div className="space-y-1">
+                                                    <label className="text-[10px] font-bold uppercase tracking-wider text-gray-500 block">
+                                                        Start Date *
+                                                    </label>
+                                                    <input
+                                                        type="date"
+                                                        required
+                                                        value={bookingStartDate}
+                                                        onChange={(e) => setBookingStartDate(e.target.value)}
+                                                        className="w-full p-2.5 border border-gray-200 bg-white text-xs font-semibold rounded-sm outline-none focus:border-black text-black"
+                                                    />
+                                                </div>
+                                                <div className="space-y-1">
+                                                    <label className="text-[10px] font-bold uppercase tracking-wider text-gray-500 block">
+                                                        End Date *
+                                                    </label>
+                                                    <input
+                                                        type="date"
+                                                        required
+                                                        value={bookingEndDate}
+                                                        onChange={(e) => setBookingEndDate(e.target.value)}
+                                                        className="w-full p-2.5 border border-gray-200 bg-white text-xs font-semibold rounded-sm outline-none focus:border-black text-black"
+                                                    />
+                                                </div>
+                                            </div>
+                                        )}
+
                                         <div className="grid grid-cols-2 gap-3">
                                             <div className="space-y-1">
                                                 <label className="text-[10px] font-bold uppercase tracking-wider text-gray-500 block">
-                                                    Start Date *
+                                                    Start Time *
                                                 </label>
                                                 <input
-                                                    type="date"
+                                                    type="time"
                                                     required
-                                                    value={bookingStartDate}
-                                                    onChange={(e) => setBookingStartDate(e.target.value)}
+                                                    value={bookingStartTime}
+                                                    onChange={(e) => setBookingStartTime(e.target.value)}
                                                     className="w-full p-2.5 border border-gray-200 bg-white text-xs font-semibold rounded-sm outline-none focus:border-black text-black"
                                                 />
                                             </div>
                                             <div className="space-y-1">
                                                 <label className="text-[10px] font-bold uppercase tracking-wider text-gray-500 block">
-                                                    End Date *
+                                                    End Time *
                                                 </label>
                                                 <input
-                                                    type="date"
+                                                    type="time"
                                                     required
-                                                    value={bookingEndDate}
-                                                    onChange={(e) => setBookingEndDate(e.target.value)}
+                                                    value={bookingEndTime}
+                                                    onChange={(e) => setBookingEndTime(e.target.value)}
                                                     className="w-full p-2.5 border border-gray-200 bg-white text-xs font-semibold rounded-sm outline-none focus:border-black text-black"
                                                 />
                                             </div>
                                         </div>
-                                    )}
-
-                                    <div className="grid grid-cols-2 gap-3">
-                                        <div className="space-y-1">
-                                            <label className="text-[10px] font-bold uppercase tracking-wider text-gray-500 block">
-                                                Start Time *
-                                            </label>
-                                            <input
-                                                type="time"
-                                                required
-                                                value={bookingStartTime}
-                                                onChange={(e) => setBookingStartTime(e.target.value)}
-                                                className="w-full p-2.5 border border-gray-200 bg-white text-xs font-semibold rounded-sm outline-none focus:border-black text-black"
-                                            />
-                                        </div>
-                                        <div className="space-y-1">
-                                            <label className="text-[10px] font-bold uppercase tracking-wider text-gray-500 block">
-                                                End Time *
-                                            </label>
-                                            <input
-                                                type="time"
-                                                required
-                                                value={bookingEndTime}
-                                                onChange={(e) => setBookingEndTime(e.target.value)}
-                                                className="w-full p-2.5 border border-gray-200 bg-white text-xs font-semibold rounded-sm outline-none focus:border-black text-black"
-                                            />
-                                        </div>
                                     </div>
+                                )}
+
+                                {(isAvailable || checkoutIntent === 'future') && (
+                                    <>
+                                        <div className="space-y-1.5 animate-in fade-in duration-200">
+                                            <label className="text-[10px] font-bold uppercase tracking-wider text-gray-500 block">
+                                                Your Name
+                                            </label>
+                                            <input
+                                                type="text"
+                                                required
+                                                placeholder="e.g. John Smith"
+                                                value={borrowerName}
+                                                onChange={(e) => setBorrowerName(e.target.value)}
+                                                className="w-full p-3 border border-gray-200 bg-white text-sm font-medium rounded-sm outline-none focus:border-neutral-400 text-black placeholder-gray-400"
+                                            />
+                                        </div>
+
+                                        <div className="space-y-1.5">
+                                            <label className="text-[10px] font-bold uppercase tracking-wider text-gray-500 block">
+                                                Are you part of the UNSW Founders Team?
+                                            </label>
+                                            <div className="grid grid-cols-2 gap-2">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setIsUnswFoundersTeam('yes')}
+                                                    className={`p-2.5 text-[10px] font-bold uppercase tracking-wider rounded-sm border transition-colors cursor-pointer ${isUnswFoundersTeam === 'yes'
+                                                        ? 'bg-black text-[#EAD64D] border-black'
+                                                        : 'bg-white text-gray-600 border-gray-200 hover:bg-neutral-50'
+                                                        }`}
+                                                >
+                                                    Yes
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setIsUnswFoundersTeam('no')}
+                                                    className={`p-2.5 text-[10px] font-bold uppercase tracking-wider rounded-sm border transition-colors cursor-pointer ${isUnswFoundersTeam === 'no'
+                                                        ? 'bg-black text-[#EAD64D] border-black'
+                                                        : 'bg-white text-gray-600 border-gray-200 hover:bg-neutral-50'
+                                                        }`}
+                                                >
+                                                    No
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        {isUnswFoundersTeam === 'no' && (
+                                            <div className="space-y-1.5 animate-in fade-in duration-200">
+                                                <label className="text-[10px] font-bold uppercase tracking-wider text-gray-500 block">
+                                                    Email Address *
+                                                </label>
+                                                <input
+                                                    type="email"
+                                                    required
+                                                    placeholder="e.g. john.smith@example.com"
+                                                    value={borrowerEmail}
+                                                    onChange={(e) => setBorrowerEmail(e.target.value)}
+                                                    className="w-full p-3 border border-gray-200 bg-white text-sm font-medium rounded-sm outline-none focus:border-neutral-400 text-black placeholder-gray-400"
+                                                />
+                                            </div>
+                                        )}
+                                    </>
+                                )}
+
+                                <button
+                                    type="submit"
+                                    disabled={isProcessing}
+                                    className={`w-full py-3.5 text-center font-bold text-xs uppercase tracking-wider rounded-sm transition-all text-white bg-black ${isProcessing ? 'opacity-50 cursor-wait' : 'hover:bg-[#EAD64D] hover:text-black cursor-pointer'}`}
+                                >
+                                    {isProcessing
+                                        ? "Processing..."
+                                        : (checkoutIntent === 'future' ? "Confirm Future Reservation 📅" : (isAvailable ? "Confirm Asset Checkout ↗" : "Process Return Check-In ↩"))
+                                    }
+                                </button>
+
+                                <div className="flex justify-between items-center text-[10px] font-bold text-gray-400 uppercase tracking-wider pt-1">
+                                    <span>Asset ID</span>
+                                    <span className="font-mono bg-white border px-2 py-0.5 rounded-sm text-neutral-800">{itemDetails.id}</span>
                                 </div>
-                            )}
 
-                            {(isAvailable || checkoutIntent === 'future') && (
-                                <>
-                                    <div className="space-y-1.5 animate-in fade-in duration-200">
-                                        <label className="text-[10px] font-bold uppercase tracking-wider text-gray-500 block">
-                                            Your Name
-                                        </label>
-                                        <input
-                                            type="text"
-                                            required
-                                            placeholder="e.g. John Smith"
-                                            value={borrowerName}
-                                            onChange={(e) => setBorrowerName(e.target.value)}
-                                            className="w-full p-3 border border-gray-200 bg-white text-sm font-medium rounded-sm outline-none focus:border-neutral-400 text-black placeholder-gray-400"
-                                        />
+                            </form>
+                        )}
+                    </div>
+
+                    {/* SECTION 2: REPORT LOW STOCK / DAMAGE BUTTONS */}
+                    <div className="pt-2 border-t border-gray-100 space-y-4">
+                        <button
+                            type="button"
+                            onClick={() => setShowReportSection(!showReportSection)}
+                            className="w-full p-3.5 bg-neutral-50 hover:bg-black hover:text-[#EAD64D] border border-neutral-200 rounded-sm text-center font-extrabold text-xs uppercase tracking-wider transition-colors cursor-pointer flex items-center justify-between group"
+                        >
+                            <span className="flex items-center gap-2">
+                                <span>⚠️</span>
+                                <span>Report Issue or Low Stock</span>
+                            </span>
+                            <span className="text-sm font-mono">{showReportSection ? '−' : '+'}</span>
+                        </button>
+
+                        {/* REPORT FORM (VISIBLE ONLY WHEN BUTTON IS CLICKED) */}
+                        {showReportSection && (
+                            <div className="p-4 sm:p-5 bg-neutral-50/60 border border-neutral-200/80 rounded-sm space-y-4 animate-in fade-in duration-200">
+
+                                {supplyAlert && (
+                                    <div className="p-3 bg-[#EAD64D] text-black font-bold text-xs rounded-xs flex justify-between items-center border border-black animate-in fade-in duration-150">
+                                        <div className="flex items-center gap-2">
+                                            <span>✓</span>
+                                            <span>Report sent to MCIC Ops!</span>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => setSupplyAlert(null)}
+                                            className="text-black font-extrabold px-1.5 py-0.5 hover:bg-black hover:text-white rounded-xs transition-colors cursor-pointer"
+                                        >
+                                            ✕
+                                        </button>
                                     </div>
+                                )}
 
-                                    {/* UNSW FOUNDERS TEAM QUESTION */}
+                                <form onSubmit={handleReportSubmit} className="space-y-4">
                                     <div className="space-y-1.5">
                                         <label className="text-[10px] font-bold uppercase tracking-wider text-gray-500 block">
-                                            Are you part of the UNSW Founders Team?
+                                            Issue Type
                                         </label>
                                         <div className="grid grid-cols-2 gap-2">
                                             <button
                                                 type="button"
-                                                onClick={() => setIsUnswFoundersTeam('yes')}
-                                                className={`p-2.5 text-[10px] font-bold uppercase tracking-wider rounded-sm border transition-colors cursor-pointer ${isUnswFoundersTeam === 'yes'
+                                                onClick={() => setReportType('broken')}
+                                                className={`p-2.5 text-[10px] font-bold uppercase tracking-wider rounded-sm border transition-colors cursor-pointer ${reportType === 'broken'
                                                     ? 'bg-black text-[#EAD64D] border-black'
                                                     : 'bg-white text-gray-600 border-gray-200 hover:bg-neutral-50'
                                                     }`}
                                             >
-                                                Yes
+                                                🔧 Broken / Damaged
                                             </button>
                                             <button
                                                 type="button"
-                                                onClick={() => setIsUnswFoundersTeam('no')}
-                                                className={`p-2.5 text-[10px] font-bold uppercase tracking-wider rounded-sm border transition-colors cursor-pointer ${isUnswFoundersTeam === 'no'
+                                                onClick={() => setReportType('stock')}
+                                                className={`p-2.5 text-[10px] font-bold uppercase tracking-wider rounded-sm border transition-colors cursor-pointer ${reportType === 'stock'
                                                     ? 'bg-black text-[#EAD64D] border-black'
                                                     : 'bg-white text-gray-600 border-gray-200 hover:bg-neutral-50'
                                                     }`}
                                             >
-                                                No
+                                                ⚠️ Low Stock / Empty
                                             </button>
                                         </div>
                                     </div>
 
-                                    {/* CONDITIONAL EMAIL INPUT IF NOT UNSW FOUNDERS TEAM */}
-                                    {isUnswFoundersTeam === 'no' && (
-                                        <div className="space-y-1.5 animate-in fade-in duration-200">
-                                            <label className="text-[10px] font-bold uppercase tracking-wider text-gray-500 block">
-                                                Email Address *
-                                            </label>
-                                            <input
-                                                type="email"
-                                                required
-                                                placeholder="e.g. john.smith@example.com"
-                                                value={borrowerEmail}
-                                                onChange={(e) => setBorrowerEmail(e.target.value)}
-                                                className="w-full p-3 border border-gray-200 bg-white text-sm font-medium rounded-sm outline-none focus:border-neutral-400 text-black placeholder-gray-400"
-                                            />
-                                        </div>
-                                    )}
-                                </>
-                            )}
+                                    <div className="space-y-1.5">
+                                        <label className="font-extrabold text-black uppercase text-xs tracking-wide block">
+                                            {reportType === 'broken' ? 'Describe the issue or damage *' : 'Describe the stock status *'}
+                                        </label>
+                                        <textarea
+                                            required
+                                            rows="3"
+                                            placeholder={reportType === 'broken' ? "e.g. Screen flickering, cable frayed, missing part..." : "e.g. Only 1 left in box, completely empty..."}
+                                            value={reportDescription}
+                                            onChange={(e) => setReportDescription(e.target.value)}
+                                            className="w-full p-3 border border-neutral-300 bg-white text-xs font-medium rounded-xs outline-none focus:border-black text-black placeholder-gray-400"
+                                        />
+                                    </div>
 
-                            <button
-                                type="submit"
-                                disabled={isProcessing}
-                                className={`w-full py-3.5 text-center font-bold text-xs uppercase tracking-wider rounded-sm transition-all text-white bg-black ${isProcessing ? 'opacity-50 cursor-wait' : 'hover:bg-[#EAD64D] hover:text-black cursor-pointer'}`}
-                            >
-                                {isProcessing
-                                    ? "Processing..."
-                                    : (checkoutIntent === 'future' ? "Confirm Future Reservation 📅" : (isAvailable ? "Confirm Asset Checkout ↗" : "Process Return Check-In ↩"))
-                                }
-                            </button>
-
-                            <div className="flex justify-between items-center text-[10px] font-bold text-gray-400 uppercase tracking-wider">
-                                <span>Asset ID</span>
-                                <span className="font-mono bg-neutral-50 border px-2 py-0.5 rounded-sm text-neutral-800">{itemDetails.id}</span>
+                                    <button
+                                        type="submit"
+                                        className="w-full bg-black text-[#EAD64D] font-extrabold py-3 text-xs uppercase tracking-wider rounded-xs hover:bg-[#EAD64D] hover:text-black transition-colors cursor-pointer"
+                                    >
+                                        {reportType === 'broken' ? 'Submit Damage Report 🔧' : 'Report Low Stock ⚠️'}
+                                    </button>
+                                </form>
                             </div>
-
-                        </form>
-                    )}
-                </div>
-
-                {/* REPORT LOW STOCK OR BROKEN ITEM SECTION */}
-                <div className="bg-white border border-gray-200 p-6 sm:p-8 rounded-sm shadow-sm space-y-6">
-                    <div className="border-b border-gray-100 pb-4 space-y-1">
-                        <h2 className="text-xl font-extrabold uppercase text-black tracking-tight">
-                            Report Issue / Low Stock
-                        </h2>
-                        <p className="text-xs text-gray-500 font-normal">
-                            Is <span className="font-bold text-black">{itemDetails.name}</span> damaged or running low in stock? Send a ticket directly to operations.
-                        </p>
+                        )}
                     </div>
 
-                    {supplyAlert && (
-                        <div className="p-4 bg-[#EAD64D] text-black font-bold text-xs rounded-xs flex justify-between items-center shadow-xs border border-black animate-in fade-in duration-150">
-                            <div className="flex items-center gap-2.5">
-                                <span className="text-base">✓</span>
-                                <span>Report for <strong>{supplyAlert}</strong> sent to MCIC Ops!</span>
-                            </div>
-                            <button
-                                type="button"
-                                onClick={() => setSupplyAlert(null)}
-                                className="text-black font-extrabold px-2 py-0.5 hover:bg-black hover:text-white rounded-xs transition-colors cursor-pointer"
-                            >
-                                ✕
-                            </button>
-                        </div>
-                    )}
-
-                    <form onSubmit={handleReportSubmit} className="space-y-4">
-                        <div className="space-y-1.5">
-                            <label className="text-[10px] font-bold uppercase tracking-wider text-gray-500 block">
-                                Report Type
-                            </label>
-                            <div className="grid grid-cols-2 gap-2">
-                                <button
-                                    type="button"
-                                    onClick={() => setReportType('broken')}
-                                    className={`p-2.5 text-[10px] font-bold uppercase tracking-wider rounded-sm border transition-colors cursor-pointer ${reportType === 'broken'
-                                        ? 'bg-black text-[#EAD64D] border-black'
-                                        : 'bg-white text-gray-600 border-gray-200 hover:bg-neutral-50'
-                                        }`}
-                                >
-                                    🔧 Broken / Damaged
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => setReportType('stock')}
-                                    className={`p-2.5 text-[10px] font-bold uppercase tracking-wider rounded-sm border transition-colors cursor-pointer ${reportType === 'stock'
-                                        ? 'bg-black text-[#EAD64D] border-black'
-                                        : 'bg-white text-gray-600 border-gray-200 hover:bg-neutral-50'
-                                        }`}
-                                >
-                                    ⚠️ Low Stock / Empty
-                                </button>
-                            </div>
-                        </div>
-
-                        <div className="space-y-1.5">
-                            <label className="font-extrabold text-black uppercase text-xs tracking-wide block">
-                                {reportType === 'broken' ? 'Describe the issue or damage *' : 'Describe the stock status *'}
-                            </label>
-                            <textarea
-                                required
-                                rows="3"
-                                placeholder={reportType === 'broken' ? "e.g. Screen flickering, cable frayed, missing part..." : "e.g. Only 1 left in box, completely empty..."}
-                                value={reportDescription}
-                                onChange={(e) => setReportDescription(e.target.value)}
-                                className="w-full p-3.5 border border-neutral-300 bg-white text-xs font-medium rounded-xs outline-none focus:border-black text-black placeholder-gray-400"
-                            />
-                        </div>
-
-                        <button
-                            type="submit"
-                            className="w-full bg-black text-[#EAD64D] font-extrabold py-3.5 text-xs uppercase tracking-wider rounded-xs hover:bg-[#EAD64D] hover:text-black transition-colors cursor-pointer"
-                        >
-                            {reportType === 'broken' ? 'Submit Damage Report 🔧' : 'Report Low Stock ⚠️'}
-                        </button>
-                    </form>
                 </div>
 
-                <div className="text-center">
+                <div className="text-center pt-4">
                     <a href="/inventory" className="text-xs text-gray-400 hover:text-black font-bold tracking-wider uppercase transition-colors">
                         ← Return to Inventory Catalog
                     </a>
