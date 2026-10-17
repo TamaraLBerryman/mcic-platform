@@ -18,8 +18,8 @@ export default function AddInventoryItemPage() {
 
     // Additional Specification Details
     const [dimensions, setDimensions] = useState('');
-    const [quantity, setQuantity] = useState('1');
     const [includedItems, setIncludedItems] = useState('');
+    const [quantity, setQuantity] = useState('1');
 
     // Multi-photo State (up to 4 photos)
     const [imageFiles, setImageFiles] = useState([]);
@@ -93,8 +93,8 @@ export default function AddInventoryItemPage() {
                 specificLocation: specificLocation.trim(),
                 storageLocation: fullStorageLocation,
                 dimensions: dimensions.trim(),
-                quantity: parseInt(quantity, 10) || 1,
                 includedItems: includedItems.trim(),
+                quantity: parseInt(quantity, 10) || 1,
                 status: 'Available',
                 user: '-',
                 image: uploadedUrls[0] || '', // Primary thumbnail photo
@@ -111,8 +111,8 @@ export default function AddInventoryItemPage() {
             setSelectedRoom('MCIC Event Space');
             setSpecificLocation('');
             setDimensions('');
-            setQuantity('1');
             setIncludedItems('');
+            setQuantity('1');
             setImageFiles([]);
             setImagePreviews([]);
 
@@ -147,7 +147,7 @@ export default function AddInventoryItemPage() {
                     ) : (
                         <form onSubmit={handleSubmit} className="space-y-6">
 
-                            {/* ITEM NAME */}
+                            {/* 1. ITEM NAME */}
                             <div className="space-y-1.5">
                                 <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-500">
                                     Item Name *
@@ -155,20 +155,22 @@ export default function AddInventoryItemPage() {
                                 <input
                                     type="text"
                                     required
-                                    placeholder="Item Name"
+                                    placeholder="e.g. Guillotine, Banner..."
                                     value={name}
                                     onChange={(e) => setName(e.target.value)}
                                     className="w-full bg-neutral-50 border border-gray-200 text-sm p-3.5 rounded-sm focus:outline-none focus:border-black font-medium text-black placeholder-gray-400"
                                 />
                             </div>
 
-                            {/* LOCATION SECTION */}
+                            {/* 2. LOCATION SECTION */}
                             <div className="space-y-2">
                                 <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-500">
                                     Location
                                 </label>
 
                                 <div className="border border-gray-200 p-5 bg-neutral-50/50 rounded-sm space-y-5">
+
+                                    {/* ROOM PILLS */}
                                     <div className="space-y-2">
                                         <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-400">
                                             Room *
@@ -194,13 +196,14 @@ export default function AddInventoryItemPage() {
                                         </div>
                                     </div>
 
+                                    {/* STORAGE POINT INPUT */}
                                     <div className="space-y-1.5 pt-2 border-t border-gray-200/60">
                                         <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-400">
                                             Storage Point
                                         </label>
                                         <input
                                             type="text"
-                                            placeholder="Storage Point e.g. Locker 50"
+                                            placeholder="e.g. Locker 50"
                                             value={specificLocation}
                                             onChange={(e) => setSpecificLocation(e.target.value)}
                                             className="w-full bg-white border border-gray-200 text-sm p-3.5 rounded-sm focus:outline-none focus:border-black font-medium text-black placeholder-gray-400"
@@ -209,50 +212,49 @@ export default function AddInventoryItemPage() {
                                 </div>
                             </div>
 
-                            {/* QUANTITY & DIMENSIONS / SIZE */}
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                                <div className="space-y-1.5 sm:col-span-1">
-                                    <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-500">
-                                        Quantity / Count
-                                    </label>
-                                    <input
-                                        type="number"
-                                        min="1"
-                                        value={quantity}
-                                        onChange={(e) => setQuantity(e.target.value)}
-                                        className="w-full bg-neutral-50 border border-gray-200 text-sm p-3.5 rounded-sm focus:outline-none focus:border-black font-medium text-black"
-                                    />
-                                </div>
-
-                                <div className="space-y-1.5 sm:col-span-2">
-                                    <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-500">
-                                        Dimensions / Size (if relevant)
-                                    </label>
-                                    <input
-                                        type="text"
-                                        placeholder="e.g. 120cm x 60cm x 75cm or A3 Size"
-                                        value={dimensions}
-                                        onChange={(e) => setDimensions(e.target.value)}
-                                        className="w-full bg-neutral-50 border border-gray-200 text-sm p-3.5 rounded-sm focus:outline-none focus:border-black font-medium text-black placeholder-gray-400"
-                                    />
-                                </div>
-                            </div>
-
-                            {/* WHAT'S INCLUDED */}
+                            {/* 3. DIMENSIONS */}
                             <div className="space-y-1.5">
                                 <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-500">
-                                    What's Included (Bundled Accessories)
+                                    Dimensions (if relevant)
                                 </label>
                                 <input
                                     type="text"
-                                    placeholder="e.g. Power Cable, HDMI Cable, Remote Control, Protective Case"
+                                    placeholder="e.g. 170cm (H) x 65cm (W) x 75cm (D)"
+                                    value={dimensions}
+                                    onChange={(e) => setDimensions(e.target.value)}
+                                    className="w-full bg-neutral-50 border border-gray-200 text-sm p-3.5 rounded-sm focus:outline-none focus:border-black font-medium text-black placeholder-gray-400"
+                                />
+                            </div>
+
+                            {/* 4. WHAT'S INCLUDED */}
+                            <div className="space-y-1.5">
+                                <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-500">
+                                    What's Included (if relevant)
+                                </label>
+                                <input
+                                    type="text"
+                                    placeholder="e.g. Power Cable, HDMI Cable, Remote Control"
                                     value={includedItems}
                                     onChange={(e) => setIncludedItems(e.target.value)}
                                     className="w-full bg-neutral-50 border border-gray-200 text-sm p-3.5 rounded-sm focus:outline-none focus:border-black font-medium text-black placeholder-gray-400"
                                 />
                             </div>
 
-                            {/* ASSET ID */}
+                            {/* 5. QUANTITY */}
+                            <div className="space-y-1.5">
+                                <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-500">
+                                    Quantity
+                                </label>
+                                <input
+                                    type="number"
+                                    min="1"
+                                    value={quantity}
+                                    onChange={(e) => setQuantity(e.target.value)}
+                                    className="w-full bg-neutral-50 border border-gray-200 text-sm p-3.5 rounded-sm focus:outline-none focus:border-black font-medium text-black"
+                                />
+                            </div>
+
+                            {/* 6. ASSET ID */}
                             <div className="space-y-1.5">
                                 <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-500">
                                     Asset ID (if relevant)
@@ -266,7 +268,7 @@ export default function AddInventoryItemPage() {
                                 />
                             </div>
 
-                            {/* MULTI-PHOTO UPLOAD SECTION (4 MAX) */}
+                            {/* 7. MULTI-PHOTO UPLOAD SECTION (4 MAX) */}
                             <div className="space-y-3 pt-2 border-t border-gray-100">
                                 <div className="flex items-center justify-between text-[11px] text-gray-500 font-bold uppercase tracking-wider">
                                     <span>Upload Photos (4 max)</span>
