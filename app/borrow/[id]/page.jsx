@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { db } from '../../lib/firebase';
+import { db, storage } from '../../lib/firebase';
 import { doc, getDoc, updateDoc, collection, addDoc } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 export default function BorrowPage({ params }) {
     const itemId = params.id ? params.id.toUpperCase() : "UNKNOWN-ASSET";
@@ -34,6 +35,7 @@ export default function BorrowPage({ params }) {
 
     // Edit Item Details Modal / Form States
     const [isEditing, setIsEditing] = useState(false);
+    const [editAssetId, setEditAssetId] = useState('');
     const [editName, setEditName] = useState('');
     const [selectedRoom, setSelectedRoom] = useState('MCIC Event Space');
     const [specificLocation, setSpecificLocation] = useState('');
@@ -41,7 +43,10 @@ export default function BorrowPage({ params }) {
     const [editIncludedItems, setEditIncludedItems] = useState('');
     const [editQuantity, setEditQuantity] = useState('1');
     const [editItemType, setEditItemType] = useState('reusable');
-    const [editImageUrl, setEditImageUrl] = useState('');
+
+    // Photo Editing States
+    const [imageFile, setImageFile] = useState(null);
+    const [imagePreview, setImagePreview] = useState('');
     const [isSavingEdit, setIsSavingEdit] = useState(false);
 
     // Standardized Room Selection Options (Mirrors app/add-item/page.jsx)
@@ -70,6 +75,7 @@ export default function BorrowPage({ params }) {
                     setItemDetails({ id: docSnap.id, ...data });
 
                     // Populate edit form states to mirror Add Item fields
+                    setEditAssetId(docSnap.id);
                     setEditName(data.name || '');
                     setSelectedRoom(data.room || 'MCIC Event Space');
                     setSpecificLocation(data.specificLocation || '');
@@ -77,7 +83,7 @@ export default function BorrowPage({ params }) {
                     setEditIncludedItems(data.includedItems || '');
                     setEditQuantity(data.quantity ? String(data.quantity) : '1');
                     setEditItemType(data.itemType || 'reusable');
-                    setEditImageUrl(data.image || '');
+                    setImagePreview(data.image || '');
                 } else {
                     console.error("No matching document in Firebase!");
                 }
@@ -91,6 +97,13 @@ export default function BorrowPage({ params }) {
             fetchItem();
         }
     }, [itemId]);
+
+    const handleImageChange = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        setImageFile(file);
+        setImagePreview(URL.createObjectURL(file));
+    };
 
     const handleCheckoutPipeline = async (e) => {
         e.preventDefault();
@@ -190,6 +203,15 @@ export default function BorrowPage({ params }) {
             : selectedRoom;
 
         try {
+            let finalImageUrl = imagePreview;
+
+            // Upload new image file if selected
+            if (imageFile) {
+                const storageRef = ref(storage, `inventory/${itemId}_${Date.now()}`);
+                await uploadBytes(storageRef, imageFile);
+                finalImageUrl = await getDownloadURL(storageRef);
+            }
+
             const docRef = doc(db, "items", itemId);
             const updatedData = {
                 name: editName.trim(),
@@ -200,7 +222,7 @@ export default function BorrowPage({ params }) {
                 includedItems: editIncludedItems.trim(),
                 quantity: parseInt(editQuantity, 10) || 1,
                 itemType: editItemType,
-                image: editImageUrl.trim()
+                image: finalImageUrl
             };
 
             await updateDoc(docRef, updatedData);
@@ -247,14 +269,13 @@ export default function BorrowPage({ params }) {
 
                     {/* ITEM HEADER & SPECIFICATIONS */}
                     <div className="border-b border-gray-100 pb-4 space-y-3">
-                        <div className="flex justify-between items-center text-[10px] font-bold text-gray-400 uppercase tracking-wider">
-                            <span>Asset Record</span>
+                        <div className="flex justify-end items-center text-[10px] font-bold text-gray-400 uppercase tracking-wider">
                             <button
                                 type="button"
                                 onClick={() => setIsEditing(!isEditing)}
                                 className="text-neutral-700 hover:text-black font-extrabold flex items-center gap-1 cursor-pointer bg-neutral-100 border border-neutral-200 px-2 py-0.5 rounded-xs transition-colors"
                             >
-                                <span>{isEditing ? '✕ Cancel Edit' : 'Edit Listing'}</span>
+                                <span>{isEditing ? '✕ Cancel Edit' : '✏️ Edit Listing'}</span>
                             </button>
                         </div>
 
@@ -342,7 +363,7 @@ export default function BorrowPage({ params }) {
                                         placeholder="e.g. 170cm (H) x 65cm (W) x 75cm (D)"
                                         value={editDimensions}
                                         onChange={(e) => setEditDimensions(e.target.value)}
-                                        className="w-full bg-neutral-50 border border-gray-200 text-sm p-3.5 rounded-sm focus:outline-none focus:border-black font-medium text-black placeholder-gray-400"
+                                        className="w-full bg-neutral-50 border border-gray-200 text-sm p-3.5 rounded-sm focus:outline-none focus:border-black text-black placeholder-gray-400"
                                     />
                                 </div>
 
@@ -356,7 +377,7 @@ export default function BorrowPage({ params }) {
                                         placeholder="e.g. Power Cable, HDMI Cable, Remote Control"
                                         value={editIncludedItems}
                                         onChange={(e) => setEditIncludedItems(e.target.value)}
-                                        className="w-full bg-neutral-50 border border-gray-200 text-sm p-3.5 rounded-sm focus:outline-none focus:border-black font-medium text-black placeholder-gray-400"
+                                        className="w-full bg-neutral-50 border border-gray-200 text-sm p-3.5 rounded-sm focus:outline-none focus:border-black text-black placeholder-gray-400"
                                     />
                                 </div>
 
@@ -406,18 +427,43 @@ export default function BorrowPage({ params }) {
                                     </div>
                                 </div>
 
-                                {/* 7. IMAGE URL */}
+                                {/* 7. ASSET ID (READ ONLY / READ-EDIT MATCHING ADD PAGE) */}
                                 <div className="space-y-1.5">
                                     <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-500">
-                                        Image URL
+                                        Asset ID
                                     </label>
                                     <input
                                         type="text"
-                                        placeholder="https://..."
-                                        value={editImageUrl}
-                                        onChange={(e) => setEditImageUrl(e.target.value)}
-                                        className="w-full bg-neutral-50 border border-gray-200 text-sm p-3.5 rounded-sm focus:outline-none focus:border-black font-medium text-black placeholder-gray-400"
+                                        readOnly
+                                        value={editAssetId}
+                                        className="w-full bg-neutral-100 border border-gray-200 text-sm p-3.5 font-mono rounded-sm focus:outline-none text-neutral-600 cursor-not-allowed"
                                     />
+                                </div>
+
+                                {/* 8. PHOTO DISPLAY AND UPLOAD SECTION */}
+                                <div className="space-y-2 pt-2 border-t border-gray-200/60">
+                                    <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-500">
+                                        Asset Image
+                                    </label>
+                                    <div className="flex items-center gap-4">
+                                        <div className="w-20 h-20 bg-neutral-100 border border-gray-200 rounded-sm overflow-hidden flex items-center justify-center shrink-0">
+                                            {imagePreview ? (
+                                                <img src={imagePreview} alt="Item Preview" className="w-full h-full object-cover" />
+                                            ) : (
+                                                <span className="text-2xl">📦</span>
+                                            )}
+                                        </div>
+                                        <label className="p-3 bg-neutral-50 border border-dashed border-gray-300 rounded-sm flex flex-col items-center justify-center cursor-pointer hover:border-black transition-colors flex-1 text-center">
+                                            <span className="text-xs font-bold uppercase text-gray-500">📷 Change Photo</span>
+                                            <span className="text-[9px] text-gray-400 mt-0.5">PNG, JPG or WEBP</span>
+                                            <input
+                                                type="file"
+                                                accept="image/*"
+                                                onChange={handleImageChange}
+                                                className="hidden"
+                                            />
+                                        </label>
+                                    </div>
                                 </div>
 
                                 {/* SAVE BUTTON */}
