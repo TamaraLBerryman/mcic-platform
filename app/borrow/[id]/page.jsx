@@ -4,26 +4,6 @@ import { useState, useEffect } from 'react';
 import { db } from '../../lib/firebase';
 import { doc, getDoc, updateDoc, collection, addDoc } from 'firebase/firestore';
 
-// Master catalog for the reporting combobox
-const allSupplyCatalog = [
-    { id: '1', label: 'Full Fat Milk', icon: '🥛', category: 'Kitchen', keywords: 'dairy milk full fat white' },
-    { id: '2', label: 'Oat Milk', icon: '🌾', category: 'Kitchen', keywords: 'oat milk dairy free plant' },
-    { id: '3', label: 'Almond Milk', icon: '🥜', category: 'Kitchen', keywords: 'almond milk nut plant' },
-    { id: '4', label: 'Coffee Beans', icon: '☕', category: 'Kitchen', keywords: 'coffee espresso beans roast' },
-    { id: '5', label: 'Tea Bags', icon: '🫖', category: 'Kitchen', keywords: 'tea Earl Grey green' },
-    { id: '6', label: 'Dishsoap', icon: '🧼', category: 'Kitchen', keywords: 'soap dish detergent cleaning' },
-    { id: '7', label: 'Paper Towel', icon: '🧻', category: 'Kitchen', keywords: 'towel paper roll wipe' },
-    { id: '8', label: 'Hand Soap', icon: '🧴', category: 'Kitchen', keywords: 'soap wash hands' },
-    { id: '9', label: 'Paper (A4)', icon: '📄', category: 'Printing', keywords: 'paper A4 printer copy' },
-    { id: '10', label: 'Paper (A3)', icon: '📑', category: 'Printing', keywords: 'paper A3 large print' },
-    { id: '11', label: 'Ink / Toner Depleted', icon: '🖨️', category: 'Printing', keywords: 'ink toner cartridge print' },
-    { id: '12', label: 'Bandaids', icon: '🩹', category: 'First Aid', keywords: 'bandaid plaster bandage first aid' },
-    { id: '13', label: 'Printer Jam / Error', icon: '🖨️', category: 'Maintenance', keywords: 'printer broken jam paper fix' },
-    { id: '14', label: 'Coffee Machine Malfunction', icon: '☕', category: 'Maintenance', keywords: 'coffee machine broken water repair' },
-    { id: '15', label: 'AV Screen / HDMI Cable Damaged', icon: '🖥️', category: 'Maintenance', keywords: 'tv screen display monitor hdmi cable' },
-    { id: '16', label: 'Phone Booth Door / Light Broken', icon: '🚪', category: 'Maintenance', keywords: 'phone booth door light socket power' }
-];
-
 export default function BorrowPage({ params }) {
     const itemId = params.id ? params.id.toUpperCase() : "UNKNOWN-ASSET";
 
@@ -32,6 +12,10 @@ export default function BorrowPage({ params }) {
     const [borrowerName, setBorrowerName] = useState('');
     const [isProcessing, setIsProcessing] = useState(false);
     const [actionSuccess, setActionSuccess] = useState(false);
+
+    // UNSW Team & Email Verification States
+    const [isUnswFoundersTeam, setIsUnswFoundersTeam] = useState('yes'); // 'yes' | 'no'
+    const [borrowerEmail, setBorrowerEmail] = useState('');
 
     // Future Reservation Date States
     const [checkoutIntent, setCheckoutIntent] = useState('now'); // 'now' | 'future'
@@ -42,14 +26,9 @@ export default function BorrowPage({ params }) {
     const [bookingStartTime, setBookingStartTime] = useState('');
     const [bookingEndTime, setBookingEndTime] = useState('');
 
-    // Reporting Low Stock / Maintenance States
-    const [supplyAlert, setSupplyAlert] = useState(null);
-    const [reportType, setReportType] = useState('stock'); // 'stock' | 'broken'
-    const [stockSearchQuery, setStockSearchQuery] = useState('');
-    const [dispatchLocation, setDispatchLocation] = useState('');
-    const [selectedItem, setSelectedItem] = useState(null);
-    const [isCustomInput, setIsCustomInput] = useState(false);
-    const [dropdownOpen, setDropdownOpen] = useState(false);
+    // Reporting Broken / Damaged Asset States
+    const [reportDescription, setReportDescription] = useState('');
+    const [supplyAlert, setSupplyAlert] = useState(false);
 
     // Fetch item document from Firebase Firestore
     useEffect(() => {
@@ -83,11 +62,13 @@ export default function BorrowPage({ params }) {
 
         try {
             if (checkoutIntent === 'future') {
-                // Log future reservation directly into Firestore
+                // Log future reservation into Firestore
                 await addDoc(collection(db, "asset_reservations"), {
                     itemId: itemId,
                     itemName: itemDetails.name,
                     borrowerName: borrowerName.trim(),
+                    isUnswFoundersTeam: isUnswFoundersTeam,
+                    borrowerEmail: isUnswFoundersTeam === 'no' ? borrowerEmail.trim() : '-',
                     dateSelectionType: dateSelectionType,
                     bookingDate: dateSelectionType === 'single' ? bookingDate : null,
                     bookingStartDate: dateSelectionType === 'range' ? bookingStartDate : null,
@@ -122,6 +103,7 @@ export default function BorrowPage({ params }) {
             setTimeout(() => {
                 setActionSuccess(false);
                 setBorrowerName('');
+                setBorrowerEmail('');
                 setBookingDate('');
                 setBookingStartDate('');
                 setBookingEndDate('');
@@ -137,33 +119,27 @@ export default function BorrowPage({ params }) {
         }
     };
 
-    // Low Stock / Broken Equipment Alert Handler
+    // Report Damaged Asset Handler (Uses known item name and storage location)
     const handleReportSubmit = async (e) => {
         e.preventDefault();
-        const itemText = isCustomInput ? stockSearchQuery : (selectedItem?.label || stockSearchQuery);
-        if (!itemText.trim() || !dispatchLocation.trim()) return;
-
-        const actionTag = reportType === 'broken' ? 'Maintenance' : 'Low Stock';
+        if (!itemDetails || !reportDescription.trim()) return;
 
         try {
             await addDoc(collection(db, "alerts"), {
-                type: actionTag,
-                item: itemText.trim(),
-                location: dispatchLocation,
+                type: 'Maintenance / Damaged Asset',
+                itemId: itemDetails.id,
+                item: itemDetails.name,
+                location: itemDetails.storageLocation || 'Unknown Location',
+                description: reportDescription.trim(),
                 status: 'Pending',
                 createdAt: new Date().toISOString()
             });
 
-            setSupplyAlert(`${actionTag} ${itemText} at ${dispatchLocation}`);
-
-            setStockSearchQuery('');
-            setSelectedItem(null);
-            setDispatchLocation('');
-            setIsCustomInput(false);
-            setDropdownOpen(false);
+            setSupplyAlert(true);
+            setReportDescription('');
         } catch (err) {
-            console.error("Error logging alert to Firebase:", err);
-            alert("Failed to submit alert.");
+            console.error("Error logging damage report to Firebase:", err);
+            alert("Failed to submit damage report.");
         }
     };
 
@@ -373,19 +349,67 @@ export default function BorrowPage({ params }) {
                             )}
 
                             {(isAvailable || checkoutIntent === 'future') && (
-                                <div className="space-y-1.5 animate-in fade-in duration-200">
-                                    <label className="text-[10px] font-bold uppercase tracking-wider text-gray-500 block">
-                                        Your Name
-                                    </label>
-                                    <input
-                                        type="text"
-                                        required
-                                        placeholder="e.g. Sarah Jenkins (EcoVibe Tech)"
-                                        value={borrowerName}
-                                        onChange={(e) => setBorrowerName(e.target.value)}
-                                        className="w-full p-3 border border-gray-200 bg-white text-sm font-medium rounded-sm outline-none focus:border-neutral-400 text-black placeholder-gray-400"
-                                    />
-                                </div>
+                                <>
+                                    <div className="space-y-1.5 animate-in fade-in duration-200">
+                                        <label className="text-[10px] font-bold uppercase tracking-wider text-gray-500 block">
+                                            Your Name
+                                        </label>
+                                        <input
+                                            type="text"
+                                            required
+                                            placeholder="e.g. John Smith"
+                                            value={borrowerName}
+                                            onChange={(e) => setBorrowerName(e.target.value)}
+                                            className="w-full p-3 border border-gray-200 bg-white text-sm font-medium rounded-sm outline-none focus:border-neutral-400 text-black placeholder-gray-400"
+                                        />
+                                    </div>
+
+                                    {/* UNSW FOUNDERS TEAM QUESTION */}
+                                    <div className="space-y-1.5">
+                                        <label className="text-[10px] font-bold uppercase tracking-wider text-gray-500 block">
+                                            Are you part of the UNSW Founders Team?
+                                        </label>
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <button
+                                                type="button"
+                                                onClick={() => setIsUnswFoundersTeam('yes')}
+                                                className={`p-2.5 text-[10px] font-bold uppercase tracking-wider rounded-sm border transition-colors cursor-pointer ${isUnswFoundersTeam === 'yes'
+                                                        ? 'bg-black text-[#EAD64D] border-black'
+                                                        : 'bg-white text-gray-600 border-gray-200 hover:bg-neutral-50'
+                                                    }`}
+                                            >
+                                                Yes
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => setIsUnswFoundersTeam('no')}
+                                                className={`p-2.5 text-[10px] font-bold uppercase tracking-wider rounded-sm border transition-colors cursor-pointer ${isUnswFoundersTeam === 'no'
+                                                        ? 'bg-black text-[#EAD64D] border-black'
+                                                        : 'bg-white text-gray-600 border-gray-200 hover:bg-neutral-50'
+                                                    }`}
+                                            >
+                                                No
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    {/* CONDITIONAL EMAIL INPUT IF NOT UNSW FOUNDERS TEAM */}
+                                    {isUnswFoundersTeam === 'no' && (
+                                        <div className="space-y-1.5 animate-in fade-in duration-200">
+                                            <label className="text-[10px] font-bold uppercase tracking-wider text-gray-500 block">
+                                                Email Address *
+                                            </label>
+                                            <input
+                                                type="email"
+                                                required
+                                                placeholder="e.g. john.smith@example.com"
+                                                value={borrowerEmail}
+                                                onChange={(e) => setBorrowerEmail(e.target.value)}
+                                                className="w-full p-3 border border-gray-200 bg-white text-sm font-medium rounded-sm outline-none focus:border-neutral-400 text-black placeholder-gray-400"
+                                            />
+                                        </div>
+                                    )}
+                                </>
                             )}
 
                             <button
@@ -408,14 +432,14 @@ export default function BorrowPage({ params }) {
                     )}
                 </div>
 
-                {/* REPORT LOW STOCK OR MAINTENANCE SECTION */}
+                {/* REPORT ITEM BROKEN / DAMAGED SECTION */}
                 <div className="bg-white border border-gray-200 p-6 sm:p-8 rounded-sm shadow-sm space-y-6">
                     <div className="border-b border-gray-100 pb-4 space-y-1">
                         <h2 className="text-xl font-extrabold uppercase text-black tracking-tight">
-                            Report Low Stock or Maintenance
+                            Report Item Broken / Damaged
                         </h2>
                         <p className="text-xs text-gray-500 font-normal">
-                            Noticed a depleted consumable or broken equipment while here? Submit a ticket directly to operations.
+                            Noticed an issue or damage with <span className="font-bold text-black">{itemDetails.name}</span>? Submit a maintenance ticket directly to operations.
                         </p>
                     </div>
 
@@ -423,11 +447,11 @@ export default function BorrowPage({ params }) {
                         <div className="p-4 bg-[#EAD64D] text-black font-bold text-xs rounded-xs flex justify-between items-center shadow-xs border border-black animate-in fade-in duration-150">
                             <div className="flex items-center gap-2.5">
                                 <span className="text-base">✓</span>
-                                <span>Logged: Request for <strong>{supplyAlert}</strong> sent to MCIC Ops!</span>
+                                <span>Damage report for <strong>{itemDetails.name}</strong> sent to MCIC Ops!</span>
                             </div>
                             <button
                                 type="button"
-                                onClick={() => setSupplyAlert(null)}
+                                onClick={() => setSupplyAlert(false)}
                                 className="text-black font-extrabold px-2 py-0.5 hover:bg-black hover:text-white rounded-xs transition-colors cursor-pointer"
                             >
                                 ✕
@@ -435,138 +459,27 @@ export default function BorrowPage({ params }) {
                         </div>
                     )}
 
-                    <form onSubmit={handleReportSubmit} className="space-y-6">
-                        <div className="space-y-2">
+                    <form onSubmit={handleReportSubmit} className="space-y-4">
+                        <div className="space-y-1.5">
                             <label className="font-extrabold text-black uppercase text-xs tracking-wide block">
-                                1. Is this about Low Stock or Maintenance?
+                                Describe the issue or damage *
                             </label>
-                            <div className="grid grid-cols-2 gap-3">
-                                <button
-                                    type="button"
-                                    onClick={() => setReportType('stock')}
-                                    className={`p-3.5 border text-left font-bold text-xs rounded-xs transition-all cursor-pointer flex items-center justify-between ${reportType === 'stock'
-                                        ? 'bg-black text-[#EAD64D] border-black shadow-xs'
-                                        : 'bg-neutral-50 text-neutral-800 border-neutral-200 hover:border-black'
-                                        }`}
-                                >
-                                    <span className="flex items-center gap-2">⚠️ Low Stock</span>
-                                    {reportType === 'stock' && <span className="text-xs">✓</span>}
-                                </button>
-
-                                <button
-                                    type="button"
-                                    onClick={() => setReportType('broken')}
-                                    className={`p-3.5 border text-left font-bold text-xs rounded-xs transition-all cursor-pointer flex items-center justify-between ${reportType === 'broken'
-                                        ? 'bg-black text-[#EAD64D] border-black shadow-xs'
-                                        : 'bg-neutral-50 text-neutral-800 border-neutral-200 hover:border-black'
-                                        }`}
-                                >
-                                    <span className="flex items-center gap-2">🔧 Broken / Damaged</span>
-                                    {reportType === 'broken' && <span className="text-xs">✓</span>}
-                                </button>
-                            </div>
+                            <textarea
+                                required
+                                rows="3"
+                                placeholder="e.g. Screen flickering, cable frayed, hinge loose..."
+                                value={reportDescription}
+                                onChange={(e) => setReportDescription(e.target.value)}
+                                className="w-full p-3.5 border border-neutral-300 bg-white text-xs font-medium rounded-xs outline-none focus:border-black text-black placeholder-gray-400"
+                            />
                         </div>
 
-                        <div className="space-y-2 relative">
-                            <label className="font-extrabold text-black uppercase text-xs tracking-wide block">
-                                2. {reportType === 'broken' ? 'WHAT IS BROKEN, DAMAGED OR MALFUNCTIONING?' : 'WHAT IS RUNNING LOW OR EMPTY?'}
-                            </label>
-
-                            <div className="relative">
-                                <input
-                                    type="text"
-                                    placeholder={reportType === 'broken' ? "What's broken or damaged?" : "What needs restocking?"}
-                                    value={stockSearchQuery}
-                                    onChange={(e) => {
-                                        setStockSearchQuery(e.target.value);
-                                        setDropdownOpen(true);
-                                        setSelectedItem(null);
-                                        setIsCustomInput(true);
-                                    }}
-                                    onFocus={() => setDropdownOpen(true)}
-                                    className="w-full p-3.5 border border-neutral-300 bg-white text-xs font-medium rounded-xs outline-none focus:border-black text-black pr-10"
-                                    required
-                                />
-                                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 text-sm">🔍</span>
-                            </div>
-
-                            {dropdownOpen && stockSearchQuery.trim().length > 0 && (
-                                <div className="absolute left-0 right-0 top-full mt-1 bg-white border-2 border-black rounded-xs shadow-xl z-50 max-h-60 overflow-y-auto divide-y divide-neutral-100">
-                                    {allSupplyCatalog
-                                        .filter(item => {
-                                            const matchesCategory = reportType === 'broken' ? item.category === 'Maintenance' : item.category !== 'Maintenance';
-                                            const matchesQuery = item.label.toLowerCase().includes(stockSearchQuery.toLowerCase()) ||
-                                                item.keywords.toLowerCase().includes(stockSearchQuery.toLowerCase());
-                                            return matchesCategory && matchesQuery;
-                                        })
-                                        .map((item) => (
-                                            <button
-                                                key={item.id}
-                                                type="button"
-                                                onClick={() => {
-                                                    setStockSearchQuery(item.label);
-                                                    setSelectedItem(item);
-                                                    setIsCustomInput(false);
-                                                    setDropdownOpen(false);
-                                                }}
-                                                className="w-full p-3 text-left hover:bg-neutral-50 flex items-center justify-between cursor-pointer transition-colors"
-                                            >
-                                                <div className="flex items-center gap-2.5">
-                                                    <span className="text-base">{item.icon}</span>
-                                                    <span className="font-bold text-xs text-neutral-900">{item.label}</span>
-                                                </div>
-                                                <span className="text-[9px] font-mono uppercase px-2 py-0.5 bg-neutral-100 text-neutral-600 rounded-xs font-bold">
-                                                    {item.category}
-                                                </span>
-                                            </button>
-                                        ))
-                                    }
-
-                                    <button
-                                        type="button"
-                                        onClick={() => {
-                                            setIsCustomInput(true);
-                                            setSelectedItem(null);
-                                            setDropdownOpen(false);
-                                        }}
-                                        className="w-full p-3 text-left bg-neutral-50 hover:bg-black hover:text-[#EAD64D] flex items-center justify-between cursor-pointer transition-colors group"
-                                    >
-                                        <span className="font-bold text-xs text-neutral-800 group-hover:text-white">
-                                            ✍️ Use custom request: "{stockSearchQuery}"
-                                        </span>
-                                        <span className="text-[9px] font-mono uppercase text-neutral-400 group-hover:text-[#EAD64D]">Custom Input</span>
-                                    </button>
-                                </div>
-                            )}
-                        </div>
-
-                        <div className="space-y-2">
-                            <label className="font-extrabold text-black uppercase text-xs tracking-wide block">
-                                3. WHERE IS IT LOCATED IN MCIC?
-                            </label>
-                            <div className="flex flex-col gap-2">
-                                <select
-                                    value={dispatchLocation}
-                                    onChange={(e) => setDispatchLocation(e.target.value)}
-                                    className="w-full p-3.5 border border-neutral-300 bg-white text-xs font-bold rounded-xs outline-none focus:border-black text-black cursor-pointer"
-                                    required
-                                >
-                                    <option value="" disabled>Select Location...</option>
-                                    <option value="Main Kitchen (Level 1)">Kitchen (Level 1 Formal Coworking Space)</option>
-                                    <option value="Founders Place Kitchenette">Kitchen (Level 1 Founders Place Informal Coworking Space)</option>
-                                    <option value="Copy Room & Print Hub">Copy Room</option>
-                                    <option value="Founders Place">Founders Place</option>
-                                    <option value="MCIC Event Space (Ground)">MCIC Event Space (Ground)</option>
-                                </select>
-
-                                <button
-                                    type="submit"
-                                    className="w-full bg-black text-[#EAD64D] font-extrabold py-3.5 text-xs uppercase tracking-wider rounded-xs hover:bg-[#EAD64D] hover:text-black transition-colors cursor-pointer"
-                                >
-                                    Send Report
-                                </button>
-                            </div>
-                        </div>
+                        <button
+                            type="submit"
+                            className="w-full bg-black text-[#EAD64D] font-extrabold py-3.5 text-xs uppercase tracking-wider rounded-xs hover:bg-[#EAD64D] hover:text-black transition-colors cursor-pointer"
+                        >
+                            Submit Damage Report 🔧
+                        </button>
                     </form>
                 </div>
 
