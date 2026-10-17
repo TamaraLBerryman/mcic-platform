@@ -12,7 +12,7 @@ export default function AddInventoryItemPage() {
     const [itemId, setItemId] = useState('');
     const [name, setName] = useState('');
 
-    // Split Room and Specific Sub-Location State
+    // Split Room and Sub-Location State
     const [selectedRoom, setSelectedRoom] = useState('MCIC Event Space');
     const [specificLocation, setSpecificLocation] = useState('');
 
@@ -22,7 +22,7 @@ export default function AddInventoryItemPage() {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [successMessage, setSuccessMessage] = useState(false);
 
-    // Standardized Room Options
+    // Standardized Room Selection Options
     const roomOptions = [
         "MCIC Event Space",
         "MCIC Design Space",
@@ -59,7 +59,7 @@ export default function AddInventoryItemPage() {
                 imageUrl = await getDownloadURL(storageRef);
             }
 
-            // Combine Room and Specific Location
+            // Combine Primary Room and Sub-Location into full storage string
             const fullStorageLocation = specificLocation.trim()
                 ? `${selectedRoom} - ${specificLocation.trim()}`
                 : selectedRoom;
@@ -94,7 +94,7 @@ export default function AddInventoryItemPage() {
 
         } catch (error) {
             console.error("Error creating item in Firebase:", error);
-            alert("Failed to save item. Please check your Firebase configuration or security rules.");
+            alert("Failed to save item. Please check your Firebase configuration or storage rules.");
             setIsSubmitting(false);
         }
     };
@@ -104,57 +104,36 @@ export default function AddInventoryItemPage() {
             <div className="max-w-xl mx-auto px-6 py-16 space-y-8">
 
                 <header className="space-y-2">
-                    <div className="inline-block bg-black text-white font-mono text-[9px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-sm">
-                        Database Registry Entry
-                    </div>
                     <h1 className="text-3xl font-extrabold tracking-tight text-black">
-                        Add New Inventory Asset
+                        Add New Item to Inventory
                     </h1>
-                    <p className="text-gray-600 text-xs sm:text-sm">
-                        Register hardware, laptops, keys, or media equipment into your live Firebase inventory catalog.
-                    </p>
                 </header>
 
                 <div className="bg-white border border-gray-200 p-6 rounded-sm shadow-xs space-y-6">
 
                     {successMessage ? (
                         <div className="p-4 bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-bold uppercase tracking-wider text-center rounded-sm animate-pulse">
-                            ✓ Item Registered Successfully! Redirecting to catalog...
+                            ✓ Item added successfully! Redirecting to Inventory List...
                         </div>
                     ) : (
                         <form onSubmit={handleSubmit} className="space-y-5">
 
-                            {/* ITEM ID */}
-                            <div className="space-y-1">
-                                <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-500">
-                                    Asset ID / Code (Unique Tag) *
-                                </label>
-                                <input
-                                    type="text"
-                                    required
-                                    placeholder="e.g. CAM_001, IPAD_004, KEYS_L1"
-                                    value={itemId}
-                                    onChange={(e) => setItemId(e.target.value)}
-                                    className="w-full bg-neutral-50 border border-gray-200 text-sm p-3 font-mono font-bold rounded-sm focus:outline-none focus:border-black text-black placeholder-gray-400"
-                                />
-                            </div>
-
                             {/* ITEM NAME */}
                             <div className="space-y-1">
                                 <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-500">
-                                    Equipment Title / Item Name *
+                                    Item Name *
                                 </label>
                                 <input
                                     type="text"
                                     required
-                                    placeholder="e.g. Sony Alpha 7 IV Camera, iPad #004"
+                                    placeholder="Item Name #004"
                                     value={name}
                                     onChange={(e) => setName(e.target.value)}
                                     className="w-full bg-neutral-50 border border-gray-200 text-sm p-3 rounded-sm focus:outline-none focus:border-black font-medium text-black placeholder-gray-400"
                                 />
                             </div>
 
-                            {/* ROOM SELECTOR DROPDOWN */}
+                            {/* PRIMARY ROOM LOCATION DROPDOWN */}
                             <div className="space-y-1">
                                 <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-500">
                                     Primary Room Location *
@@ -179,17 +158,31 @@ export default function AddInventoryItemPage() {
                                 </label>
                                 <input
                                     type="text"
-                                    placeholder="e.g. Black Cabinet (Zone B), Drawer 3, AV Shutter Shelf 2"
+                                    placeholder="e.g. Black Cabinet (Zone B), Shelf 2, AV Roller Shutter"
                                     value={specificLocation}
                                     onChange={(e) => setSpecificLocation(e.target.value)}
                                     className="w-full bg-neutral-50 border border-gray-200 text-sm p-3 rounded-sm focus:outline-none focus:border-black font-medium text-black placeholder-gray-400"
                                 />
                             </div>
 
+                            {/* ITEM ID */}
+                            <div className="space-y-1">
+                                <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-500">
+                                    Unique Asset ID (Optional)
+                                </label>
+                                <input
+                                    type="text"
+                                    placeholder="e.g. IPAD_004, CAM_001"
+                                    value={itemId}
+                                    onChange={(e) => setItemId(e.target.value)}
+                                    className="w-full bg-neutral-50 border border-gray-200 text-sm p-3 font-mono font-bold rounded-sm focus:outline-none focus:border-black text-black placeholder-gray-400"
+                                />
+                            </div>
+
                             {/* PHOTO UPLOAD INPUT */}
                             <div className="space-y-2 pt-2 border-t border-gray-100">
                                 <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-500">
-                                    Equipment Photo (Upload)
+                                    Upload Photo/s
                                 </label>
 
                                 <div className="flex items-center gap-4">
@@ -218,7 +211,7 @@ export default function AddInventoryItemPage() {
                                 disabled={isSubmitting}
                                 className={`w-full py-3.5 text-center font-bold text-xs uppercase tracking-wider rounded-sm transition-all text-white bg-black ${isSubmitting ? 'opacity-50 cursor-wait' : 'hover:bg-[#EAD64D] hover:text-black'}`}
                             >
-                                {isSubmitting ? "Uploading Photo & Saving to Firebase..." : "+ Save Asset to Inventory"}
+                                {isSubmitting ? "Uploading Photo & Saving..." : "+ Save Item to Inventory"}
                             </button>
 
                         </form>
@@ -228,7 +221,7 @@ export default function AddInventoryItemPage() {
 
                 <div className="text-center">
                     <a href="/inventory" className="text-xs text-gray-400 hover:text-black font-bold tracking-wider uppercase transition-colors">
-                        ← Cancel & Return to Catalog
+                        ← Cancel & Return to Inventory List.
                     </a>
                 </div>
 

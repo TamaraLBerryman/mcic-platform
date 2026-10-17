@@ -64,7 +64,7 @@ export default function InventoryPage() {
                     </label>
                     <input
                         type="text"
-                        placeholder="Banner, Guillatine, Paper Plates..."
+                        placeholder="Banner, Guillotine, Paper Plates..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                         className="w-full bg-gray-50 border border-gray-300 text-sm px-3 py-2 rounded-sm focus:outline-none focus:border-black font-medium text-black"
