@@ -11,12 +11,29 @@ export default function AddInventoryItemPage() {
 
     const [itemId, setItemId] = useState('');
     const [name, setName] = useState('');
-    const [storageLocation, setStorageLocation] = useState('');
+
+    // Split Room and Specific Sub-Location State
+    const [selectedRoom, setSelectedRoom] = useState('MCIC Event Space');
+    const [specificLocation, setSpecificLocation] = useState('');
+
     const [imageFile, setImageFile] = useState(null);
     const [imagePreview, setImagePreview] = useState(null);
 
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [successMessage, setSuccessMessage] = useState(false);
+
+    // Standardized Room Options
+    const roomOptions = [
+        "MCIC Event Space",
+        "MCIC Design Space",
+        "Fishbowl",
+        "Founders Place Event Space",
+        "Founders Place Group Study",
+        "Ground Floor Lockers",
+        "Founders Level 1 Office",
+        "Founders Level 1 Copy Room",
+        "Founders Level 1 Kitchen"
+    ];
 
     // Handle Image Preview
     const handleImageChange = (e) => {
@@ -42,10 +59,17 @@ export default function AddInventoryItemPage() {
                 imageUrl = await getDownloadURL(storageRef);
             }
 
+            // Combine Room and Specific Location
+            const fullStorageLocation = specificLocation.trim()
+                ? `${selectedRoom} - ${specificLocation.trim()}`
+                : selectedRoom;
+
             // 2. Save document record into Firebase Firestore
             await setDoc(doc(db, "items", formattedId), {
                 name: name.trim(),
-                storageLocation: storageLocation.trim(),
+                room: selectedRoom,
+                specificLocation: specificLocation.trim(),
+                storageLocation: fullStorageLocation,
                 status: 'Available',
                 user: '-',
                 image: imageUrl,
@@ -58,7 +82,8 @@ export default function AddInventoryItemPage() {
             // Reset Form fields
             setItemId('');
             setName('');
-            setStorageLocation('');
+            setSelectedRoom('MCIC Event Space');
+            setSpecificLocation('');
             setImageFile(null);
             setImagePreview(null);
 
@@ -69,7 +94,7 @@ export default function AddInventoryItemPage() {
 
         } catch (error) {
             console.error("Error creating item in Firebase:", error);
-            alert("Failed to save item. Please check your Firebase configuration or storage rules.");
+            alert("Failed to save item. Please check your Firebase configuration or security rules.");
             setIsSubmitting(false);
         }
     };
@@ -102,7 +127,7 @@ export default function AddInventoryItemPage() {
                             {/* ITEM ID */}
                             <div className="space-y-1">
                                 <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-500">
-                                    Asset ID / Code (Unique Tag)
+                                    Asset ID / Code (Unique Tag) *
                                 </label>
                                 <input
                                     type="text"
@@ -117,7 +142,7 @@ export default function AddInventoryItemPage() {
                             {/* ITEM NAME */}
                             <div className="space-y-1">
                                 <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-500">
-                                    Equipment Title / Item Name
+                                    Equipment Title / Item Name *
                                 </label>
                                 <input
                                     type="text"
@@ -129,17 +154,34 @@ export default function AddInventoryItemPage() {
                                 />
                             </div>
 
-                            {/* STORAGE LOCATION */}
+                            {/* ROOM SELECTOR DROPDOWN */}
                             <div className="space-y-1">
                                 <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-500">
-                                    Storage Zone / Cabinet Location
+                                    Primary Room Location *
+                                </label>
+                                <select
+                                    value={selectedRoom}
+                                    onChange={(e) => setSelectedRoom(e.target.value)}
+                                    className="w-full bg-neutral-50 border border-gray-200 text-sm p-3 rounded-sm focus:outline-none focus:border-black font-semibold text-black cursor-pointer"
+                                >
+                                    {roomOptions.map((room) => (
+                                        <option key={room} value={room}>
+                                            {room}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            {/* SPECIFIC LOCATION IN ROOM */}
+                            <div className="space-y-1">
+                                <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-500">
+                                    Specific Location in Room (Optional)
                                 </label>
                                 <input
                                     type="text"
-                                    required
-                                    placeholder="e.g. MCIC AV Roller Shutter, Fishbowl, Coordinator Desk"
-                                    value={storageLocation}
-                                    onChange={(e) => setStorageLocation(e.target.value)}
+                                    placeholder="e.g. Black Cabinet (Zone B), Drawer 3, AV Shutter Shelf 2"
+                                    value={specificLocation}
+                                    onChange={(e) => setSpecificLocation(e.target.value)}
                                     className="w-full bg-neutral-50 border border-gray-200 text-sm p-3 rounded-sm focus:outline-none focus:border-black font-medium text-black placeholder-gray-400"
                                 />
                             </div>

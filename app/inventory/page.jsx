@@ -75,7 +75,7 @@ export default function InventoryPage() {
                 <div className="bg-white border border-gray-200 divide-y divide-gray-100 rounded-sm shadow-xs overflow-hidden">
                     {loading ? (
                         <div className="p-8 text-center text-xs font-bold uppercase text-gray-400 animate-pulse tracking-wide">
-                            Connecting to Firebase Database...
+                            Loading...
                         </div>
                     ) : filteredItems.length > 0 ? (
                         filteredItems.map(item => {
@@ -126,7 +126,7 @@ export default function InventoryPage() {
                         })
                     ) : (
                         <div className="p-8 text-center text-xs font-bold uppercase text-gray-400 italic tracking-wide">
-                            No inventory items found. Click "+ Add New Item" above to create your first item!
+                            No inventory items found. Change your search parameters or add a new item.
                         </div>
                     )}
                 </div>
