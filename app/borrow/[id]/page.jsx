@@ -237,105 +237,135 @@ export default function BorrowPage({ params }) {
                             </button>
                         </div>
 
+                        {/* EDIT SPECIFICATIONS FORM */}
                         {isEditing ? (
-                            <form onSubmit={handleSaveItemEdit} className="p-4 bg-neutral-50 border border-neutral-200 rounded-sm space-y-3 animate-in fade-in duration-200">
-                                <span className="font-extrabold text-[11px] uppercase tracking-wider text-black block border-b pb-1">
-                                    Update Asset Details
-                                </span>
+                            <form onSubmit={handleSaveItemEdit} className="p-4 sm:p-6 bg-[#F9F9F9] border border-gray-200 rounded-sm space-y-5 animate-in fade-in duration-200">
+                                <div className="border-b border-gray-200 pb-2">
+                                    <h3 className="font-extrabold text-xs tracking-wider uppercase text-black">
+                                        UPDATE ASSET DETAILS
+                                    </h3>
+                                </div>
 
-                                <div className="space-y-1">
-                                    <label className="text-[9px] font-bold uppercase tracking-wider text-gray-500 block">Item Name</label>
+                                {/* ITEM NAME */}
+                                <div className="space-y-1.5">
+                                    <label className="text-[10px] font-bold uppercase tracking-wider text-gray-500 block">
+                                        ITEM NAME
+                                    </label>
                                     <input
                                         type="text"
                                         required
                                         value={editName}
                                         onChange={(e) => setEditName(e.target.value)}
-                                        className="w-full p-2 border border-gray-200 bg-white text-xs font-medium rounded-xs outline-none focus:border-black text-black"
+                                        className="w-full p-3 border border-gray-200 bg-white text-xs font-semibold rounded-sm outline-none focus:border-black text-black"
                                     />
                                 </div>
 
-                                <div className="space-y-1">
-                                    <label className="text-[9px] font-bold uppercase tracking-wider text-gray-500 block">Storage Location</label>
+                                {/* STORAGE LOCATION */}
+                                <div className="space-y-1.5">
+                                    <label className="text-[10px] font-bold uppercase tracking-wider text-gray-500 block">
+                                        STORAGE LOCATION
+                                    </label>
                                     <input
                                         type="text"
                                         required
                                         value={editLocation}
                                         onChange={(e) => setEditLocation(e.target.value)}
-                                        className="w-full p-2 border border-gray-200 bg-white text-xs font-medium rounded-xs outline-none focus:border-black text-black"
+                                        className="w-full p-3 border border-gray-200 bg-white text-xs font-semibold rounded-sm outline-none focus:border-black text-black"
                                     />
                                 </div>
 
-                                <div className="grid grid-cols-2 gap-2">
-                                    <div className="space-y-1">
-                                        <label className="text-[9px] font-bold uppercase tracking-wider text-gray-500 block">Dimensions</label>
+                                {/* DIMENSIONS & QUANTITY */}
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div className="space-y-1.5">
+                                        <label className="text-[10px] font-bold uppercase tracking-wider text-gray-500 block">
+                                            DIMENSIONS
+                                        </label>
                                         <input
                                             type="text"
                                             placeholder="e.g. 50cm x 30cm"
                                             value={editDimensions}
                                             onChange={(e) => setEditDimensions(e.target.value)}
-                                            className="w-full p-2 border border-gray-200 bg-white text-xs font-medium rounded-xs outline-none focus:border-black text-black"
+                                            className="w-full p-3 border border-gray-200 bg-white text-xs font-medium rounded-sm outline-none focus:border-black text-black placeholder-gray-400"
                                         />
                                     </div>
-                                    <div className="space-y-1">
-                                        <label className="text-[9px] font-bold uppercase tracking-wider text-gray-500 block">Quantity</label>
+                                    <div className="space-y-1.5">
+                                        <label className="text-[10px] font-bold uppercase tracking-wider text-gray-500 block">
+                                            QUANTITY
+                                        </label>
                                         <input
                                             type="number"
                                             min="1"
                                             value={editQuantity}
                                             onChange={(e) => setEditQuantity(e.target.value)}
-                                            className="w-full p-2 border border-gray-200 bg-white text-xs font-medium rounded-xs outline-none focus:border-black text-black"
+                                            className="w-full p-3 border border-gray-200 bg-white text-xs font-semibold rounded-sm outline-none focus:border-black text-black"
                                         />
                                     </div>
                                 </div>
 
-                                <div className="space-y-1">
-                                    <label className="text-[9px] font-bold uppercase tracking-wider text-gray-500 block">What's Included</label>
+                                {/* WHAT'S INCLUDED */}
+                                <div className="space-y-1.5">
+                                    <label className="text-[10px] font-bold uppercase tracking-wider text-gray-500 block">
+                                        WHAT'S INCLUDED
+                                    </label>
                                     <input
                                         type="text"
                                         placeholder="e.g. Power Cable, Case..."
                                         value={editIncludedItems}
                                         onChange={(e) => setEditIncludedItems(e.target.value)}
-                                        className="w-full p-2 border border-gray-200 bg-white text-xs font-medium rounded-xs outline-none focus:border-black text-black"
+                                        className="w-full p-3 border border-gray-200 bg-white text-xs font-medium rounded-sm outline-none focus:border-black text-black placeholder-gray-400"
                                     />
                                 </div>
 
-                                <div className="space-y-1">
-                                    <label className="text-[9px] font-bold uppercase tracking-wider text-gray-500 block">Asset Type</label>
+                                {/* ASSET TYPE TOGGLE */}
+                                <div className="space-y-1.5">
+                                    <label className="text-[10px] font-bold uppercase tracking-wider text-gray-500 block">
+                                        ASSET TYPE
+                                    </label>
                                     <div className="grid grid-cols-2 gap-2">
                                         <button
                                             type="button"
                                             onClick={() => setEditItemType('reusable')}
-                                            className={`p-1.5 text-[9px] font-bold uppercase tracking-wider rounded-xs border transition-colors cursor-pointer ${editItemType === 'reusable' ? 'bg-black text-[#EAD64D] border-black' : 'bg-white text-gray-600 border-gray-200'}`}
+                                            className={`p-2.5 text-[10px] font-bold uppercase tracking-wider rounded-sm border transition-colors cursor-pointer flex items-center justify-center gap-1.5 ${editItemType === 'reusable'
+                                                    ? 'bg-black text-[#EAD64D] border-black'
+                                                    : 'bg-white text-gray-600 border-gray-200 hover:bg-neutral-50'
+                                                }`}
                                         >
-                                            🔄 Re-usable
+                                            <span>🔄</span> RE-USABLE
                                         </button>
                                         <button
                                             type="button"
                                             onClick={() => setEditItemType('single-use')}
-                                            className={`p-1.5 text-[9px] font-bold uppercase tracking-wider rounded-xs border transition-colors cursor-pointer ${editItemType === 'single-use' ? 'bg-black text-[#EAD64D] border-black' : 'bg-white text-gray-600 border-gray-200'}`}
+                                            className={`p-2.5 text-[10px] font-bold uppercase tracking-wider rounded-sm border transition-colors cursor-pointer flex items-center justify-center gap-1.5 ${editItemType === 'single-use'
+                                                    ? 'bg-black text-[#EAD64D] border-black'
+                                                    : 'bg-white text-gray-600 border-gray-200 hover:bg-neutral-50'
+                                                }`}
                                         >
-                                            📦 Single-Use
+                                            <span>📦</span> SINGLE-USE
                                         </button>
                                     </div>
                                 </div>
 
-                                <div className="space-y-1">
-                                    <label className="text-[9px] font-bold uppercase tracking-wider text-gray-500 block">Image URL</label>
+                                {/* IMAGE URL */}
+                                <div className="space-y-1.5">
+                                    <label className="text-[10px] font-bold uppercase tracking-wider text-gray-500 block">
+                                        IMAGE URL
+                                    </label>
                                     <input
                                         type="text"
                                         placeholder="https://..."
                                         value={editImageUrl}
                                         onChange={(e) => setEditImageUrl(e.target.value)}
-                                        className="w-full p-2 border border-gray-200 bg-white text-xs font-medium rounded-xs outline-none focus:border-black text-black"
+                                        className="w-full p-3 border border-gray-200 bg-white text-xs font-medium rounded-sm outline-none focus:border-black text-black placeholder-gray-400"
                                     />
                                 </div>
 
+                                {/* SAVE BUTTON */}
                                 <button
                                     type="submit"
                                     disabled={isSavingEdit}
-                                    className="w-full py-2 bg-black text-[#EAD64D] font-bold text-xs uppercase tracking-wider rounded-xs hover:bg-[#EAD64D] hover:text-black transition-colors cursor-pointer"
+                                    className="w-full py-3 bg-black text-[#EAD64D] font-bold text-xs uppercase tracking-wider rounded-sm hover:bg-[#EAD64D] hover:text-black transition-colors cursor-pointer flex items-center justify-center gap-2"
                                 >
-                                    {isSavingEdit ? 'Saving Updates...' : '💾 Save Changes'}
+                                    <span>💾</span> {isSavingEdit ? 'SAVING CHANGES...' : 'SAVE CHANGES'}
                                 </button>
                             </form>
                         ) : (
