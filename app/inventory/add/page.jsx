@@ -16,8 +16,9 @@ export default function AddInventoryItemPage() {
     const [selectedRoom, setSelectedRoom] = useState('MCIC Event Space');
     const [specificLocation, setSpecificLocation] = useState('');
 
-    const [imageFile, setImageFile] = useState(null);
-    const [imagePreview, setImagePreview] = useState(null);
+    // Multi-photo State (1 to 4 photos)
+    const [imageFiles, setImageFiles] = useState([]);
+    const [imagePreviews, setImagePreviews] = useState([]);
 
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [successMessage, setSuccessMessage] = useState(false);
@@ -35,13 +36,23 @@ export default function AddInventoryItemPage() {
         "Founders Level 1 Kitchen"
     ];
 
-    // Handle Image Preview
+    // Handle Multi-Photo Selection (Up to 4)
     const handleImageChange = (e) => {
-        const file = e.target.files[0];
-        if (file) {
-            setImageFile(file);
-            setImagePreview(URL.createObjectURL(file));
-        }
+        const files = Array.from(e.target.files);
+        if (!files.length) return;
+
+        const updatedFiles = [...imageFiles, ...files].slice(0, 4);
+        setImageFiles(updatedFiles);
+
+        const updatedPreviews = updatedFiles.map(file => URL.createObjectURL(file));
+        setImagePreviews(updatedPreviews);
+    };
+
+    const handleRemovePhoto = (index) => {
+        const updatedFiles = imageFiles.filter((_, i) => i !== index);
+        const updatedPreviews = imagePreviews.filter((_, i) => i !== index);
+        setImageFiles(updatedFiles);
+        setImagePreviews(updatedPreviews);
     };
 
     const handleSubmit = async (e) => {
@@ -49,14 +60,20 @@ export default function AddInventoryItemPage() {
         setIsSubmitting(true);
 
         try {
-            const formattedId = itemId.trim().toUpperCase().replace(/\s+/g, '_');
-            let imageUrl = '';
+            const formattedId = itemId.trim()
+                ? itemId.trim().toUpperCase().replace(/\s+/g, '_')
+                : `ITEM_${Date.now()}`;
 
-            // 1. Upload photo to Firebase Storage if selected
-            if (imageFile) {
-                const storageRef = ref(storage, `inventory/${formattedId}_${Date.now()}`);
-                await uploadBytes(storageRef, imageFile);
-                imageUrl = await getDownloadURL(storageRef);
+            const uploadedUrls = [];
+
+            // 1. Upload photos (1 to 4) to Firebase Storage
+            if (imageFiles.length > 0) {
+                for (let i = 0; i < imageFiles.length; i++) {
+                    const storageRef = ref(storage, `inventory/${formattedId}_${Date.now()}_${i + 1}`);
+                    await uploadBytes(storageRef, imageFiles[i]);
+                    const url = await getDownloadURL(storageRef);
+                    uploadedUrls.push(url);
+                }
             }
 
             // Combine Primary Room and Sub-Location into full storage string
@@ -72,7 +89,8 @@ export default function AddInventoryItemPage() {
                 storageLocation: fullStorageLocation,
                 status: 'Available',
                 user: '-',
-                image: imageUrl,
+                image: uploadedUrls[0] || '', // Primary thumbnail photo
+                images: uploadedUrls,          // Array of 1 to 4 photo URLs
                 createdAt: new Date().toISOString()
             });
 
@@ -84,8 +102,8 @@ export default function AddInventoryItemPage() {
             setName('');
             setSelectedRoom('MCIC Event Space');
             setSpecificLocation('');
-            setImageFile(null);
-            setImagePreview(null);
+            setImageFiles([]);
+            setImagePreviews([]);
 
             // Redirect back to inventory after 2 seconds
             setTimeout(() => {
@@ -119,90 +137,91 @@ export default function AddInventoryItemPage() {
                         <form onSubmit={handleSubmit} className="space-y-5">
 
                             {/* ITEM NAME */}
-                            <div className="space-y-1">
-                                <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-500">
-                                    Item Name *
-                                </label>
+                            <div>
                                 <input
                                     type="text"
                                     required
-                                    placeholder="Item Name #004"
+                                    placeholder="Item Name"
                                     value={name}
                                     onChange={(e) => setName(e.target.value)}
-                                    className="w-full bg-neutral-50 border border-gray-200 text-sm p-3 rounded-sm focus:outline-none focus:border-black font-medium text-black placeholder-gray-400"
+                                    className="w-full bg-neutral-50 border border-gray-200 text-sm p-3.5 rounded-sm focus:outline-none focus:border-black font-medium text-black placeholder-gray-400"
                                 />
                             </div>
 
-                            {/* PRIMARY ROOM LOCATION DROPDOWN */}
-                            <div className="space-y-1">
-                                <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-500">
-                                    Primary Room Location *
-                                </label>
+                            {/* LOCATION GROUP SECTION */}
+                            <div className="border border-gray-200 p-4 bg-neutral-50/50 rounded-sm space-y-3">
+                                <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 block">
+                                    Location
+                                </span>
+
                                 <select
                                     value={selectedRoom}
                                     onChange={(e) => setSelectedRoom(e.target.value)}
-                                    className="w-full bg-neutral-50 border border-gray-200 text-sm p-3 rounded-sm focus:outline-none focus:border-black font-semibold text-black cursor-pointer"
+                                    className="w-full bg-white border border-gray-200 text-sm p-3.5 rounded-sm focus:outline-none focus:border-black font-semibold text-black cursor-pointer"
                                 >
                                     {roomOptions.map((room) => (
                                         <option key={room} value={room}>
-                                            {room}
+                                            {room}*
                                         </option>
                                     ))}
                                 </select>
-                            </div>
 
-                            {/* SPECIFIC LOCATION IN ROOM */}
-                            <div className="space-y-1">
-                                <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-500">
-                                    Specific Location in Room (Optional)
-                                </label>
                                 <input
                                     type="text"
-                                    placeholder="e.g. Black Cabinet (Zone B), Shelf 2, AV Roller Shutter"
+                                    placeholder="Storage Point e.g. Locker 50"
                                     value={specificLocation}
                                     onChange={(e) => setSpecificLocation(e.target.value)}
-                                    className="w-full bg-neutral-50 border border-gray-200 text-sm p-3 rounded-sm focus:outline-none focus:border-black font-medium text-black placeholder-gray-400"
+                                    className="w-full bg-white border border-gray-200 text-sm p-3.5 rounded-sm focus:outline-none focus:border-black font-medium text-black placeholder-gray-400"
                                 />
                             </div>
 
-                            {/* ITEM ID */}
-                            <div className="space-y-1">
-                                <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-500">
-                                    Unique Asset ID (Optional)
-                                </label>
+                            {/* ASSET ID */}
+                            <div>
                                 <input
                                     type="text"
-                                    placeholder="e.g. IPAD_004, CAM_001"
+                                    placeholder="Asset ID (if relevent) e.g. Ipad_004"
                                     value={itemId}
                                     onChange={(e) => setItemId(e.target.value)}
-                                    className="w-full bg-neutral-50 border border-gray-200 text-sm p-3 font-mono font-bold rounded-sm focus:outline-none focus:border-black text-black placeholder-gray-400"
+                                    className="w-full bg-neutral-50 border border-gray-200 text-sm p-3.5 font-mono font-bold rounded-sm focus:outline-none focus:border-black text-black placeholder-gray-400"
                                 />
                             </div>
 
-                            {/* PHOTO UPLOAD INPUT */}
-                            <div className="space-y-2 pt-2 border-t border-gray-100">
-                                <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-500">
-                                    Upload Photo/s
-                                </label>
-
-                                <div className="flex items-center gap-4">
-                                    <div className="w-20 h-20 bg-neutral-100 border border-gray-200 rounded-sm shrink-0 overflow-hidden flex items-center justify-center">
-                                        {imagePreview ? (
-                                            <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" />
-                                        ) : (
-                                            <span className="text-2xl">📷</span>
-                                        )}
-                                    </div>
-                                    <div className="flex-1">
-                                        <input
-                                            type="file"
-                                            accept="image/*"
-                                            onChange={handleImageChange}
-                                            className="text-xs text-gray-500 file:mr-3 file:py-2 file:px-3 file:rounded-sm file:border-0 file:text-[10px] file:font-bold file:uppercase file:bg-black file:text-white hover:file:bg-[#EAD64D] hover:file:text-black file:cursor-pointer"
-                                        />
-                                        <p className="text-[10px] text-gray-400 mt-1">PNG, JPG, or WEBP photo format.</p>
-                                    </div>
+                            {/* MULTI-PHOTO UPLOAD SECTION (1 to 4 Photos) */}
+                            <div className="space-y-3 pt-2 border-t border-gray-100">
+                                <div className="flex items-center justify-between text-xs text-gray-400 font-medium">
+                                    <span>Upload Photos (1 to 4 max)</span>
+                                    <span>{imageFiles.length}/4 Selected</span>
                                 </div>
+
+                                <div className="grid grid-cols-4 gap-2">
+                                    {imagePreviews.map((src, idx) => (
+                                        <div key={idx} className="relative aspect-square bg-neutral-100 border border-gray-200 rounded-sm overflow-hidden group">
+                                            <img src={src} alt={`Preview ${idx + 1}`} className="w-full h-full object-cover" />
+                                            <button
+                                                type="button"
+                                                onClick={() => handleRemovePhoto(idx)}
+                                                className="absolute top-1 right-1 bg-black/80 text-white text-[10px] w-5 h-5 rounded-full flex items-center justify-center opacity-90 hover:bg-red-600 transition-colors"
+                                            >
+                                                ✕
+                                            </button>
+                                        </div>
+                                    ))}
+
+                                    {imageFiles.length < 4 && (
+                                        <label className="aspect-square bg-neutral-50 border-2 border-dashed border-gray-200 rounded-sm flex flex-col items-center justify-center cursor-pointer hover:border-black transition-colors">
+                                            <span className="text-xl text-gray-400">📷</span>
+                                            <span className="text-[9px] font-bold uppercase text-gray-400 mt-1">+ Photo</span>
+                                            <input
+                                                type="file"
+                                                accept="image/*"
+                                                multiple
+                                                onChange={handleImageChange}
+                                                className="hidden"
+                                            />
+                                        </label>
+                                    )}
+                                </div>
+                                <p className="text-[10px] text-gray-400">PNG, JPG, or WEBP formats allowed.</p>
                             </div>
 
                             {/* SUBMIT BUTTON */}
@@ -211,7 +230,7 @@ export default function AddInventoryItemPage() {
                                 disabled={isSubmitting}
                                 className={`w-full py-3.5 text-center font-bold text-xs uppercase tracking-wider rounded-sm transition-all text-white bg-black ${isSubmitting ? 'opacity-50 cursor-wait' : 'hover:bg-[#EAD64D] hover:text-black'}`}
                             >
-                                {isSubmitting ? "Uploading Photo & Saving..." : "+ Save Item to Inventory"}
+                                {isSubmitting ? "Uploading Photos & Saving..." : "+ Save Item to Inventory"}
                             </button>
 
                         </form>
