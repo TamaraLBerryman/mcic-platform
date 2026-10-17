@@ -144,7 +144,7 @@ export default function AddInventoryItemPage() {
                                 <input
                                     type="text"
                                     required
-                                    placeholder="Item Name"
+                                    placeholder="e.g. Guillotine, Banner..."
                                     value={name}
                                     onChange={(e) => setName(e.target.value)}
                                     className="w-full bg-neutral-50 border border-gray-200 text-sm p-3.5 rounded-sm focus:outline-none focus:border-black font-medium text-black placeholder-gray-400"
@@ -173,8 +173,8 @@ export default function AddInventoryItemPage() {
                                                         type="button"
                                                         onClick={() => setSelectedRoom(room)}
                                                         className={`p-3 text-[11px] font-bold uppercase tracking-wider rounded-sm border transition-all cursor-pointer text-left flex items-center justify-between ${isSelected
-                                                                ? 'bg-black text-[#EAD64D] border-black shadow-xs'
-                                                                : 'bg-white text-neutral-700 border-gray-200 hover:border-black hover:bg-neutral-100'
+                                                            ? 'bg-black text-[#EAD64D] border-black shadow-xs'
+                                                            : 'bg-white text-neutral-700 border-gray-200 hover:border-black hover:bg-neutral-100'
                                                             }`}
                                                     >
                                                         <span>{room}</span>
@@ -192,7 +192,7 @@ export default function AddInventoryItemPage() {
                                         </label>
                                         <input
                                             type="text"
-                                            placeholder="Storage Point e.g. Locker 50"
+                                            placeholder="e.g. Locker 50"
                                             value={specificLocation}
                                             onChange={(e) => setSpecificLocation(e.target.value)}
                                             className="w-full bg-white border border-gray-200 text-sm p-3.5 rounded-sm focus:outline-none focus:border-black font-medium text-black placeholder-gray-400"
