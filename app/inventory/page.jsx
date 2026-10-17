@@ -45,7 +45,7 @@ export default function InventoryPage() {
                 <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                     <div className="space-y-1">
                         <h1 className="text-4xl font-extrabold tracking-tight text-black">Inventory</h1>
-                        <p className="text-gray-600 text-xs sm:text-sm">Real-time Firebase tracking of MCIC Assets.</p>
+                        <p className="text-gray-600 text-xs sm:text-sm">Search, Check-Out, Book and Report Borken Items.</p>
                     </div>
                     <div>
                         <a
@@ -60,11 +60,11 @@ export default function InventoryPage() {
                 {/* SEARCH BAR */}
                 <div className="bg-white p-4 border border-gray-200 rounded-sm shadow-xs">
                     <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-500 mb-1">
-                        Search Hardware or Location
+                        Search Item or Location
                     </label>
                     <input
                         type="text"
-                        placeholder="Search Dell, Fishbowl, TV..."
+                        placeholder="Banner, Guillatine, Paper Plates..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                         className="w-full bg-gray-50 border border-gray-300 text-sm px-3 py-2 rounded-sm focus:outline-none focus:border-black font-medium text-black"
