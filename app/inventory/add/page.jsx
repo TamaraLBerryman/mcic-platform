@@ -137,7 +137,10 @@ export default function AddInventoryItemPage() {
                         <form onSubmit={handleSubmit} className="space-y-5">
 
                             {/* ITEM NAME */}
-                            <div>
+                            <div className="space-y-1.5">
+                                <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-500">
+                                    Item Name *
+                                </label>
                                 <input
                                     type="text"
                                     required
@@ -150,33 +153,46 @@ export default function AddInventoryItemPage() {
 
                             {/* LOCATION GROUP SECTION */}
                             <div className="border border-gray-200 p-4 bg-neutral-50/50 rounded-sm space-y-3">
-                                <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 block">
+                                <span className="text-[11px] font-bold uppercase tracking-wider text-gray-500 block">
                                     Location
                                 </span>
 
-                                <select
-                                    value={selectedRoom}
-                                    onChange={(e) => setSelectedRoom(e.target.value)}
-                                    className="w-full bg-white border border-gray-200 text-sm p-3.5 rounded-sm focus:outline-none focus:border-black font-semibold text-black cursor-pointer"
-                                >
-                                    {roomOptions.map((room) => (
-                                        <option key={room} value={room}>
-                                            {room}*
-                                        </option>
-                                    ))}
-                                </select>
+                                <div className="space-y-1">
+                                    <label className="block text-[10px] font-semibold text-gray-400">
+                                        Room *
+                                    </label>
+                                    <select
+                                        value={selectedRoom}
+                                        onChange={(e) => setSelectedRoom(e.target.value)}
+                                        className="w-full bg-white border border-gray-200 text-sm p-3.5 rounded-sm focus:outline-none focus:border-black font-semibold text-black cursor-pointer"
+                                    >
+                                        {roomOptions.map((room) => (
+                                            <option key={room} value={room}>
+                                                {room}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
 
-                                <input
-                                    type="text"
-                                    placeholder="Storage Point e.g. Locker 50"
-                                    value={specificLocation}
-                                    onChange={(e) => setSpecificLocation(e.target.value)}
-                                    className="w-full bg-white border border-gray-200 text-sm p-3.5 rounded-sm focus:outline-none focus:border-black font-medium text-black placeholder-gray-400"
-                                />
+                                <div className="space-y-1 pt-1">
+                                    <label className="block text-[10px] font-semibold text-gray-400">
+                                        Storage Point
+                                    </label>
+                                    <input
+                                        type="text"
+                                        placeholder="Storage Point e.g. Locker 50"
+                                        value={specificLocation}
+                                        onChange={(e) => setSpecificLocation(e.target.value)}
+                                        className="w-full bg-white border border-gray-200 text-sm p-3.5 rounded-sm focus:outline-none focus:border-black font-medium text-black placeholder-gray-400"
+                                    />
+                                </div>
                             </div>
 
                             {/* ASSET ID */}
-                            <div>
+                            <div className="space-y-1.5">
+                                <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-500">
+                                    Asset ID
+                                </label>
                                 <input
                                     type="text"
                                     placeholder="Asset ID (if relevent) e.g. Ipad_004"
@@ -188,9 +204,9 @@ export default function AddInventoryItemPage() {
 
                             {/* MULTI-PHOTO UPLOAD SECTION (1 to 4 Photos) */}
                             <div className="space-y-3 pt-2 border-t border-gray-100">
-                                <div className="flex items-center justify-between text-xs text-gray-400 font-medium">
+                                <div className="flex items-center justify-between text-xs text-gray-500 font-bold uppercase tracking-wider">
                                     <span>Upload Photos (1 to 4 max)</span>
-                                    <span>{imageFiles.length}/4 Selected</span>
+                                    <span className="text-gray-400 font-normal">{imageFiles.length}/4 Selected</span>
                                 </div>
 
                                 <div className="grid grid-cols-4 gap-2">
