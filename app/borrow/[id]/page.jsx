@@ -44,9 +44,11 @@ export default function BorrowPage({ params }) {
     const [editQuantity, setEditQuantity] = useState('1');
     const [editItemType, setEditItemType] = useState('reusable');
 
-    // Photo Editing States
-    const [imageFile, setImageFile] = useState(null);
-    const [imagePreview, setImagePreview] = useState('');
+    // Multi-photo Editing States (up to 4 photos)
+    const [existingImages, setExistingImages] = useState([]); // Currently saved Firestore URLs
+    const [newImageFiles, setNewImageFiles] = useState([]);  // Newly selected File objects
+    const [newImagePreviews, setNewImagePreviews] = useState([]); // Blob URLs for newly selected files
+    const [activeDisplayPhotoIdx, setActiveDisplayPhotoIdx] = useState(0);
     const [isSavingEdit, setIsSavingEdit] = useState(false);
 
     // Standardized Room Selection Options (Mirrors app/add-item/page.jsx)
@@ -74,7 +76,7 @@ export default function BorrowPage({ params }) {
                     const data = docSnap.data();
                     setItemDetails({ id: docSnap.id, ...data });
 
-                    // Populate edit form states to mirror Add Item fields
+                    // Populate edit form states
                     setEditAssetId(docSnap.id);
                     setEditName(data.name || '');
                     setSelectedRoom(data.room || 'MCIC Event Space');
@@ -83,7 +85,12 @@ export default function BorrowPage({ params }) {
                     setEditIncludedItems(data.includedItems || '');
                     setEditQuantity(data.quantity ? String(data.quantity) : '1');
                     setEditItemType(data.itemType || 'reusable');
-                    setImagePreview(data.image || '');
+
+                    // Load existing images (or primary thumbnail)
+                    const imgs = data.images && data.images.length > 0
+                        ? data.images
+                        : (data.image ? [data.image] : []);
+                    setExistingImages(imgs);
                 } else {
                     console.error("No matching document in Firebase!");
                 }
@@ -98,11 +105,36 @@ export default function BorrowPage({ params }) {
         }
     }, [itemId]);
 
-    const handleImageChange = (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-        setImageFile(file);
-        setImagePreview(URL.createObjectURL(file));
+    // Total photos count (existing saved + newly staged)
+    const totalPhotosCount = existingImages.length + newImageFiles.length;
+
+    // Handle selecting new photos (up to 4 max combined)
+    const handleAddPhotos = (e) => {
+        const files = Array.from(e.target.files);
+        if (!files.length) return;
+
+        const availableSlots = 4 - totalPhotosCount;
+        if (availableSlots <= 0) return;
+
+        const filesToAdd = files.slice(0, availableSlots);
+        const updatedNewFiles = [...newImageFiles, ...filesToAdd];
+        setNewImageFiles(updatedNewFiles);
+
+        const updatedPreviews = updatedNewFiles.map(file => URL.createObjectURL(file));
+        setNewImagePreviews(updatedPreviews);
+    };
+
+    // Remove an existing saved photo from Firestore list
+    const handleRemoveExistingPhoto = (index) => {
+        setExistingImages(existingImages.filter((_, i) => i !== index));
+    };
+
+    // Remove a newly uploaded photo before saving
+    const handleRemoveNewPhoto = (index) => {
+        const updatedFiles = newImageFiles.filter((_, i) => i !== index);
+        const updatedPreviews = newImagePreviews.filter((_, i) => i !== index);
+        setNewImageFiles(updatedFiles);
+        setNewImagePreviews(updatedPreviews);
     };
 
     const handleCheckoutPipeline = async (e) => {
@@ -203,14 +235,19 @@ export default function BorrowPage({ params }) {
             : selectedRoom;
 
         try {
-            let finalImageUrl = imagePreview;
+            const newlyUploadedUrls = [];
 
-            // Upload new image file if selected
-            if (imageFile) {
-                const storageRef = ref(storage, `inventory/${itemId}_${Date.now()}`);
-                await uploadBytes(storageRef, imageFile);
-                finalImageUrl = await getDownloadURL(storageRef);
+            // 1. Upload any new photo files to Firebase Storage
+            if (newImageFiles.length > 0) {
+                for (let i = 0; i < newImageFiles.length; i++) {
+                    const storageRef = ref(storage, `inventory/${itemId}_${Date.now()}_${i + 1}`);
+                    await uploadBytes(storageRef, newImageFiles[i]);
+                    const url = await getDownloadURL(storageRef);
+                    newlyUploadedUrls.push(url);
+                }
             }
+
+            const allFinalImages = [...existingImages, ...newlyUploadedUrls].slice(0, 4);
 
             const docRef = doc(db, "items", itemId);
             const updatedData = {
@@ -222,7 +259,8 @@ export default function BorrowPage({ params }) {
                 includedItems: editIncludedItems.trim(),
                 quantity: parseInt(editQuantity, 10) || 1,
                 itemType: editItemType,
-                image: finalImageUrl
+                image: allFinalImages[0] || '',
+                images: allFinalImages
             };
 
             await updateDoc(docRef, updatedData);
@@ -232,6 +270,10 @@ export default function BorrowPage({ params }) {
                 ...updatedData
             }));
 
+            // Reset staged new upload states
+            setExistingImages(allFinalImages);
+            setNewImageFiles([]);
+            setNewImagePreviews([]);
             setIsEditing(false);
         } catch (err) {
             console.error("Error updating item specs in Firestore:", err);
@@ -259,6 +301,9 @@ export default function BorrowPage({ params }) {
     }
 
     const isAvailable = itemDetails.status === 'Available';
+    const displayPhotosList = itemDetails.images && itemDetails.images.length > 0
+        ? itemDetails.images
+        : (itemDetails.image ? [itemDetails.image] : []);
 
     return (
         <main className="min-h-screen bg-[#F9F9F9] text-black font-sans antialiased selection:bg-[#EAD64D]">
@@ -427,7 +472,7 @@ export default function BorrowPage({ params }) {
                                     </div>
                                 </div>
 
-                                {/* 7. ASSET ID (READ ONLY / READ-EDIT MATCHING ADD PAGE) */}
+                                {/* 7. ASSET ID (READ ONLY) */}
                                 <div className="space-y-1.5">
                                     <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-500">
                                         Asset ID
@@ -440,30 +485,58 @@ export default function BorrowPage({ params }) {
                                     />
                                 </div>
 
-                                {/* 8. PHOTO DISPLAY AND UPLOAD SECTION */}
-                                <div className="space-y-2 pt-2 border-t border-gray-200/60">
-                                    <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-500">
-                                        Asset Image
-                                    </label>
-                                    <div className="flex items-center gap-4">
-                                        <div className="w-20 h-20 bg-neutral-100 border border-gray-200 rounded-sm overflow-hidden flex items-center justify-center shrink-0">
-                                            {imagePreview ? (
-                                                <img src={imagePreview} alt="Item Preview" className="w-full h-full object-cover" />
-                                            ) : (
-                                                <span className="text-2xl">📦</span>
-                                            )}
-                                        </div>
-                                        <label className="p-3 bg-neutral-50 border border-dashed border-gray-300 rounded-sm flex flex-col items-center justify-center cursor-pointer hover:border-black transition-colors flex-1 text-center">
-                                            <span className="text-xs font-bold uppercase text-gray-500">📷 Change Photo</span>
-                                            <span className="text-[9px] text-gray-400 mt-0.5">PNG, JPG or WEBP</span>
-                                            <input
-                                                type="file"
-                                                accept="image/*"
-                                                onChange={handleImageChange}
-                                                className="hidden"
-                                            />
-                                        </label>
+                                {/* 8. MULTI-PHOTO EDITING SECTION (UP TO 4 PHOTOS) */}
+                                <div className="space-y-3 pt-2 border-t border-gray-200/60">
+                                    <div className="flex items-center justify-between text-[11px] text-gray-500 font-bold uppercase tracking-wider">
+                                        <span>Asset Photos (4 max)</span>
+                                        <span className="text-gray-400 font-normal">{totalPhotosCount}/4 Selected</span>
                                     </div>
+
+                                    <div className="grid grid-cols-4 gap-2">
+                                        {/* EXISTING FIRESTORE PHOTOS */}
+                                        {existingImages.map((src, idx) => (
+                                            <div key={`existing-${idx}`} className="relative aspect-square bg-neutral-100 border border-gray-200 rounded-sm overflow-hidden group">
+                                                <img src={src} alt={`Saved Photo ${idx + 1}`} className="w-full h-full object-cover" />
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleRemoveExistingPhoto(idx)}
+                                                    className="absolute top-1 right-1 bg-black/80 text-white text-[10px] w-5 h-5 rounded-full flex items-center justify-center opacity-90 hover:bg-red-600 transition-colors cursor-pointer"
+                                                >
+                                                    ✕
+                                                </button>
+                                            </div>
+                                        ))}
+
+                                        {/* NEWLY STAGED UPLOAD PREVIEWS */}
+                                        {newImagePreviews.map((src, idx) => (
+                                            <div key={`new-${idx}`} className="relative aspect-square bg-neutral-100 border border-gray-200 rounded-sm overflow-hidden group">
+                                                <img src={src} alt={`New Preview ${idx + 1}`} className="w-full h-full object-cover" />
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleRemoveNewPhoto(idx)}
+                                                    className="absolute top-1 right-1 bg-black/80 text-white text-[10px] w-5 h-5 rounded-full flex items-center justify-center opacity-90 hover:bg-red-600 transition-colors cursor-pointer"
+                                                >
+                                                    ✕
+                                                </button>
+                                            </div>
+                                        ))}
+
+                                        {/* ADD PHOTO BUTTON SLOT */}
+                                        {totalPhotosCount < 4 && (
+                                            <label className="aspect-square bg-neutral-50 border-2 border-dashed border-gray-200 rounded-sm flex flex-col items-center justify-center cursor-pointer hover:border-black transition-colors">
+                                                <span className="text-xl text-gray-400">📷</span>
+                                                <span className="text-[9px] font-bold uppercase text-gray-400 mt-1">+ Photo</span>
+                                                <input
+                                                    type="file"
+                                                    accept="image/*"
+                                                    multiple
+                                                    onChange={handleAddPhotos}
+                                                    className="hidden"
+                                                />
+                                            </label>
+                                        )}
+                                    </div>
+                                    <p className="text-[10px] text-gray-400">Click ✕ on any thumbnail to remove it before saving.</p>
                                 </div>
 
                                 {/* SAVE BUTTON */}
@@ -472,15 +545,19 @@ export default function BorrowPage({ params }) {
                                     disabled={isSavingEdit}
                                     className="w-full py-3.5 bg-black text-[#EAD64D] font-bold text-xs uppercase tracking-wider rounded-sm hover:bg-[#EAD64D] hover:text-black transition-colors cursor-pointer flex items-center justify-center gap-2"
                                 >
-                                    <span>💾</span> {isSavingEdit ? 'Saving Changes...' : 'Save Changes'}
+                                    <span>💾</span> {isSavingEdit ? 'Uploading Photos & Saving...' : 'Save Changes'}
                                 </button>
                             </form>
                         ) : (
                             <>
                                 <div className="flex items-center gap-4 pt-2">
-                                    <div className="w-16 h-16 bg-neutral-100 border border-gray-200 rounded-sm shrink-0 overflow-hidden flex items-center justify-center">
-                                        {itemDetails.image ? (
-                                            <img src={itemDetails.image} alt={itemDetails.name} className="w-full h-full object-cover" />
+                                    <div className="w-16 h-16 bg-neutral-100 border border-gray-200 rounded-sm shrink-0 overflow-hidden flex items-center justify-center relative">
+                                        {displayPhotosList.length > 0 ? (
+                                            <img
+                                                src={displayPhotosList[activeDisplayPhotoIdx] || displayPhotosList[0]}
+                                                alt={itemDetails.name}
+                                                className="w-full h-full object-cover"
+                                            />
                                         ) : (
                                             <span className="text-xl">📦</span>
                                         )}
@@ -492,6 +569,22 @@ export default function BorrowPage({ params }) {
                                         </p>
                                     </div>
                                 </div>
+
+                                {/* MULTI-PHOTO GALLERY THUMBNAILS IN VIEW MODE */}
+                                {displayPhotosList.length > 1 && (
+                                    <div className="flex gap-1.5 pt-1">
+                                        {displayPhotosList.map((photoUrl, idx) => (
+                                            <button
+                                                key={idx}
+                                                type="button"
+                                                onClick={() => setActiveDisplayPhotoIdx(idx)}
+                                                className={`w-10 h-10 rounded-xs overflow-hidden border cursor-pointer transition-all ${activeDisplayPhotoIdx === idx ? 'border-black ring-1 ring-black' : 'border-gray-200 opacity-60 hover:opacity-100'}`}
+                                            >
+                                                <img src={photoUrl} alt={`Thumbnail ${idx + 1}`} className="w-full h-full object-cover" />
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
 
                                 {(itemDetails.dimensions || itemDetails.includedItems || itemDetails.itemType) && (
                                     <div className="p-3 bg-neutral-50 border border-neutral-100 rounded-sm text-xs space-y-1 font-medium text-neutral-700">
