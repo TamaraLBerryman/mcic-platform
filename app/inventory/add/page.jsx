@@ -16,7 +16,7 @@ export default function AddInventoryItemPage() {
     const [selectedRoom, setSelectedRoom] = useState('MCIC Event Space');
     const [specificLocation, setSpecificLocation] = useState('');
 
-    // Multi-photo State (1 to 4 photos)
+    // Multi-photo State (up to 4 photos)
     const [imageFiles, setImageFiles] = useState([]);
     const [imagePreviews, setImagePreviews] = useState([]);
 
@@ -66,7 +66,7 @@ export default function AddInventoryItemPage() {
 
             const uploadedUrls = [];
 
-            // 1. Upload photos (1 to 4) to Firebase Storage
+            // 1. Upload photos (up to 4) to Firebase Storage
             if (imageFiles.length > 0) {
                 for (let i = 0; i < imageFiles.length; i++) {
                     const storageRef = ref(storage, `inventory/${formattedId}_${Date.now()}_${i + 1}`);
@@ -90,7 +90,7 @@ export default function AddInventoryItemPage() {
                 status: 'Available',
                 user: '-',
                 image: uploadedUrls[0] || '', // Primary thumbnail photo
-                images: uploadedUrls,          // Array of 1 to 4 photo URLs
+                images: uploadedUrls,          // Array of up to 4 photo URLs
                 createdAt: new Date().toISOString()
             });
 
@@ -134,7 +134,7 @@ export default function AddInventoryItemPage() {
                             ✓ Item added successfully! Redirecting to Inventory List...
                         </div>
                     ) : (
-                        <form onSubmit={handleSubmit} className="space-y-5">
+                        <form onSubmit={handleSubmit} className="space-y-6">
 
                             {/* ITEM NAME */}
                             <div className="space-y-1.5">
@@ -151,61 +151,73 @@ export default function AddInventoryItemPage() {
                                 />
                             </div>
 
-                            {/* LOCATION GROUP SECTION */}
-                            <div className="border border-gray-200 p-4 bg-neutral-50/50 rounded-sm space-y-3">
-                                <span className="text-[11px] font-bold uppercase tracking-wider text-gray-500 block">
+                            {/* LOCATION SECTION (HEADER OUTSIDE THE GREY BOX) */}
+                            <div className="space-y-2">
+                                <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-500">
                                     Location
-                                </span>
+                                </label>
 
-                                <div className="space-y-1">
-                                    <label className="block text-[10px] font-semibold text-gray-400">
-                                        Room *
-                                    </label>
-                                    <select
-                                        value={selectedRoom}
-                                        onChange={(e) => setSelectedRoom(e.target.value)}
-                                        className="w-full bg-white border border-gray-200 text-sm p-3.5 rounded-sm focus:outline-none focus:border-black font-semibold text-black cursor-pointer"
-                                    >
-                                        {roomOptions.map((room) => (
-                                            <option key={room} value={room}>
-                                                {room}
-                                            </option>
-                                        ))}
-                                    </select>
-                                </div>
+                                <div className="border border-gray-200 p-4 bg-neutral-50/50 rounded-sm space-y-4">
 
-                                <div className="space-y-1 pt-1">
-                                    <label className="block text-[10px] font-semibold text-gray-400">
-                                        Storage Point
-                                    </label>
-                                    <input
-                                        type="text"
-                                        placeholder="Storage Point e.g. Locker 50"
-                                        value={specificLocation}
-                                        onChange={(e) => setSpecificLocation(e.target.value)}
-                                        className="w-full bg-white border border-gray-200 text-sm p-3.5 rounded-sm focus:outline-none focus:border-black font-medium text-black placeholder-gray-400"
-                                    />
+                                    {/* ROOM SELECTION PILLS */}
+                                    <div className="space-y-2">
+                                        <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                                            Room *
+                                        </label>
+                                        <div className="flex flex-wrap gap-2">
+                                            {roomOptions.map((room) => {
+                                                const isSelected = selectedRoom === room;
+                                                return (
+                                                    <button
+                                                        key={room}
+                                                        type="button"
+                                                        onClick={() => setSelectedRoom(room)}
+                                                        className={`px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider rounded-sm border transition-all cursor-pointer ${isSelected
+                                                                ? 'bg-black text-[#EAD64D] border-black shadow-xs'
+                                                                : 'bg-white text-neutral-700 border-gray-200 hover:border-black hover:bg-neutral-100'
+                                                            }`}
+                                                    >
+                                                        {room}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+
+                                    {/* STORAGE POINT INPUT */}
+                                    <div className="space-y-1.5 pt-1">
+                                        <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                                            Storage Point
+                                        </label>
+                                        <input
+                                            type="text"
+                                            placeholder="Storage Point e.g. Locker 50"
+                                            value={specificLocation}
+                                            onChange={(e) => setSpecificLocation(e.target.value)}
+                                            className="w-full bg-white border border-gray-200 text-sm p-3.5 rounded-sm focus:outline-none focus:border-black font-medium text-black placeholder-gray-400"
+                                        />
+                                    </div>
                                 </div>
                             </div>
 
                             {/* ASSET ID */}
                             <div className="space-y-1.5">
                                 <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-500">
-                                    Asset ID
+                                    Asset ID (if relevant)
                                 </label>
                                 <input
                                     type="text"
-                                    placeholder="Asset ID (if relevent) e.g. Ipad_004"
+                                    placeholder="e.g. Ipad_004"
                                     value={itemId}
                                     onChange={(e) => setItemId(e.target.value)}
-                                    className="w-full bg-neutral-50 border border-gray-200 text-sm p-3.5 font-mono font-bold rounded-sm focus:outline-none focus:border-black text-black placeholder-gray-400"
+                                    className="w-full bg-neutral-50 border border-gray-200 text-sm p-3.5 font-medium rounded-sm focus:outline-none focus:border-black text-black placeholder-gray-400"
                                 />
                             </div>
 
-                            {/* MULTI-PHOTO UPLOAD SECTION (1 to 4 Photos) */}
+                            {/* MULTI-PHOTO UPLOAD SECTION (4 MAX) */}
                             <div className="space-y-3 pt-2 border-t border-gray-100">
-                                <div className="flex items-center justify-between text-xs text-gray-500 font-bold uppercase tracking-wider">
-                                    <span>Upload Photos (1 to 4 max)</span>
+                                <div className="flex items-center justify-between text-[11px] text-gray-500 font-bold uppercase tracking-wider">
+                                    <span>Upload Photos (4 max)</span>
                                     <span className="text-gray-400 font-normal">{imageFiles.length}/4 Selected</span>
                                 </div>
 
@@ -216,7 +228,7 @@ export default function AddInventoryItemPage() {
                                             <button
                                                 type="button"
                                                 onClick={() => handleRemovePhoto(idx)}
-                                                className="absolute top-1 right-1 bg-black/80 text-white text-[10px] w-5 h-5 rounded-full flex items-center justify-center opacity-90 hover:bg-red-600 transition-colors"
+                                                className="absolute top-1 right-1 bg-black/80 text-white text-[10px] w-5 h-5 rounded-full flex items-center justify-center opacity-90 hover:bg-red-600 transition-colors cursor-pointer"
                                             >
                                                 ✕
                                             </button>
@@ -244,7 +256,7 @@ export default function AddInventoryItemPage() {
                             <button
                                 type="submit"
                                 disabled={isSubmitting}
-                                className={`w-full py-3.5 text-center font-bold text-xs uppercase tracking-wider rounded-sm transition-all text-white bg-black ${isSubmitting ? 'opacity-50 cursor-wait' : 'hover:bg-[#EAD64D] hover:text-black'}`}
+                                className={`w-full py-3.5 text-center font-bold text-xs uppercase tracking-wider rounded-sm transition-all text-white bg-black ${isSubmitting ? 'opacity-50 cursor-wait' : 'hover:bg-[#EAD64D] hover:text-black cursor-pointer'}`}
                             >
                                 {isSubmitting ? "Uploading Photos & Saving..." : "+ Save Item to Inventory"}
                             </button>
