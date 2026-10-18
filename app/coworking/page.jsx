@@ -10,6 +10,7 @@ export default function CoworkingPage() {
     const [statusSearchQuery, setStatusSearchQuery] = useState('');
     const [matchedRecord, setMatchedRecord] = useState(null);
     const [hasSearchedStatus, setHasSearchedStatus] = useState(false);
+    const [activePipelineStep, setActivePipelineStep] = useState(1); // 1 | 2 | 3 | 4
 
     // Clipboard copy state for Outlook Cheat-Sheet
     const [copiedRoomCode, setCopiedRoomCode] = useState(null);
@@ -302,66 +303,38 @@ export default function CoworkingPage() {
 
                     {/* HERO TITLE & VIRTUAL TOUR VIDEO GRID */}
                     <div className="grid grid-cols-1 md:grid-cols-12 gap-8 items-center">
-                        <header className="md:col-span-7 space-y-4">
-                            <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight text-black">
-                                Startup Access & Coworking
-                            </h1>
-                            <div className="text-gray-600 text-xs sm:text-sm leading-relaxed space-y-3 font-normal">
-                                <p>
-                                    The Startup co-working spaces at the MCIC are located on Level 1 and include allocated desks, hot-desks with monitors, informal co-working space (no monitors), 4 bookable meeting rooms, 2 soundproof meeting booths, lockers and kitchen facilities.
+                        <header className="md:col-span-7 space-y-6">
+                            <div className="space-y-3">
+                                <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight text-black">
+                                    Startup Access & Coworking
+                                </h1>
+                                <p className="text-gray-600 text-xs sm:text-sm leading-relaxed font-normal">
+                                    The Startup co-working spaces at the MCIC are located on Level 1 and include allocated desks, hot-desks with monitors, informal co-working spaces (no monitors), 4 bookable meeting rooms, 2 soundproof meeting booths, lockers, and kitchen facilities.
                                 </p>
                             </div>
-                            {/* CLEAN TWO-COLUMN QUICK NAVIGATION HUB */}
-                            <div className="col-span-12 grid grid-cols-1 md:grid-cols-2 gap-4">
-                                {/* CARD 1: REQUEST ACCESS */}
-                                <div className="bg-white border border-gray-200 p-6 rounded-sm shadow-xs flex flex-col justify-between space-y-4 hover:border-black transition-colors">
-                                    <div className="space-y-1.5">
-                                        <h4 className="text-base font-extrabold uppercase text-black">
-                                            Want access to our coworking spaces?
-                                        </h4>
-                                    </div>
 
-                                    <button
-                                        type="button"
-                                        onClick={handleSkipToForm}
-                                        className="w-full bg-[#EAD64D] text-black font-extrabold py-3 text-xs uppercase tracking-wider rounded-xs hover:bg-black hover:text-white transition-colors cursor-pointer text-center"
-                                    >
-                                        Skip straight to access request form ➔
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => {
-                                            const target = document.getElementById('booking-form') || document.querySelector('form');
-                                            if (target) {
-                                                target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                                            }
-                                        }}
-                                        className="text-xs font-bold uppercase tracking-wider text-black underline decoration-2 decoration-[#EAD64D] underline-offset-4 hover:text-neutral-600 transition-colors block pt-2 cursor-pointer"
-                                    >
-                                        Or book a tour of our coworking space.
-                                    </button>
+                            {/* STREAMLINED HERO ACTION HUB */}
+                            <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                                <button
+                                    type="button"
+                                    onClick={handleSkipToForm}
+                                    className="bg-[#EAD64D] text-black font-extrabold py-3 px-6 text-xs uppercase tracking-wider rounded-xs hover:bg-black hover:text-white transition-colors cursor-pointer text-center"
+                                >
+                                    Apply For Access ➔
+                                </button>
 
-                                </div>
-
-                                {/* CARD 2: EXISTING RESIDENTS / FAQS */}
-                                <div className="bg-white border border-gray-200 p-6 rounded-sm shadow-xs flex flex-col justify-between space-y-4 hover:border-black transition-colors">
-                                    <div className="space-y-1.5">
-                                        <h4 className="text-base font-extrabold uppercase text-black">
-                                            Already Have Access?
-                                        </h4>
-                                        <p className="text-xs text-gray-600 leading-relaxed font-normal">
-                                            Need to book a meeting room, access printers, provide a postal address, etc.?
-                                        </p>
-                                    </div>
-
-                                    <button
-                                        type="button"
-                                        onClick={handleSkipToFaqs}
-                                        className="w-full bg-neutral-100 text-black border border-gray-300 font-extrabold py-3 text-xs uppercase tracking-wider rounded-xs hover:bg-black hover:text-white hover:border-black transition-colors cursor-pointer text-center"
-                                    >
-                                        View the Space Use FAQs ➔
-                                    </button>
-                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        const target = document.getElementById('booking-form') || document.querySelector('form');
+                                        if (target) {
+                                            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                                        }
+                                    }}
+                                    className="bg-white text-black border border-gray-300 font-extrabold py-3 px-6 text-xs uppercase tracking-wider rounded-xs hover:border-black hover:bg-neutral-50 transition-colors cursor-pointer text-center"
+                                >
+                                    Book A Tour ➔
+                                </button>
                             </div>
                         </header>
 
@@ -436,19 +409,33 @@ export default function CoworkingPage() {
                             { id: 'apply', label: 'Access Co-working' },
                             { id: 'faqs', label: 'Space Use FAQs' },
                             { id: 'floorplan', label: 'Live desk availability' },
-                            { id: 'stock-alert', label: 'Report Low Stock & Maintenance' }
-                        ].map((tab) => (
-                            <button
-                                key={tab.id}
-                                onClick={() => setActiveTab(tab.id)}
-                                className={`px-5 py-3 text-xs font-bold uppercase tracking-wider rounded-sm transition-all duration-150 cursor-pointer ${activeTab === tab.id
-                                    ? 'bg-black text-[#EAD64D] shadow-xs'
-                                    : 'bg-white text-gray-700 hover:bg-neutral-100 border border-gray-200'
-                                    }`}
-                            >
-                                {tab.label}
-                            </button>
-                        ))}
+                            { id: 'officehours', label: 'Book Startup Support' },
+                            { id: 'contact', label: 'Contact Us', href: '/contact' }
+                        ].map((tab) =>
+                            tab.href ? (
+                                <a
+                                    key={tab.id}
+                                    href={tab.href}
+                                    className={`px-5 py-3 text-xs font-bold uppercase tracking-wider rounded-sm transition-all duration-150 cursor-pointer inline-block ${activeTab === tab.id
+                                        ? 'bg-black text-[#EAD64D] shadow-xs'
+                                        : 'bg-white text-gray-700 hover:bg-neutral-100 border border-gray-200'
+                                        }`}
+                                >
+                                    {tab.label}
+                                </a>
+                            ) : (
+                                <button
+                                    key={tab.id}
+                                    onClick={() => setActiveTab(tab.id)}
+                                    className={`px-5 py-3 text-xs font-bold uppercase tracking-wider rounded-sm transition-all duration-150 cursor-pointer ${activeTab === tab.id
+                                        ? 'bg-black text-[#EAD64D] shadow-xs'
+                                        : 'bg-white text-gray-700 hover:bg-neutral-100 border border-gray-200'
+                                        }`}
+                                >
+                                    {tab.label}
+                                </button>
+                            )
+                        )}
                     </div>
 
                     {/* ============================================================== */}
@@ -477,133 +464,189 @@ export default function CoworkingPage() {
                             ) : (
                                 <div className="space-y-6">
 
-                                    {/* TOP INTERACTIVE ACCESS PIPELINE & STATUS SEARCH ENGINE */}
-                                    <div className="bg-white border border-gray-200 p-6 shadow-xs rounded-sm space-y-6">
-                                        <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 border-b border-gray-100 pb-4">
-                                            <div>
-                                                <h2 className="text-xl font-extrabold tracking-tight text-black mt-1">
-                                                    Check the progress of your access request.
-                                                </h2>
-                                                <p className="text-xs text-gray-500 font-normal">
-                                                    Search your name to see how your access request is progressing.
-                                                </p>
-                                            </div>
+                                    {/* INTERACTIVE PROGRESS PIPELINE TRACKER & SEARCH */}
+                                    <div className="bg-white border border-gray-200 rounded-sm p-6 sm:p-8 space-y-6 shadow-xs">
 
-                                            {/* SEARCH INPUT FORM */}
-                                            <form onSubmit={handleStatusSearch} className="flex gap-2 w-full sm:w-auto">
-                                                <input
-                                                    type="text"
-                                                    value={statusSearchQuery}
-                                                    onChange={(e) => setStatusSearchQuery(e.target.value)}
-                                                    placeholder="Search your name..."
-                                                    className="p-2.5 border border-gray-300 text-xs font-semibold rounded-xs outline-none focus:border-black text-black w-full sm:w-64 bg-neutral-50"
-                                                />
-                                                <button
-                                                    type="submit"
-                                                    className="bg-black text-[#EAD64D] font-extrabold px-4 py-2.5 text-xs uppercase tracking-wider rounded-xs hover:bg-[#EAD64D] hover:text-black transition-colors cursor-pointer shrink-0"
-                                                >
-                                                    Search
-                                                </button>
-                                            </form>
+                                        {/* HEADER TITLE & SEARCH FORM */}
+                                        <div className="space-y-4 border-b border-gray-100 pb-5">
+                                            <div className="flex flex-col sm:flex-row justify-between sm:items-start gap-4">
+                                                <div className="space-y-1">
+                                                    <h2 className="text-xl sm:text-2xl font-black tracking-tight text-black pt-1">
+                                                        Track your access request
+                                                    </h2>
+                                                </div>
+
+                                                {/* SEARCH INPUT FORM & UNBOXED RIGHT-ALIGNED RESULT */}
+                                                <div className="flex flex-col items-end w-full sm:w-auto gap-2">
+                                                    <form onSubmit={handleStatusSearch} className="flex gap-2 w-full sm:w-auto">
+                                                        <input
+                                                            type="text"
+                                                            value={statusSearchQuery}
+                                                            onChange={(e) => setStatusSearchQuery(e.target.value)}
+                                                            placeholder="Search your name..."
+                                                            className="p-2.5 border border-gray-300 text-xs font-semibold rounded-xs outline-none focus:border-black text-black w-full sm:w-64 bg-neutral-50"
+                                                        />
+                                                        <button
+                                                            type="submit"
+                                                            className="bg-black text-[#EAD64D] font-extrabold px-4 py-2.5 text-xs uppercase tracking-wider rounded-xs hover:bg-[#EAD64D] hover:text-black transition-colors cursor-pointer shrink-0"
+                                                        >
+                                                            Search
+                                                        </button>
+                                                    </form>
+
+                                                    {/* UNBOXED SEARCH RESULT WITH YELLOW ACCENT TAG */}
+                                                    {hasSearchedStatus && (
+                                                        <div className="animate-in fade-in duration-200 w-full sm:w-auto text-right pt-1">
+                                                            {!matchedRecord ? (
+                                                                <div className="text-right text-xs">
+                                                                    <span className="font-bold text-gray-700 block">No Application Found</span>
+                                                                    <span className="text-[10px] text-gray-500">No match for "{statusSearchQuery}"</span>
+                                                                </div>
+                                                            ) : (
+                                                                <div className="flex flex-col items-end gap-1">
+                                                                    <span className="bg-[#EAD64D] text-black font-extrabold text-xs uppercase tracking-wider px-2 py-0.5 rounded-xs inline-block">
+                                                                        {matchedRecord.name}
+                                                                    </span>
+                                                                    <span className="text-gray-500 font-mono text-[11px] uppercase tracking-wide pr-0.5">
+                                                                        {matchedRecord.startup}
+                                                                    </span>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                </div>                                            </div>
+
+                                            {/* INSTRUCTION TEXT (HIDDEN WHEN USER HAS SEARCHED) */}
+                                            {!hasSearchedStatus && (
+                                                <div className="flex justify-between items-center text-xs text-gray-500 font-normal pt-1">
+                                                    <p>Search your name to check the status of your access request, or tap each step to view the process.</p>
+                                                </div>
+                                            )}
                                         </div>
 
-                                        {/* PIPELINE PROGRESS BAR */}
-                                        <div className="space-y-2">
-                                            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-                                                {pipelineStages.map((stage, idx) => {
-                                                    const activeIndex = matchedRecord ? matchedRecord.stageIndex : -1;
-                                                    const isDone = idx < activeIndex;
-                                                    const isCurrent = idx === activeIndex;
+                                        {/* TIMELINE PROGRESS LINE & STEP CIRCLES WITH TIMESTAMPS */}
+                                        <div className="relative pt-4 pb-2">
+                                            {/* BACKGROUND CONNECTOR LINE */}
+                                            <div className="absolute top-[28px] left-6 right-6 h-[2px] bg-gray-200 z-0" />
+
+                                            {/* ACTIVE HIGHLIGHT CONNECTOR LINE */}
+                                            <div
+                                                className="absolute top-[28px] left-6 h-[2px] bg-black z-0 transition-all duration-300"
+                                                style={{
+                                                    width: (matchedRecord ? matchedRecord.stageIndex : activePipelineStep) === 1
+                                                        ? '0%'
+                                                        : (matchedRecord ? matchedRecord.stageIndex : activePipelineStep) === 2
+                                                            ? '33.33%'
+                                                            : (matchedRecord ? matchedRecord.stageIndex : activePipelineStep) === 3
+                                                                ? '66.66%'
+                                                                : 'calc(100% - 48px)'
+                                                }}
+                                            />
+
+                                            {/* STEPS GRID */}
+                                            <div className="relative z-10 grid grid-cols-4 text-center">
+                                                {[
+                                                    { step: 1, key: 'step1', title: 'Form Submitted' },
+                                                    { step: 2, key: 'step2', title: 'Founders Review' },
+                                                    { step: 3, key: 'step3', title: 'Security Review' },
+                                                    { step: 4, key: 'step4', title: 'Notification' }
+                                                ].map((item) => {
+                                                    const currentStage = matchedRecord ? matchedRecord.stageIndex : activePipelineStep;
+                                                    const isCurrent = currentStage === item.step;
+                                                    const isDone = currentStage > item.step;
+                                                    const completionTimestamp = matchedRecord?.completedDates?.[item.key];
 
                                                     return (
-                                                        <div
-                                                            key={stage.title}
-                                                            className={`p-3 border text-left flex flex-col justify-between rounded-xs transition-all ${isCurrent
-                                                                ? 'border-black bg-[#EAD64D] text-black font-black shadow-xs ring-2 ring-black'
-                                                                : isDone
-                                                                    ? 'border-neutral-900 bg-neutral-900 text-white font-bold'
-                                                                    : 'border-gray-200 bg-neutral-50 text-gray-400 font-medium'
-                                                                }`}
+                                                        <button
+                                                            key={item.step}
+                                                            type="button"
+                                                            onClick={() => setActivePipelineStep(item.step)}
+                                                            className="flex flex-col items-center group cursor-pointer outline-none"
                                                         >
-                                                            <span className="text-[10px] font-mono uppercase">
-                                                                Step 0{idx + 1} {isDone ? '✓' : isCurrent ? '⏱️' : ''}
-                                                            </span>
-                                                            <div className="mt-2">
-                                                                <span className="text-[11px] leading-tight block uppercase">
-                                                                    {stage.title}
-                                                                </span>
-                                                                <span className="text-[9px] opacity-75 block font-normal">
-                                                                    {stage.subtitle}
-                                                                </span>
+                                                            {/* STEP CIRCLE */}
+                                                            <div className={`w-8 h-8 rounded-full border-2 flex items-center justify-center text-xs font-black transition-all ${isCurrent
+                                                                ? 'border-black bg-[#EAD64D] text-black ring-4 ring-black/10 scale-110'
+                                                                : isDone
+                                                                    ? 'border-black bg-black text-white'
+                                                                    : 'border-gray-300 bg-white text-gray-400 group-hover:border-gray-400'
+                                                                }`}>
+                                                                {isDone ? '✓' : item.step}
                                                             </div>
-                                                        </div>
+
+                                                            {/* STEP LABEL */}
+                                                            <span className={`mt-3 text-[10px] font-black uppercase tracking-wider block transition-colors ${isCurrent ? 'text-black' : 'text-gray-400 group-hover:text-black'
+                                                                }`}>
+                                                                {item.title}
+                                                            </span>
+
+                                                            {/* TIMESTAMP / CUSTOM NAME STATUS BADGE */}
+                                                            {completionTimestamp ? (
+                                                                <span className="text-[9px] font-mono text-emerald-600 font-bold block mt-0.5">
+                                                                    ✓ {completionTimestamp}
+                                                                </span>
+                                                            ) : (matchedRecord && isCurrent) ? (
+                                                                <span className="text-[9px] font-mono text-amber-700 font-bold block mt-0.5 uppercase tracking-tight">
+                                                                    {matchedRecord.name}'s Access is here
+                                                                </span>
+                                                            ) : null}
+                                                        </button>
                                                     );
                                                 })}
                                             </div>
                                         </div>
 
-                                        {/* SEARCH MATCH RESULT BANNER */}
-                                        {hasSearchedStatus && (
-                                            <div className="animate-in fade-in duration-200 pt-2">
-                                                {!matchedRecord ? (
-                                                    <div className="bg-neutral-50 border border-dashed border-gray-300 p-4 text-center rounded-xs">
-                                                        <span className="text-xs font-bold uppercase text-gray-700 block">No Active Application Found</span>
-                                                        <span className="text-[11px] text-gray-500">
-                                                            No request matches "{statusSearchQuery}". Submit a new request below if you haven't applied yet.
-                                                        </span>
-                                                    </div>
-                                                ) : (
-                                                    <div className="bg-neutral-900 text-white p-5 rounded-xs space-y-3">
-                                                        <div className="flex flex-col sm:flex-row justify-between sm:items-center border-b border-neutral-800 pb-3 gap-2">
-                                                            <div>
-                                                                <span className="text-[10px] font-mono text-neutral-400 uppercase">
-                                                                    {matchedRecord.category} • {matchedRecord.startup}
-                                                                </span>
-                                                                <h3 className="text-base font-black text-[#EAD64D] uppercase">
-                                                                    {matchedRecord.name} ({matchedRecord.zid})
-                                                                </h3>
-                                                            </div>
-                                                            <div className="bg-neutral-800 px-3 py-1.5 rounded-xs text-left sm:text-right border border-neutral-700">
-                                                                <span className="text-[9px] font-mono text-neutral-400 block uppercase">Current Stage</span>
-                                                                <span className="text-xs font-bold text-emerald-400 uppercase">{matchedRecord.stageLabel}</span>
-                                                            </div>
-                                                        </div>
+                                        {/* ACTIVE STEP DETAIL BANNER */}
+                                        {(() => {
+                                            const displayStep = matchedRecord ? matchedRecord.stageIndex : activePipelineStep;
+                                            return (
+                                                <div className="border-t border-gray-100 pt-5 flex items-start gap-3">
+                                                    <span className="bg-[#EAD64D] text-black text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-xs shrink-0 mt-0.5">
+                                                        STEP 0{displayStep}
+                                                    </span>
 
-                                                        <div className="space-y-1">
-                                                            <div className="flex justify-between text-[10px] font-mono text-neutral-400">
-                                                                <span>ETA: <strong className="text-white">{matchedRecord.eta}</strong></span>
-                                                                <span>Updated: {matchedRecord.updatedAt}</span>
-                                                            </div>
-                                                            <p className="text-xs text-neutral-300 leading-relaxed pt-1 font-sans">
-                                                                {matchedRecord.nextAction}
+                                                    <div className="text-xs text-neutral-800 font-normal leading-relaxed">
+                                                        {displayStep === 1 && (
+                                                            <p className="font-medium text-neutral-900">Form Submitted.</p>
+                                                        )}
+
+                                                        {displayStep === 2 && (
+                                                            <p className="font-medium text-neutral-900">
+                                                                Reviewed by Founders and sent to Security (once per week).
                                                             </p>
-                                                        </div>
+                                                        )}
 
-                                                        {matchedRecord.moodleUrl && (
-                                                            <div className="pt-2">
-                                                                <a
-                                                                    href={matchedRecord.moodleUrl}
-                                                                    target="_blank"
-                                                                    rel="noreferrer"
-                                                                    className="inline-block bg-[#EAD64D] text-black text-xs font-bold uppercase tracking-wider px-4 py-2 rounded-xs hover:bg-white transition-colors"
-                                                                >
-                                                                    Complete Mandatory Safety Moodle →
-                                                                </a>
+                                                        {displayStep === 3 && (
+                                                            <p className="font-medium text-neutral-900">
+                                                                Security Review.
+                                                            </p>
+                                                        )}
+
+                                                        {displayStep === 4 && (
+                                                            <div className="space-y-2">
+                                                                <p className="font-extrabold text-black uppercase tracking-wider text-[11px]">
+                                                                    Notification Sent to you that:
+                                                                </p>
+                                                                <ul className="space-y-1.5 list-disc list-inside text-neutral-700">
+                                                                    <li>
+                                                                        <strong>Those with existing zID:</strong> Access has now been applied to an existing Swipe Access Card (Allow 48 hours to activate).
+                                                                    </li>
+                                                                    <li>
+                                                                        <strong>Those without active/current zID:</strong> Must collect a new Swipe Access Card at Gate 2 Security for a cost of $25 + optional $3 Lanyard. If you have an expired Swipe Access Card you can trade it in to waive the $25 fee.
+                                                                    </li>
+                                                                </ul>
                                                             </div>
                                                         )}
                                                     </div>
-                                                )}
-                                            </div>
-                                        )}
-                                    </div>
+                                                </div>
+                                            );
+                                        })()}
 
-                                    {/* MAIN FORM */}
+                                    </div>                                    {/* MAIN FORM */}
                                     <form onSubmit={handleSubmit} className="bg-white border border-gray-200 p-6 sm:p-8 space-y-8 shadow-xs rounded-sm">
 
                                         <header className="border-b border-gray-100 pb-4">
-                                            <span className="bg-[#EAD64D] text-black font-extrabold text-[10px] uppercase tracking-widest px-2 py-0.5 rounded-xs">
-                                                UNSW Founders In Residence                                            </span>
-                                            <h2 className="text-2xl font-extrabold tracking-tight text-black mt-2">                                                Access Request Form
+                                            <h2 className="text-2xl font-extrabold tracking-tight text-black mt-2">
+                                                Submit an Access Request Form
                                             </h2>
                                             <p className="text-xs text-gray-500 font-normal mt-0.5">
                                                 Submit this form to request access to MCIC Level 1 formal and informal Co-working Spaces.
@@ -633,7 +676,7 @@ export default function CoworkingPage() {
                                             <div className="space-y-2">
                                                 <label className="text-[11px] font-bold uppercase tracking-wider text-neutral-400 block">Programs have you participated in</label>
                                                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
-                                                    {['PFC', 'New Wave', 'Pre X', '10x', 'Other', 'None'].map((program) => (
+                                                    {['PFC', 'New Wave', 'Pre X', '10x', 'Spinout Fellowship', 'Couch and Connect', 'Other', 'None'].map((program) => (
                                                         <label key={program} className="flex items-center gap-2 p-2 border border-gray-100 rounded-xs hover:bg-neutral-50 cursor-pointer">
                                                             <input
                                                                 type="checkbox"
@@ -645,6 +688,19 @@ export default function CoworkingPage() {
                                                         </label>
                                                     ))}
                                                 </div>
+
+                                                {/* CONDITIONAL PROGRAM TEXTBOX FOR "OTHER" */}
+                                                {formData.programsParticipated.includes('Other') && (
+                                                    <div className="pt-2 animate-in fade-in duration-150">
+                                                        <input
+                                                            type="text"
+                                                            placeholder="Please specify program name..."
+                                                            value={formData.otherProgramDetails || ''}
+                                                            onChange={(e) => setFormData({ ...formData, otherProgramDetails: e.target.value })}
+                                                            className="w-full p-3 border border-gray-200 bg-white text-xs font-medium rounded-sm outline-none focus:border-black text-black"
+                                                        />
+                                                    </div>
+                                                )}
                                             </div>
 
                                             <div className="space-y-2">
@@ -670,7 +726,7 @@ export default function CoworkingPage() {
                                                 <input
                                                     type="text"
                                                     required
-                                                    placeholder="Startup / Venture Name"
+                                                    placeholder="MyStartup"
                                                     value={formData.startupName}
                                                     onChange={(e) => setFormData({ ...formData, startupName: e.target.value })}
                                                     className="w-full p-3 border border-gray-200 bg-white text-xs font-medium rounded-sm outline-none focus:border-black text-black"
@@ -720,19 +776,7 @@ export default function CoworkingPage() {
                                                 3. Access & Desk Requirements
                                             </label>
 
-                                            <div className="space-y-2">
-                                                <label className="text-[11px] font-bold uppercase tracking-wider text-neutral-400 block">zID Status *</label>
-                                                <select
-                                                    value={formData.swipeCardAccessNeeded}
-                                                    onChange={(e) => setFormData({ ...formData, swipeCardAccessNeeded: e.target.value })}
-                                                    className="w-full p-3 bg-white border border-gray-200 text-xs font-semibold rounded-sm outline-none cursor-pointer focus:border-black text-black"
-                                                >
-                                                    <option value="Yes - Add to existing zID card">I am a CURRENT student or Staff member at UNSW. Please add access to my existing zID number.</option>
-                                                    <option value="Yes - Issue new external access card">I was PREVIOUSLY a Student or Staff at UNSW. Please reactivate my zID number.</option>
-                                                    <option value="Yes - Issue new external access card">I have NEVER been a Student or Staff at UNSW. Please Issue me a new zID.</option>
-                                                </select>
-                                            </div>
-
+                                            {/* ACCESS STATUS (ASKED FIRST) */}
                                             <div className="space-y-2">
                                                 <label className="text-[11px] font-bold uppercase tracking-wider text-neutral-400 block">Access Status *</label>
                                                 <select
@@ -745,20 +789,39 @@ export default function CoworkingPage() {
                                                 </select>
                                             </div>
 
-                                            <div className="space-y-2">
-                                                <label className="text-[11px] font-bold uppercase tracking-wider text-neutral-400 block">Desk Allocation Request *</label>
-                                                <select
-                                                    value={formData.deskRequestType}
-                                                    onChange={(e) => setFormData({ ...formData, deskRequestType: e.target.value })}
-                                                    className="w-full p-3 bg-white border border-gray-200 text-xs font-semibold rounded-sm outline-none cursor-pointer focus:border-black text-black"
-                                                >
-                                                    <option value="No Desk Required (Hot Desks only)">No Desk Required (Hot Desks & informal co-working space only).</option>
-                                                    <option value="Formal Co-Working Dedicated Desk Request">Formal Co-Working Dedicated Desk Request.</option>
-                                                </select>
-                                            </div>
+                                            {/* zID STATUS (ONLY SHOWN IF REQUESTING ACCESS) */}
+                                            {formData.accessStatusNeeded === 'I do not have access to the space and am requesting access.' && (
+                                                <div className="space-y-2 animate-in fade-in duration-150">
+                                                    <label className="text-[11px] font-bold uppercase tracking-wider text-neutral-400 block">zID Status *</label>
+                                                    <select
+                                                        value={formData.swipeCardAccessNeeded}
+                                                        onChange={(e) => setFormData({ ...formData, swipeCardAccessNeeded: e.target.value })}
+                                                        className="w-full p-3 bg-white border border-gray-200 text-xs font-semibold rounded-sm outline-none cursor-pointer focus:border-black text-black"
+                                                    >
+                                                        <option value="Yes - Add to existing zID card">I am a CURRENT student or Staff member at UNSW. Please add access to my existing zID number.</option>
+                                                        <option value="Yes - Issue new external access card">I DO Not have a active zID. Please issue me a new Swipe Access Card.</option>
+                                                    </select>
+                                                </div>
+                                            )}
 
-                                            {formData.deskRequestType !== 'No Desk Required (Hot Desks only)' && (
-                                                <div className="space-y-2">
+                                            {/* DESK ALLOCATION REQUEST (ONLY SHOWN IF REQUESTING ACCESS) */}
+                                            {formData.accessStatusNeeded === 'I do not have access to the space and am requesting access.' && (
+                                                <div className="space-y-2 animate-in fade-in duration-150">
+                                                    <label className="text-[11px] font-bold uppercase tracking-wider text-neutral-400 block">Desk Allocation Request *</label>
+                                                    <select
+                                                        value={formData.deskRequestType}
+                                                        onChange={(e) => setFormData({ ...formData, deskRequestType: e.target.value })}
+                                                        className="w-full p-3 bg-white border border-gray-200 text-xs font-semibold rounded-sm outline-none cursor-pointer focus:border-black text-black"
+                                                    >
+                                                        <option value="No Desk Required (Hot Desks only)">No Desk Required (Hot Desks & informal co-working space only).</option>
+                                                        <option value="Formal Co-Working Dedicated Desk Request">Formal Co-Working Dedicated Desk Request.</option>
+                                                    </select>
+                                                </div>
+                                            )}
+
+                                            {/* NUMBER OF DESKS REQUESTED (SHOWN IF ALREADY HAS ACCESS OR IF FORMAL DESK REQUESTED) */}
+                                            {(formData.accessStatusNeeded === 'No' || formData.deskRequestType === 'Formal Co-Working Dedicated Desk Request') && (
+                                                <div className="space-y-2 animate-in fade-in duration-150">
                                                     <label className="text-[11px] font-bold uppercase tracking-wider text-neutral-400 block">Number of Desks Requested</label>
                                                     <input
                                                         type="number"
@@ -1290,6 +1353,8 @@ export default function CoworkingPage() {
                                                                 <ul className="space-y-0.5 text-neutral-600 text-[11px]">
                                                                     <li>• Group desks</li>
                                                                     <li>• Office chairs</li>
+                                                                    <li>• Whiteboards</li>
+                                                                    <li>• Stationary and Printing</li>
                                                                 </ul>
                                                             </div>
                                                             <div className="space-y-1">
@@ -1298,6 +1363,10 @@ export default function CoworkingPage() {
                                                                     <li>• Desk</li>
                                                                     <li>• Office chair</li>
                                                                     <li>• Monitor, Mouse & Keyboard</li>
+                                                                    <li>• Whiteboards</li>
+                                                                    <li>• Stationary and Printing</li>
+
+
                                                                 </ul>
                                                             </div>
 
@@ -1350,7 +1419,7 @@ export default function CoworkingPage() {
                                                     <div className="p-4 border border-amber-200 bg-amber-50/50 rounded-xs space-y-1">
                                                         <span className="font-bold text-amber-900 uppercase text-[10px] tracking-wider block">Desks are allocated based on need and attendance.</span>
                                                         <p className="text-amber-900/90 text-xs leading-relaxed">
-                                                            Regular presence in the Founders space will prioritise your request; infrequent use may result in desk reassignment or relocation.
+                                                            Regular presence in the Founders space will prioritise your request; infrequent use may result in desk reassignment or relocation. We will notify you if and when you are allocated a permanent desk.
                                                         </p>
                                                     </div>
 
@@ -2016,7 +2085,7 @@ export default function CoworkingPage() {
                                                         ⚠️<strong> Clean up after yourself. </strong>⚠️
                                                     </p>
                                                     <p className="text-neutral-800 text-[11px] leading-relaxed font-medium">
-                                                        Unload the Dishwasher if needed and place dirty dishes directly into the dishwasher, dispose of rubbish, wipe down benches, and report low stock (detergent, paper towels, milk) via the Report Low Stock & Maintenance on this page.
+                                                        Unload the Dishwasher if needed and place dirty dishes directly into the dishwasher, dispose of rubbish, wipe down benches, and report low stock (detergent, paper towels, milk).
                                                     </p>
 
                                                 </div>
@@ -2407,7 +2476,7 @@ export default function CoworkingPage() {
                                             className="w-full flex items-center justify-between text-left font-extrabold text-black uppercase text-xs hover:text-[#EAD64D] transition-colors py-2 cursor-pointer"
                                         >
                                             <span className="flex items-center gap-2">
-                                                <span>🛡️</span> Security, Emergency & Safety
+                                                <span>🚑</span> First Aid, Security, Emergency & Safety
                                             </span>
                                             <span className="font-mono text-sm">{openFaqId === 'security' ? '−' : '+'}</span>
                                         </button>
@@ -2416,7 +2485,83 @@ export default function CoworkingPage() {
                                             <div className="p-6 bg-white text-xs space-y-6 animate-in slide-in-from-top-1 duration-150 text-neutral-600 font-normal leading-relaxed">
                                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 
-                                                    {/* CAMPUS SECURITY & SAFEZONE APP */}
+                                                    {/* FIRST AID, INJURY & EVACUATION PROCEDURES (NOW LEFT COLUMN, FIRST AID AT TOP) */}
+                                                    <div className="p-5 border border-neutral-200 bg-neutral-50/40 rounded-xs space-y-4 flex flex-col justify-between">
+                                                        <div className="space-y-4">
+
+                                                            {/* FIRST AID & DEFIBRILLATOR LOCATIONS */}
+                                                            <div className="space-y-2 text-xs">
+                                                                <div className="flex items-center gap-1.5 text-neutral-900 font-bold uppercase tracking-tight text-[10px]">
+                                                                    <span>🩹</span> First Aid & Defibrillator
+                                                                </div>
+
+                                                                <div className="space-y-1">
+                                                                    <span className="font-bold text-neutral-900 block">First Aid Kits Located:</span>
+                                                                    <ul className="space-y-1 pl-1 text-[11px] text-neutral-600">
+                                                                        <li>• Wall beside the Computer in Design Space <em>(Red Bag)</em></li>
+                                                                        <li>• On the Red Cabinet in Founders Place <em>(White Box)</em></li>
+                                                                        <li>• In UNSW Makerspace beside Ground Floor Event Spaces <em>(White Cabinet)</em></li>
+                                                                        <li>• In UNSW Founders Level 1 Copy Room <em>(White Cabinet)</em></li>
+                                                                    </ul>
+                                                                </div>
+
+                                                                <div className="p-2.5 bg-red-50/60 border border-red-200/80 rounded-xs text-[11px] text-red-950 mt-2">
+                                                                    ⚡ <strong>Defibrillator:</strong> Located on the Ground Floor at the glass doors between Hilmer Building Foyer and the hallway behind MCIC Ground Floor Event Spaces.{' '}
+                                                                    <a href="https://link.mazemap.com/0S4Nxpm9" target="_blank" rel="noopener noreferrer" className="font-bold text-red-700 underline hover:text-red-900 inline-flex items-center gap-0.5">
+                                                                        View MazeMap Pin ↗
+                                                                    </a>
+                                                                </div>
+                                                            </div>
+
+                                                            {/* IN CASE OF INJURY */}
+                                                            <div className="space-y-1.5 pt-3 border-t border-neutral-200/60 text-xs">
+                                                                <span className="font-bold text-neutral-900 block text-[10px] uppercase tracking-tight">🩺 In Case of Injury:</span>
+                                                                <p className="text-neutral-600 text-[11px] leading-normal">
+                                                                    Depending on severity and preference, seek prompt attention via:
+                                                                </p>
+                                                                <ul className="space-y-1 pl-1 text-[11px] text-neutral-600">
+                                                                    <li>• <strong>First Aid Officer:</strong> Hamish, Tamara or any Makerspace Staff</li>
+                                                                    <li>• <strong>Ambulance:</strong> Call Security on <a href="tel:0293856666" className="font-mono font-bold text-black underline">9385 6666</a> (or ext <span className="font-mono font-bold">56666</span>)</li>
+                                                                    <li>• Hospital or nearest medical facility</li>
+                                                                    <li>• Treating local doctor</li>
+                                                                </ul>
+                                                            </div>
+
+                                                            {/* BUILDING EVACUATION */}
+                                                            <div className="space-y-3 pt-3 border-t border-neutral-200/60">
+                                                                <div className="flex items-center gap-1.5 text-neutral-900 font-bold uppercase tracking-tight text-[10px]">
+                                                                    <span>🚨</span> Building Evacuation Protocols
+                                                                </div>
+
+                                                                <div className="space-y-1.5 text-xs">
+                                                                    <span className="font-bold text-neutral-900 block">Building & Floor Wardens:</span>
+                                                                    <p className="text-neutral-600">
+                                                                        Find warden details on <strong>Archibus</strong> under <em>"Emergency Contacts by Building"</em>, or contact Security Ops (<a href="tel:0293856000" className="font-mono font-bold text-black underline">9385 6000</a>) / <a href="mailto:emergency@unsw.edu.au" className="font-mono font-bold text-black underline">emergency@unsw.edu.au</a>.
+                                                                    </p>
+                                                                </div>
+
+                                                                <div className="space-y-1.5 text-xs">
+                                                                    <span className="font-bold text-neutral-900 block">Evacuation Process & Drills:</span>
+                                                                    <p className="text-neutral-600">
+                                                                        Follow instructions on <strong>orange A3 posters</strong> displayed throughout the building. Annual drills are conducted to ensure safe exit.
+                                                                    </p>
+                                                                </div>
+                                                            </div>
+
+                                                        </div>
+
+                                                        {/* EVACUATION LINK */}
+                                                        <div className="pt-3 border-t border-neutral-200/60 text-xs">
+                                                            <p>
+                                                                Additional information available at:
+                                                            </p>
+                                                            <a href="https://www.estate.unsw.edu.au/emergencies" target="_blank" rel="noopener noreferrer" className="text-black font-bold underline hover:text-[#EAD64D]">
+                                                                UNSW Emergency & Evacuation Procedures ↗
+                                                            </a>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* CAMPUS SECURITY & SAFEZONE APP (NOW RIGHT COLUMN) */}
                                                     <div className="p-5 border border-neutral-200 bg-neutral-50/40 rounded-xs space-y-4 flex flex-col justify-between">
                                                         <div className="space-y-4">
                                                             <div className="flex items-center gap-1.5 text-neutral-900 font-bold uppercase tracking-tight text-[10px]">
@@ -2471,41 +2616,6 @@ export default function CoworkingPage() {
                                                             </p>
                                                             <a href="https://www.estate.unsw.edu.au/protective-services/your-safety" target="_blank" rel="noopener noreferrer" className="text-black font-bold underline hover:text-[#EAD64D]">
                                                                 UNSW Protective Services & Safety Portal ↗
-                                                            </a>
-                                                        </div>
-                                                    </div>
-
-                                                    {/* EVACUATION PROCEDURES */}
-                                                    <div className="p-5 border border-neutral-200 bg-neutral-50/40 rounded-xs space-y-4 flex flex-col justify-between">
-                                                        <div className="space-y-4">
-                                                            <div className="flex items-center gap-1.5 text-neutral-900 font-bold uppercase tracking-tight text-[10px]">
-                                                                <span>🚨</span> Building Evacuation Protocols
-                                                            </div>
-
-                                                            {/* WARDENS */}
-                                                            <div className="space-y-1.5">
-                                                                <span className="font-bold text-neutral-900 block text-xs">Building & Floor Wardens:</span>
-                                                                <p className="text-neutral-600 text-xs">
-                                                                    Find your warden details on <strong>Archibus</strong> under <em>"Emergency Contacts by Building"</em>. If you do not have Archibus access, call Security Ops (<a href="tel:0293856000" className="font-mono font-bold text-black underline">9385 6000</a>) or email <a href="mailto:emergency@unsw.edu.au" className="font-mono font-bold text-black underline">emergency@unsw.edu.au</a>.
-                                                                </p>
-                                                            </div>
-
-                                                            {/* PROCESS & DRILLS */}
-                                                            <div className="space-y-1.5 pt-2 border-t border-neutral-200/60">
-                                                                <span className="font-bold text-neutral-900 block text-xs">Evacuation Process & Drills:</span>
-                                                                <p className="text-neutral-600 text-xs">
-                                                                    Evacuation instructions are displayed throughout all buildings on <strong>orange A3 posters</strong>. Evacuation drills are conducted annually, and Floor Wardens will sweep the floor to ensure all personnel exit safely.
-                                                                </p>
-                                                            </div>
-                                                        </div>
-
-                                                        {/* EVACUATION LINK */}
-                                                        <div className="pt-3 border-t border-neutral-200/60 text-xs">
-                                                            <p>
-                                                                Additional information available at:
-                                                            </p>
-                                                            <a href="https://www.estate.unsw.edu.au/emergencies" target="_blank" rel="noopener noreferrer" className="text-black font-bold underline hover:text-[#EAD64D]">
-                                                                UNSW Emergency & Evacuation Procedures ↗
                                                             </a>
                                                         </div>
                                                     </div>
@@ -2696,213 +2806,6 @@ export default function CoworkingPage() {
                         </div>
                     )}
 
-                    {/* ============================================================== */}
-                    {/* TAB 3: OPERATIONAL STOCK & SUPPLY DISPATCH                     */}
-                    {/* ============================================================== */}
-                    {activeTab === 'stock-alert' && (
-                        <div className="bg-white border border-gray-200 rounded-sm shadow-xs p-6 md:p-8 space-y-8 animate-in fade-in duration-200 text-xs text-neutral-700">
-
-                            {/* HEADER BANNER */}
-                            <div className="border-b border-gray-100 pb-4 space-y-1">
-                                <h2 className="text-xl font-extrabold uppercase text-black tracking-tight">
-                                    Report Low Stock or Maintenance
-                                </h2>
-                            </div>
-
-                            {/* ALERT CONFIRMATION NOTIFICATION */}
-                            {supplyAlert && (
-                                <div className="p-4 bg-[#EAD64D] text-black font-bold text-xs rounded-xs flex justify-between items-center shadow-xs border border-black animate-in fade-in duration-150">
-                                    <div className="flex items-center gap-2.5">
-                                        <span className="text-base">✓</span>
-                                        <span>
-                                            Logged: Request for <strong>{supplyAlert}</strong> sent to MCIC Ops!
-                                        </span>
-                                    </div>
-                                    <button
-                                        type="button"
-                                        onClick={() => setSupplyAlert(null)}
-                                        className="text-black font-extrabold px-2 py-0.5 hover:bg-black hover:text-white rounded-xs transition-colors cursor-pointer"
-                                    >
-                                        ✕
-                                    </button>
-                                </div>
-                            )}
-
-                            {/* UNIFIED SEARCHABLE DISPATCH FORM */}
-                            <form
-                                onSubmit={(e) => {
-                                    e.preventDefault();
-                                    const itemText = isCustomInput ? stockSearchQuery : (selectedItem?.label || stockSearchQuery);
-                                    if (!itemText.trim() || !dispatchLocation.trim()) return;
-
-                                    const actionTag = reportType === 'broken' ? '[Maintenance]' : '[Stock]';
-                                    setSupplyAlert(`${actionTag} ${itemText} at ${dispatchLocation}`);
-
-                                    // Reset Form
-                                    setStockSearchQuery('');
-                                    setSelectedItem(null);
-                                    setDispatchLocation('');
-                                    setIsCustomInput(false);
-                                    setDropdownOpen(false);
-                                }}
-                                className="space-y-6 max-w-2xl"
-                            >
-                                {/* STEP 1: REPORT TYPE QUESTION */}
-                                <div className="space-y-2">
-                                    <label className="font-extrabold text-black uppercase text-xs tracking-wide block">
-                                        1. Is this about Low Stock or Maintainance?
-                                    </label>
-                                    <div className="grid grid-cols-2 gap-3">
-                                        <button
-                                            type="button"
-                                            onClick={() => setReportType('stock')}
-                                            className={`p-3.5 border text-left font-bold text-xs rounded-xs transition-all cursor-pointer flex items-center justify-between ${reportType === 'stock'
-                                                ? 'bg-black text-[#EAD64D] border-black shadow-xs'
-                                                : 'bg-neutral-50 text-neutral-800 border-neutral-200 hover:border-black'
-                                                }`}
-                                        >
-                                            <span className="flex items-center gap-2">
-                                                <span>⚠️</span> Low Stock
-                                            </span>
-                                            {reportType === 'stock' && <span className="text-xs">✓</span>}
-                                        </button>
-
-                                        <button
-                                            type="button"
-                                            onClick={() => setReportType('broken')}
-                                            className={`p-3.5 border text-left font-bold text-xs rounded-xs transition-all cursor-pointer flex items-center justify-between ${reportType === 'broken'
-                                                ? 'bg-black text-[#EAD64D] border-black shadow-xs'
-                                                : 'bg-neutral-50 text-neutral-800 border-neutral-200 hover:border-black'
-                                                }`}
-                                        >
-                                            <span className="flex items-center gap-2">
-                                                <span>🔧</span> Broken
-                                            </span>
-                                            {reportType === 'broken' && <span className="text-xs">✓</span>}
-                                        </button>
-                                    </div>
-                                </div>
-
-                                {/* STEP 2: ITEM SEARCH / SELECT COMBOBOX */}
-                                <div className="space-y-2 relative">
-                                    <label className="font-extrabold text-black uppercase text-xs tracking-wide block">
-                                        2. {reportType === 'broken' ? 'WHAT IS BROKEN OR MALFUNCTIONING?' : 'WHAT IS RUNNING LOW OR EMPTY?'}
-                                    </label>
-
-                                    <div className="relative">
-                                        <input
-                                            type="text"
-                                            placeholder={
-                                                reportType === 'broken'
-                                                    ? "What's Broken?"
-                                                    : "What needs restocking?"
-                                            }
-                                            value={stockSearchQuery}
-                                            onChange={(e) => {
-                                                setStockSearchQuery(e.target.value);
-                                                setDropdownOpen(true);
-                                                setSelectedItem(null);
-                                                setIsCustomInput(true);
-                                            }}
-                                            onFocus={() => setDropdownOpen(true)}
-                                            className="w-full p-3.5 border border-neutral-300 bg-white text-xs font-medium rounded-xs outline-none focus:border-black text-black pr-10"
-                                            required
-                                        />
-                                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 text-sm">
-                                            🔍
-                                        </span>
-                                    </div>
-
-                                    {/* SEARCH DROPDOWN MENU */}
-                                    {dropdownOpen && stockSearchQuery.trim().length > 0 && (
-                                        <div className="absolute left-0 right-0 top-full mt-1 bg-white border-2 border-black rounded-xs shadow-xl z-50 max-h-60 overflow-y-auto divide-y divide-neutral-100">
-
-                                            {/* PRE-DEFINED MATCHES FILTERED BY REPORT TYPE */}
-                                            {allSupplyCatalog
-                                                .filter(item => {
-                                                    const matchesCategory = reportType === 'broken'
-                                                        ? item.category === 'Maintenance'
-                                                        : item.category !== 'Maintenance';
-                                                    const matchesQuery = item.label.toLowerCase().includes(stockSearchQuery.toLowerCase()) ||
-                                                        item.keywords.toLowerCase().includes(stockSearchQuery.toLowerCase());
-                                                    return matchesCategory && matchesQuery;
-                                                })
-                                                .map((item) => (
-                                                    <button
-                                                        key={item.id}
-                                                        type="button"
-                                                        onClick={() => {
-                                                            setStockSearchQuery(item.label);
-                                                            setSelectedItem(item);
-                                                            setIsCustomInput(false);
-                                                            setDropdownOpen(false);
-                                                        }}
-                                                        className="w-full p-3 text-left hover:bg-neutral-50 flex items-center justify-between cursor-pointer transition-colors"
-                                                    >
-                                                        <div className="flex items-center gap-2.5">
-                                                            <span className="text-base">{item.icon}</span>
-                                                            <span className="font-bold text-xs text-neutral-900">{item.label}</span>
-                                                        </div>
-                                                        <span className="text-[9px] font-mono uppercase px-2 py-0.5 bg-neutral-100 text-neutral-600 rounded-xs font-bold">
-                                                            {item.category}
-                                                        </span>
-                                                    </button>
-                                                ))
-                                            }
-
-                                            {/* FREETEXT FALLBACK OPTION */}
-                                            <button
-                                                type="button"
-                                                onClick={() => {
-                                                    setIsCustomInput(true);
-                                                    setSelectedItem(null);
-                                                    setDropdownOpen(false);
-                                                }}
-                                                className="w-full p-3 text-left bg-neutral-50 hover:bg-black hover:text-[#EAD64D] flex items-center justify-between cursor-pointer transition-colors group"
-                                            >
-                                                <span className="font-bold text-xs text-neutral-800 group-hover:text-white">
-                                                    ✍️ Use custom request: "{stockSearchQuery}"
-                                                </span>
-                                                <span className="text-[9px] font-mono uppercase text-neutral-400 group-hover:text-[#EAD64D]">
-                                                    Custom Input
-                                                </span>
-                                            </button>
-                                        </div>
-                                    )}
-                                </div>
-
-                                {/* STEP 3: LOCATION SELECTOR */}
-                                <div className="space-y-2">
-                                    <label className="font-extrabold text-black uppercase text-xs tracking-wide block">
-                                        3. WHERE IS IT LOCATED IN MCIC?
-                                    </label>
-                                    <div className="flex flex-col sm:flex-row gap-2">
-                                        <select
-                                            value={dispatchLocation}
-                                            onChange={(e) => setDispatchLocation(e.target.value)}
-                                            className="p-3.5 border border-neutral-300 bg-white text-xs font-bold rounded-xs outline-none focus:border-black text-black cursor-pointer flex-1"
-                                            required
-                                        >
-                                            <option value="" disabled>Select Location...</option>
-                                            <option value="Main Kitchen (Level 1)">Kitchen (Level 1 Formal Coworking Space)</option>
-                                            <option value="Founders Place Kitchenette">Kitchen (Level 1 Founders Place Informal Coworking Space)</option>
-                                            <option value="Copy Room & Print Hub">Copy Room</option>
-                                            <option value="Founders Place">Founders Place</option>
-                                            <option value="MCIC Event Space (Ground)">MCIC Event Space (Ground)</option>
-                                        </select>
-
-                                        <button
-                                            type="submit"
-                                            className="bg-black text-[#EAD64D] font-extrabold px-8 py-3.5 text-xs uppercase tracking-wider rounded-xs hover:bg-[#EAD64D] hover:text-black transition-colors cursor-pointer shrink-0"
-                                        >
-                                            Send Report
-                                        </button>
-                                    </div>
-                                </div>
-                            </form>
-
-                        </div>
-                    )}
                 </section>
 
             </div >
