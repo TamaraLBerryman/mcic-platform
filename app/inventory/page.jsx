@@ -44,7 +44,8 @@ export default function InventoryPage() {
                 {/* HEADER */}
                 <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                     <div className="space-y-1">
-                        <h1 className="text-4xl font-extrabold tracking-tight text-black">Inventory</h1>
+                        <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight text-black">
+                            Inventory</h1>
                         <p className="text-gray-600 text-xs sm:text-sm">Search, Check-Out, Book and Report Broken Items.</p>
                     </div>
                     <div>

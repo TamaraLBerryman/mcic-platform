@@ -22,8 +22,8 @@ export default function RunsheetPage() {
                     <div className="inline-block bg-black text-[#EAD64D] font-mono text-[10px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-sm">
                         MCIC Operations Terminal
                     </div>
-                    <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-black">
-                        Daily Venue Runsheet
+                    <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight text-black">
+                        Daily Runsheet
                     </h1>
                     <p className="text-gray-600 text-xs sm:text-sm">
                         Real-time operational checklist and setup schedule for Level 1 staff and coordinators.

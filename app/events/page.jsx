@@ -49,11 +49,11 @@ export default async function EventsDirectoryPage() {
                 {/* PAGE HEADER */}
                 <header className="border-b border-neutral-200 pb-8 space-y-3">
 
-                    <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight uppercase text-black">
+                    <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight text-black">
                         Events & Workshops
                     </h1>
                     <p className="text-sm font-medium text-neutral-600 max-w-2xl leading-relaxed">
-                        Explore upcoming events & workshops hosted at the Michael Crouch Innovation Centre.
+                        Explore what's scheduled at the Michael Crouch Innovation Centre.
                     </p>
                 </header>
 

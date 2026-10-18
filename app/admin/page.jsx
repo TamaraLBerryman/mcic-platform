@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 
 // Color Code Legend matching your Excel key
 const COLOR_CLASSES = {
@@ -13,7 +15,9 @@ const COLOR_CLASSES = {
 };
 
 export default function AdminDashboardPage() {
-    // Admin Navigation tab state: 'overview' | 'events-analytics' | 'spaces' | 'assets' | 'alerts' | 'audit'
+    const router = useRouter();
+
+    // Admin Navigation tab state: 'overview' | 'events-analytics' | 'spaces' | 'assets' | 'alerts' | 'audit' | 'runsheet'
     const [activeTab, setActiveTab] = useState('spaces');
 
     // Date Range Selection State for Events Reporting
@@ -316,6 +320,14 @@ export default function AdminDashboardPage() {
         setSupplyAlerts(prev => prev.map(alert => alert.id === id ? { ...alert, status: 'Resolved' } : alert));
     };
 
+    const handleTabClick = (tabId) => {
+        if (tabId === 'runsheet') {
+            router.push('/admin/runsheet');
+        } else {
+            setActiveTab(tabId);
+        }
+    };
+
     return (
         <main className="min-h-screen bg-[#F9F9F9] text-black font-sans antialiased selection:bg-[#EAD64D]">
             <div className="max-w-7xl mx-auto px-6 sm:px-12 py-10 space-y-8">
@@ -330,15 +342,9 @@ export default function AdminDashboardPage() {
                 {/* ADMIN HEADER */}
                 <header className="bg-white p-6 sm:p-8 border border-gray-200 rounded-sm shadow-xs flex flex-col md:flex-row justify-between md:items-center gap-4">
                     <div>
-                        <span className="bg-[#EAD64D] text-black font-extrabold text-[10px] uppercase tracking-widest px-2 py-0.5 rounded-xs">
-                            UNSW Founders • Internal Ops & Analytics
-                        </span>
-                        <h1 className="text-3xl font-extrabold tracking-tight text-black uppercase mt-2">
-                            MCIC Operational Control & Reporting
+                        <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight text-black">
+                            MCIC Admin Dashboard
                         </h1>
-                        <p className="text-gray-500 text-xs mt-1">
-                            Comprehensive reporting for event hire performance, department participation, co-working capacity, and facility maintenance.
-                        </p>
                     </div>
                     <div className="flex items-center gap-3">
                         <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-neutral-100 border border-gray-200 text-xs font-mono font-bold rounded-xs">
@@ -348,10 +354,11 @@ export default function AdminDashboardPage() {
                     </div>
                 </header>
 
-                {/* ADMIN TAB NAVIGATION */}
+                {/* ADMIN TAB NAVIGATION INCLUDING RUNSHEET LINK */}
                 <div className="flex flex-wrap gap-2 border-b border-gray-200 pb-3">
                     {[
                         { id: 'overview', label: 'Command Overview' },
+                        { id: 'runsheet', label: '📋 Runsheet / Schedule ↗' },
                         { id: 'events-analytics', label: '📊 Events Reporting & Analytics' },
                         { id: 'spaces', label: '🗺️ Coworking Map & Occupancy' },
                         { id: 'assets', label: 'Hardware Loans' },
@@ -360,10 +367,10 @@ export default function AdminDashboardPage() {
                     ].map((tab) => (
                         <button
                             key={tab.id}
-                            onClick={() => setActiveTab(tab.id)}
-                            className={`px-4 py-3 text-xs font-bold uppercase tracking-wider rounded-sm transition-all duration-150 cursor-pointer ${activeTab === tab.id
-                                ? 'bg-black text-[#EAD64D] shadow-xs'
-                                : 'bg-white text-gray-700 hover:bg-neutral-100 border border-gray-200'
+                            onClick={() => handleTabClick(tab.id)}
+                            className={`px-4 py-3 text-xs font-bold uppercase tracking-wider rounded-sm transition-all duration-150 cursor-pointer ${(activeTab === tab.id && tab.id !== 'runsheet')
+                                    ? 'bg-black text-[#EAD64D] shadow-xs'
+                                    : 'bg-white text-gray-700 hover:bg-neutral-100 border border-gray-200'
                                 }`}
                         >
                             {tab.label}
@@ -655,6 +662,24 @@ export default function AdminDashboardPage() {
                                     <p className="text-[11px] text-gray-500">Lounges, high benches, and informal break-out tables.</p>
                                 </div>
                             </div>
+                        </div>
+
+                        {/* RUNSHEET QUICK LINK CARD */}
+                        <div className="bg-neutral-900 text-white p-6 rounded-sm shadow-xs flex items-center justify-between">
+                            <div>
+                                <h3 className="text-sm font-bold uppercase tracking-wider text-[#EAD64D]">
+                                    📋 Daily Center Runsheet & Logistics Schedule
+                                </h3>
+                                <p className="text-xs text-gray-400 mt-1">
+                                    View and manage today's live event setups, room transformations, and operational task lists.
+                                </p>
+                            </div>
+                            <Link
+                                href="/admin/runsheet"
+                                className="bg-[#EAD64D] text-black font-extrabold text-xs uppercase px-4 py-2.5 rounded-xs hover:bg-white transition-colors cursor-pointer shrink-0"
+                            >
+                                Open Runsheet ↗
+                            </Link>
                         </div>
                     </div>
                 )}

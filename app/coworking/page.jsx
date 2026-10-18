@@ -303,7 +303,7 @@ export default function CoworkingPage() {
                     {/* HERO TITLE & VIRTUAL TOUR VIDEO GRID */}
                     <div className="grid grid-cols-1 md:grid-cols-12 gap-8 items-center">
                         <header className="md:col-span-7 space-y-4">
-                            <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight text-black uppercase">
+                            <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight text-black">
                                 Startup Access & Coworking
                             </h1>
                             <div className="text-gray-600 text-xs sm:text-sm leading-relaxed space-y-3 font-normal">
@@ -433,7 +433,7 @@ export default function CoworkingPage() {
                     {/* SUB-NAV TABS */}
                     <div className="flex flex-wrap gap-2 border-b border-gray-200 pb-3">
                         {[
-                            { id: 'apply', label: 'Accessing Co-working' },
+                            { id: 'apply', label: 'Access Co-working' },
                             { id: 'faqs', label: 'Space Use FAQs' },
                             { id: 'floorplan', label: 'Live desk availability' },
                             { id: 'stock-alert', label: 'Report Low Stock & Maintenance' }
@@ -900,6 +900,52 @@ export default function CoworkingPage() {
 
                                 <div className="divide-y divide-gray-200 text-xs">
 
+                                    {/* APPLY FOR ACCESS FAQ */}
+                                    <div className="py-3 border-b border-gray-200">
+                                        <button
+                                            type="button"
+                                            onClick={() => toggleFaq('coworking-access')}
+                                            className="w-full flex items-center justify-between text-left font-extrabold text-black uppercase text-xs hover:text-[#EAD64D] transition-colors py-2 cursor-pointer"
+                                        >
+                                            <span className="flex items-center gap-2">
+                                                <span>🔑</span> Applying for access to UNSW Founders coworking spaces
+                                            </span>
+                                            <span className="font-mono text-sm">{openFaqId === 'coworking-access' ? '−' : '+'}</span>
+                                        </button>
+
+                                        {openFaqId === 'coworking-access' && (
+                                            <div className="p-6 bg-white text-xs space-y-4 animate-in slide-in-from-top-1 duration-150 text-neutral-600 font-normal leading-relaxed">
+                                                <p className="text-neutral-700 text-xs">
+                                                    Submit an access request form via the <strong>'Access Co-working'</strong> tab on this page.
+                                                </p>
+
+                                                <div className="p-4 bg-neutral-50/80 border border-neutral-200 rounded-xs space-y-2.5">
+                                                    <ol className="list-decimal pl-4 text-neutral-600 space-y-2 text-[11px]">
+                                                        <li>Received requests are reviewed by our team and forwarded to UNSW Security.</li>
+                                                        <li>Security reviews and approves your access request.</li>
+                                                        <li className="space-y-1.5">
+                                                            <span>You will be contacted by <a href="mailto:MCIC@unsw.edu.au" className="text-black font-bold underline hover:text-[#EAD64D]">MCIC@unsw.edu.au</a> once your access is approved.</span>
+
+                                                            {/* INDENTED SUB-BULLETS UNDER STEP 3 */}
+                                                            <ul className="pl-4 border-l-2 border-neutral-200 space-y-1.5 text-neutral-600 text-[11px] mt-1.5">
+                                                                <li>
+                                                                    • <strong>Existing zID holders:</strong> You <em>won't</em> need to collect an additional card. Room access will be allocated directly to your current UNSW student or staff card.
+                                                                </li>
+                                                                <li>
+                                                                    • <strong>All other applicants:</strong> Please collect your physical swipe access card from UNSW Gate 2 Security. The card costs <strong>$25</strong> (plus <strong>$3</strong> for an optional lanyard).
+                                                                </li>
+                                                            </ul>
+                                                        </li>
+                                                    </ol>
+                                                </div>
+
+                                                <div className="p-3 bg-amber-50/60 border border-amber-200/80 rounded-xs text-[11px] text-amber-900">
+                                                    ⏳ <strong>Timeline:</strong> This process can take <strong>up to 1 week</strong>. Please be patient and contact us at MCIC@unsw.edu.au if you experience any issues!
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+
                                     {/* 10. OPEN HOURS */}
                                     <div className="py-3 border-b border-gray-200">
                                         <button
@@ -1034,71 +1080,109 @@ export default function CoworkingPage() {
                                             className="w-full flex items-center justify-between text-left font-extrabold text-black uppercase text-xs hover:text-[#EAD64D] transition-colors py-2 cursor-pointer"
                                         >
                                             <span className="flex items-center gap-2">
-                                                <span>🏍️</span> Parking, EV Charging & Bicycle Facilities
+                                                <span>🅿️</span> Parking, EV Charging & Bicycle Facilities
                                             </span>
                                             <span className="font-mono text-sm">{openFaqId === 'parking' ? '−' : '+'}</span>
                                         </button>
 
                                         {openFaqId === 'parking' && (
-                                            <div className="p-6 bg-white text-xs space-y-6 animate-in slide-in-from-top-1 duration-150 text-neutral-600 font-normal leading-relaxed">
-                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                            <div className="p-6 bg-white text-xs space-y-4 animate-in slide-in-from-top-1 duration-150 text-neutral-600 font-normal leading-relaxed">
 
-                                                    {/* CAR PARKING & CELLOPARK APP */}
-                                                    <div className="p-5 border border-neutral-200 bg-neutral-50/40 rounded-xs space-y-4 flex flex-col justify-between">
-                                                        <div className="space-y-4">
-                                                            <div className="flex items-center gap-1.5 text-neutral-900 font-bold uppercase tracking-tight text-[10px]">
-                                                                <span>🚗</span> Car Parking & Rates
+                                                {/* SIDE-BY-SIDE PANELS */}
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+                                                    {/* PANEL 1: CAR PARKING & CELLOPARK */}
+                                                    <div className="border border-neutral-200 bg-neutral-50/40 rounded-xs overflow-hidden flex flex-col justify-between">
+                                                        <div>
+                                                            <div className="p-4 font-black text-black uppercase tracking-tight text-xs bg-neutral-100 border-b border-neutral-200 flex items-center gap-1.5">
+                                                                <span>🚗</span> Car Parking & Rates Overview
                                                             </div>
+                                                            <div className="p-5 space-y-5 bg-white">
 
-                                                            {/* STAFF PARKING */}
-                                                            <div className="space-y-1.5">
-                                                                <span className="font-bold text-neutral-900 block text-xs">Parking for Staff:</span>
-                                                                <p className="text-neutral-600 text-xs">
-                                                                    UNSW Staff are able to choose between <strong>annual permits</strong> (via the UNSW vPermit website) or <strong>pay-as-you-go</strong> Parking Sessions (via the CellOPark App).
-                                                                </p>
-                                                                <p className="text-neutral-600 text-xs">
-                                                                    Having either an annual 'vPermit' or an active parking session on CellOPark allows staff to park in any bay marked <strong>'UNSW Permit Holder'</strong>.
-                                                                </p>
-                                                            </div>
+                                                                {/* STARTUP PARKING */}
+                                                                <div className="space-y-2 pb-4 border-b border-neutral-200/60">
+                                                                    <div className="px-2.5 py-1 bg-black text-white rounded-xs inline-block">
+                                                                        <span className="font-black uppercase tracking-wide text-[11px]">🚀 Startups</span>
+                                                                    </div>
+                                                                    <p className="text-neutral-600 text-xs">
+                                                                        For UNSW Parking Rules, Locations and Rates visit the <a href="https://www.unsw.edu.au/estate/getting-here/parking" target="_blank" rel="noopener noreferrer" className="text-black font-bold underline hover:text-[#EAD64D]">UNSW Parking Webpage ↗</a>.
+                                                                    </p>
 
-                                                            {/* STUDENTS & VISITORS PARKING */}
-                                                            <div className="space-y-1.5 pt-2 border-t border-neutral-200/60">
-                                                                <span className="font-bold text-neutral-900 block text-xs">For Students & Visitors:</span>
-                                                                <p className="text-neutral-600 text-xs">
-                                                                    All-day parking is available to Students and Visitors at the top level of Botany Street multi-storey Carpark, entry via Gate 11. There are short-term 2P or 4P timed parking bays in the carparks nearby Gates 2, 8 (off High Street); Gate 11 Apron (off Botany Street) and at the Western Campus.
-                                                                </p>
-                                                                <p className="text-neutral-500 text-[11px] italic">
-                                                                    Payment is required on arrival and can be made by downloading the CellOPark App. Or Pay-By-Plate meter. Parking is <strong>free between 7.30 pm and 7.30 am on weekdays, and all day on weekends and public holidays</strong>.
-                                                                </p>
-                                                            </div>
+                                                                    <div className="p-3 bg-neutral-50/80 border border-neutral-200 rounded-xs space-y-2 mt-2">
+                                                                        <div className="flex items-center justify-between">
+                                                                            <span className="font-bold text-neutral-900 block uppercase text-[10px]">🎟️ How to Get a Day Pass (vPermit):</span>
+                                                                            <a href="https://vpermit.com.au/unsw" target="_blank" rel="noopener noreferrer" className="text-[10px] font-bold text-black underline hover:text-[#EAD64D]">vPermit Portal ↗</a>
+                                                                        </div>
+                                                                        <ol className="list-decimal pl-4 text-neutral-600 space-y-1 text-[11px]">
+                                                                            <li>Open the drop down menu (top-left of screen) and select <strong>'Register'</strong>.</li>
+                                                                            <li>Enter your details and register an individual account.</li>
+                                                                            <li>Once you are logged in, open the drop-down menu and select <strong>'My Permits'</strong>.</li>
+                                                                            <li>Select <strong>'Apply for a vPermit'</strong>.</li>
+                                                                            <li>Select <strong>'Contractor Day Pass'</strong> as the permit type and enter the registration plate of the vehicle under <strong>'Vehicle 1'</strong>.</li>
+                                                                            <li>Read and accept the Terms and Conditions then select <strong>'Register'</strong>.</li>
+                                                                            <li>You can now park your vehicle in any bay marked <strong>'UNSW Permit Holder'</strong>.</li>
+                                                                        </ol>
+                                                                    </div>
+                                                                </div>
 
-                                                            {/* CELLOPARK SETUP STEPS */}
-                                                            <div className="p-3 bg-white border border-neutral-200/80 rounded-xs space-y-1.5">
-                                                                <span className="font-bold text-neutral-900 block uppercase text-[10px]">CellOPark App Setup:</span>
-                                                                <ol className="list-decimal pl-4 text-neutral-600 space-y-1 text-[11px]">
-                                                                    <li>Download the CellOPark app on your phone.</li>
-                                                                    <li>Have your zID and email address in your profile on the app so that it recognises you as staff.</li>
-                                                                    <li>Register your vehicle registration number and your credit card details.</li>
-                                                                    <li>Always select <strong>'2052033 UNSW Permit Holder Parking'</strong> zone on the app every time you drive to campus and park in any "UNSW Permit Holder" bay on campus (Gate 11 or Gate 14 carpark).</li>
-                                                                    <li>Make zone <strong className="font-mono text-black">2052033</strong> your favourite by pressing the STAR.</li>
-                                                                    <li>It is important that when using the 'pay-as-you-go' app that you enter your vehicle registration details correctly.</li>
-                                                                    <li>Press <strong>START</strong> on arrival each day you drive to campus. You are not required to press STOP as it is a flat rate $8 regardless of how long you stayed.</li>
-                                                                </ol>
-                                                            </div>
+                                                                {/* STAFF PARKING */}
+                                                                <div className="space-y-2 pb-4 border-b border-neutral-200/60">
+                                                                    <div className="px-2.5 py-1 bg-neutral-900 text-white rounded-xs inline-block">
+                                                                        <span className="font-black uppercase tracking-wide text-[11px]">💼 Staff</span>
+                                                                    </div>
+                                                                    <p className="text-neutral-600 text-xs">
+                                                                        UNSW Staff are able to choose between <strong>annual permits</strong> (via the UNSW vPermit website) or <strong>pay-as-you-go</strong> Parking Sessions (via the CellOPark App).
+                                                                    </p>
+                                                                    <p className="text-neutral-600 text-xs">
+                                                                        Having either an annual 'vPermit' or an active parking session on CellOPark allows staff to park in any bay marked <strong>'UNSW Permit Holder'</strong>.
+                                                                    </p>
+                                                                </div>
 
-                                                            {/* EV CHARGING */}
-                                                            <div className="p-3 bg-white border border-neutral-200/80 rounded-xs space-y-1">
-                                                                <span className="font-bold text-neutral-900 block uppercase text-[10px]">⚡ Can I charge an electric vehicle?</span>
-                                                                <p className="text-neutral-600 text-[11px]">
-                                                                    Yes! There are six electric vehicle charging stations located on the rooftop level of the Botany Street car park.
-                                                                </p>
-                                                                <a href="https://www.estate.unsw.edu.au/unsw-solar-powered-electric-vehicle-charging-stations" target="_blank" rel="noopener noreferrer" className="text-neutral-600 underline hover:text-black">Charging stations ↗</a>
+                                                                {/* STUDENTS & VISITORS PARKING */}
+                                                                <div className="space-y-2 pb-4 border-b border-neutral-200/60">
+                                                                    <div className="px-2.5 py-1 bg-neutral-900 text-white rounded-xs inline-block">
+                                                                        <span className="font-black uppercase tracking-wide text-[11px]">🎓 Students & Visitors</span>
+                                                                    </div>
+                                                                    <p className="text-neutral-600 text-xs">
+                                                                        All-day parking is available to Students and Visitors at the top level of Botany Street multi-storey Carpark, entry via Gate 11. There are short-term 2P or 4P timed parking bays in the carparks nearby Gates 2, 8 (off High Street); Gate 11 Apron (off Botany Street) and at the Western Campus.
+                                                                    </p>
+                                                                    <p className="text-neutral-500 text-[11px] italic">
+                                                                        Payment is required on arrival and can be made by downloading the CellOPark App or Pay-By-Plate meter. Parking is <strong>free between 7.30 pm and 7.30 am on weekdays, and all day on weekends and public holidays</strong>.
+                                                                    </p>
+                                                                </div>
+
+                                                                {/* CELLOPARK SETUP STEPS */}
+                                                                <div className="p-3 bg-neutral-50/60 border border-neutral-200/80 rounded-xs space-y-1.5">
+                                                                    <span className="font-bold text-neutral-900 block uppercase text-[10px]">📱 CellOPark App Setup:</span>
+                                                                    <ol className="list-decimal pl-4 text-neutral-600 space-y-1 text-[11px]">
+                                                                        <li>Download the CellOPark app on your phone.</li>
+                                                                        <li>Have your zID and email address in your profile on the app so that it recognises you as staff.</li>
+                                                                        <li>Register your vehicle registration number and your credit card details.</li>
+                                                                        <li>Always select <strong>'2052033 UNSW Permit Holder Parking'</strong> zone on the app every time you drive to campus and park in any "UNSW Permit Holder" bay on campus (Gate 11 or Gate 14 carpark).</li>
+                                                                        <li>Make zone <strong className="font-mono text-black">2052033</strong> your favourite by pressing the STAR.</li>
+                                                                        <li>It is important that when using the 'pay-as-you-go' app that you enter your vehicle registration details correctly.</li>
+                                                                        <li>Press <strong>START</strong> on arrival each day you drive to campus. You are not required to press STOP as it is a flat rate $8 regardless of how long you stayed.</li>
+                                                                    </ol>
+                                                                </div>
+
+                                                                {/* EV CHARGING */}
+                                                                <div className="space-y-2 pt-1">
+                                                                    <div className="px-2.5 py-1 bg-amber-400 text-black rounded-xs inline-block">
+                                                                        <span className="font-black uppercase tracking-wide text-[11px]">⚡ Electric Vehicle (EV) Charging</span>
+                                                                    </div>
+                                                                    <div className="p-3 bg-neutral-50/60 border border-neutral-200/80 rounded-xs space-y-1">
+                                                                        <p className="text-neutral-600 text-[11px]">
+                                                                            Yes! There are six electric vehicle charging stations located on the rooftop level of the Botany Street car park.
+                                                                        </p>
+                                                                        <a href="https://www.estate.unsw.edu.au/unsw-solar-powered-electric-vehicle-charging-stations" target="_blank" rel="noopener noreferrer" className="text-neutral-900 font-bold underline hover:text-black block text-[11px] pt-0.5">Charging stations info ↗</a>
+                                                                    </div>
+                                                                </div>
 
                                                             </div>
                                                         </div>
 
                                                         {/* CAR & EV LINKS */}
-                                                        <div className="pt-3 border-t border-neutral-200/60 space-y-1.5 text-[11px]">
+                                                        <div className="p-4 bg-neutral-50/40 border-t border-neutral-200/60 space-y-1.5 text-[11px]">
                                                             <span className="font-bold text-neutral-900 uppercase text-[9px] block">Links:</span>
                                                             <div className="flex flex-col gap-1 text-xs">
                                                                 <a href="https://www.estate.unsw.edu.au/getting-here/parking-campus" target="_blank" rel="noopener noreferrer" className="text-black font-bold underline hover:text-[#EAD64D]">Parking at UNSW ↗</a>
@@ -1107,68 +1191,74 @@ export default function CoworkingPage() {
                                                         </div>
                                                     </div>
 
-                                                    {/* MOTORCYCLES, BICYCLES & HELPFUL LINKS */}
-                                                    <div className="p-5 border border-neutral-200 bg-neutral-50/40 rounded-xs space-y-4 flex flex-col justify-between">
-                                                        <div className="space-y-4">
-                                                            <div className="flex items-center gap-1.5 text-neutral-900 font-bold uppercase tracking-tight text-[10px]">
+                                                    {/* PANEL 2: MOTORBIKE & BICYCLES */}
+                                                    <div className="border border-neutral-200 bg-neutral-50/40 rounded-xs overflow-hidden flex flex-col justify-between">
+                                                        <div>
+                                                            <div className="p-4 font-black text-black uppercase tracking-tight text-xs bg-neutral-100 border-b border-neutral-200 flex items-center gap-1.5">
                                                                 <span>🏍️</span> Motorbike & Bicycle Parking
                                                             </div>
+                                                            <div className="p-5 space-y-5 bg-white">
 
-                                                            {/* MOTORBIKE */}
-                                                            <div className="space-y-1.5">
-                                                                <span className="font-bold text-neutral-900 block text-xs">Motorbike parking:</span>
-                                                                <p className="text-neutral-600 text-xs">
-                                                                    Motorcycle parking is free and only valid when parked within areas marked <strong>'Motorcycle Bay'</strong> available on Union Rd behind Hilmer Building, next to the UNSW Law building. The parking of motorcycles is restricted to these designated areas only.
-                                                                </p>
-                                                                <div className="pt-1 text-xs">
-                                                                    <a href="https://maps.app.goo.gl/BSSzkkA6HKfULorH8" target="_blank" rel="noopener noreferrer" className="text-neutral-600 underline hover:text-black">Pinned location of Union Rd motorcycle and bicycle parking ↗</a>
-                                                                </div>
-                                                            </div>
-
-                                                            {/* BICYCLE PARKING */}
-                                                            <div className="space-y-2 pt-2 border-t border-neutral-200/60">
-                                                                <span className="font-bold text-neutral-900 block text-xs">Bicycle parking:</span>
-                                                                <p className="text-neutral-600 text-xs">
-                                                                    Bicycle parking is only available in designated bicycle racks on campus.
-                                                                </p>
-
-                                                                {/* SECURITY WARNING ALERT BOX */}
-                                                                <div className="p-3 bg-red-50/60 border border-red-200 rounded-xs space-y-2 mt-2">
-                                                                    <div className="flex items-center gap-1.5 text-red-900 font-bold uppercase text-[10px] tracking-wide">
-                                                                        <span>⚠️</span> Security & Impound Warning
+                                                                {/* MOTORBIKE */}
+                                                                <div className="space-y-2 pb-4 border-b border-neutral-200/60">
+                                                                    <div className="px-2.5 py-1 bg-neutral-900 text-white rounded-xs inline-block">
+                                                                        <span className="font-black uppercase tracking-wide text-[11px]">🏍️ Motorbike Parking</span>
                                                                     </div>
-                                                                    <ul className="space-y-1 text-red-700 text-[11px] leading-relaxed font-medium">
-                                                                        <li>
-                                                                            • Bikes attached to rails, light poles, or fences will be tagged with a warning by Campus Security.
-                                                                        </li>
-                                                                        <li>
-                                                                            • Bikes not removed within 48 hours will be impounded by Campus Security.
-                                                                        </li>
-                                                                        <li className="pt-1 border-t border-red-200/50 font-semibold text-red-900">
-                                                                            • If your bike is stolen, report it immediately to Campus Security Services on <strong>9385 6000</strong>.
-                                                                        </li>
-                                                                    </ul>
+                                                                    <p className="text-neutral-600 text-xs">
+                                                                        Motorcycle parking is free and only valid when parked within areas marked <strong>'Motorcycle Bay'</strong> available on Union Rd behind Hilmer Building, next to the UNSW Law building. The parking of motorcycles is restricted to these designated areas only.
+                                                                    </p>
+                                                                    <div className="pt-1 text-xs">
+                                                                        <a href="https://maps.app.goo.gl/BSSzkkA6HKfULorH8" target="_blank" rel="noopener noreferrer" className="text-neutral-600 underline hover:text-black font-medium">Pinned location of Union Rd motorcycle and bicycle parking ↗</a>
+                                                                    </div>
                                                                 </div>
 
-                                                                <div className="pt-1 text-xs">
-                                                                    <a href="https://maps.app.goo.gl/BSSzkkA6HKfULorH8" target="_blank" rel="noopener noreferrer" className="text-neutral-600 underline hover:text-black">Pinned location of Union Rd motorcycle and bicycle parking ↗</a>
+                                                                {/* BICYCLE PARKING */}
+                                                                <div className="space-y-2">
+                                                                    <div className="px-2.5 py-1 bg-neutral-900 text-white rounded-xs inline-block">
+                                                                        <span className="font-black uppercase tracking-wide text-[11px]">🚲 Bicycle Parking</span>
+                                                                    </div>
+                                                                    <p className="text-neutral-600 text-xs">
+                                                                        Bicycle parking is only available in designated bicycle racks on campus.
+                                                                    </p>
+
+                                                                    {/* SECURITY WARNING ALERT BOX */}
+                                                                    <div className="p-3 bg-red-50/60 border border-red-200 rounded-xs space-y-2 mt-2">
+                                                                        <div className="flex items-center gap-1.5 text-red-900 font-bold uppercase text-[10px] tracking-wide">
+                                                                            <span>⚠️</span> Security & Impound Warning
+                                                                        </div>
+                                                                        <ul className="space-y-1 text-red-700 text-[11px] leading-relaxed font-medium">
+                                                                            <li>
+                                                                                - Bikes attached to rails, light poles, or fences will be tagged with a warning by Campus Security.
+                                                                            </li>
+                                                                            <li>
+                                                                                - Bikes not removed within 48 hours will be impounded by Campus Security.
+                                                                            </li>
+                                                                            <li className="pt-1 border-t border-red-200/50 font-semibold text-red-900">
+                                                                                - If your bike is stolen, report it immediately to Campus Security Services on <strong>9385 6000</strong>.
+                                                                            </li>
+                                                                        </ul>
+                                                                    </div>
+
+                                                                    <div className="pt-1 text-xs flex flex-col gap-1">
+                                                                        <a href="https://maps.app.goo.gl/BSSzkkA6HKfULorH8" target="_blank" rel="noopener noreferrer" className="text-neutral-600 underline hover:text-black">Pinned location of Union Rd motorcycle and bicycle parking ↗</a>
+                                                                        <a href="https://www.estate.unsw.edu.au/getting-here/maps?id=514c6a097d4c475abd7f391b5c69b1e2" target="_blank" rel="noopener noreferrer" className="text-neutral-600 underline hover:text-black">Location of bicycle racks ↗</a>
+                                                                    </div>
                                                                 </div>
-                                                                <div className="pt-1 text-xs">
-                                                                    <a href="https://www.estate.unsw.edu.au/getting-here/maps?id=514c6a097d4c475abd7f391b5c69b1e2" target="_blank" rel="noopener noreferrer" className="text-neutral-600 underline hover:text-black">Location of bicycle racks ↗</a>
-                                                                </div>
+
                                                             </div>
-                                                        </div>
-
-                                                        {/* SUPPORT CONTACT & UNSURE SECTION */}
-                                                        <div className="pt-3 border-t border-neutral-200/60 space-y-1.5 text-[11px]">
-                                                            <span className="font-bold text-neutral-900 uppercase text-[9px] block">Unsure?</span>
-                                                            <p className="text-neutral-600 text-xs">
-                                                                Please contact Security and Traffic Management: <a href="mailto:parking@unsw.edu.au" className="font-mono font-bold text-black underline">parking@unsw.edu.au</a>
-                                                            </p>
                                                         </div>
                                                     </div>
 
                                                 </div>
+
+                                                {/* ALWAYS-VISIBLE SECURITY OFFICE CONTACT BOX */}
+                                                <div className="p-3.5 bg-neutral-100 border border-neutral-200/80 rounded-xs text-[10px] space-y-1 text-neutral-700 font-mono">
+                                                    <p className="font-black text-neutral-900 uppercase font-sans text-[10px] tracking-wide">Any issues contact Gate 2 Security Office:</p>
+                                                    <p>🕒 Open 8am-4pm Monday-Friday</p>
+                                                    <p>📞 Phone: <a href="tel:0290659941" className="underline font-bold text-black">02 9065 9941</a></p>
+                                                    <p>✉️ Email: <a href="mailto:parking@unsw.edu.au" className="underline font-bold text-black">parking@unsw.edu.au</a></p>
+                                                </div>
+
                                             </div>
                                         )}
                                     </div>
@@ -1504,13 +1594,16 @@ export default function CoworkingPage() {
                                                 </div>
 
                                                 {/* FOOTER LINKS & SUPPORT */}
-                                                <div className="pt-3 border-t border-neutral-200 flex flex-wrap justify-between items-center gap-3 text-[11px]">
-                                                    <a href="https://www.myit.unsw.edu.au/printing-staff" target="_blank" rel="noopener noreferrer" className="text-black font-bold underline hover:text-[#EAD64D]">
-                                                        For printing at other locations around UNSW, visit the Staff Printing Guide ↗
-                                                    </a>
-                                                    <span className="text-neutral-500">
+                                                <div className="pt-4 border-t border-neutral-200 space-y-2 text-[11px]">
+                                                    <div className="p-3 bg-neutral-50 border border-neutral-200 rounded-xs flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                                                        <span>
+                                                            <strong>For Large Print Jobs (e.g. Flyers, Posters)</strong> Visit the <a href="https://www.print.unsw.edu.au/" target="_blank" rel="noopener noreferrer" className="text-black font-bold underline hover:text-[#EAD64D]">UNSW Print Shop on Campus ↗</a>
+                                                        </span>
+                                                    </div>
+
+                                                    <div className="text-right text-neutral-500 pt-1">
                                                         Need help? Contact IT: <a href="mailto:itservicecentre@unsw.edu.au" className="font-mono font-bold text-black underline">itservicecentre@unsw.edu.au</a>
-                                                    </span>
+                                                    </div>
                                                 </div>
 
                                             </div>
@@ -1551,13 +1644,13 @@ export default function CoworkingPage() {
                                                             <span>🏢</span> Meeting Room Bookings
                                                         </div>
                                                         <ul className="space-y-1 text-neutral-600 text-[11px] leading-relaxed">
-                                                            <p>All meeting rooms must be booked in advance via Outlook. <strong>To add these rooms to your outlook to make bookings:</strong></p>
+                                                            <p>All meeting rooms must be booked in advance via Outlook. <strong>If you have a zID, you can add these rooms to your outlook to make bookings:</strong></p>
                                                             <li>• Copy the room name below and add it as a calendar in your Outlook</li>
                                                             <li>• Make a booking directly into the rooms calendar, or select it as a location from the dropdown menu in your calendar outlook meeting.</li>
                                                         </ul>
                                                         <p className="pt-0.5 text-[11px]  italic"><strong>Note: </strong>Your meeting room is confirmed only if you receive an "accepted" e-mail. You can also confirm by checking if the room responded "Yes" response in the meeting details, or if it blocked out your booking time as busy.</p>
                                                         <p className="text-neutral-600 text-[11px] leading-relaxed">
-                                                            <strong>Contact MCIC@unsw.edu.au if you have any issues.</strong>
+                                                            <strong> For those without a zID, please contact MCIC@unsw.edu.au to make a booking.</strong>
                                                         </p>
 
 
@@ -1609,6 +1702,37 @@ export default function CoworkingPage() {
                                         )}
                                     </div>
 
+                                    {/* EVENT SPACE BOOKINGS FAQ */}
+                                    <div className="py-3 border-b border-gray-200">
+                                        <button
+                                            type="button"
+                                            onClick={() => toggleFaq('event-space')}
+                                            className="w-full flex items-center justify-between text-left font-extrabold text-black uppercase text-xs hover:text-[#EAD64D] transition-colors py-2 cursor-pointer"
+                                        >
+                                            <span className="flex items-center gap-2">
+                                                <span>🎤</span> Can I book an event space?
+                                            </span>
+                                            <span className="font-mono text-sm">{openFaqId === 'event-space' ? '−' : '+'}</span>
+                                        </button>
+
+                                        {openFaqId === 'event-space' && (
+                                            <div className="p-6 bg-white text-xs space-y-4 animate-in slide-in-from-top-1 duration-150 text-neutral-600 font-normal leading-relaxed">
+                                                <p className="text-neutral-700 text-xs">
+                                                    Yes! Startups can book Michael Crouch Innocation Centre event spaces at discounted rates or at no cost.
+                                                </p>
+                                                <div className="pt-1">
+                                                    <a
+                                                        href="/booking"
+                                                        className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-black text-white font-bold text-xs rounded-xs hover:bg-[#EAD64D] hover:text-black transition-colors"
+                                                    >
+                                                        <span>Submit a booking request</span>
+                                                        <span className="font-mono">↗</span>
+                                                    </a>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+
                                     {/* 3. PARCEL & MAIL COLLECTION */}
                                     <div className="py-3 border-b border-gray-200">
                                         <button
@@ -1623,7 +1747,9 @@ export default function CoworkingPage() {
                                         </button>
 
                                         {openFaqId === 'mail' && (
-                                            <div className="p-6 bg-white text-xs space-y-4 animate-in slide-in-from-top-1 duration-150 text-neutral-600 font-normal leading-relaxed">
+                                            <div className="p-6 bg-white text-xs space-y-6 animate-in slide-in-from-top-1 duration-150 text-neutral-600 font-normal leading-relaxed">
+
+                                                {/* TOP GRID: STANDARD MAIL & PARCELS */}
                                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
                                                     {/* LEFT BOX: REGULAR MAIL (LOCKER 118) */}
@@ -1680,7 +1806,7 @@ export default function CoworkingPage() {
                                                     <div className="p-4 border border-neutral-200 bg-neutral-50/40 rounded-xs space-y-3 flex flex-col justify-between">
                                                         <div className="space-y-2">
                                                             <div className="flex items-center gap-1.5 text-neutral-900 font-bold uppercase tracking-tight text-[10px]">
-                                                                <span>🚚</span> Parcels
+                                                                <span>🚚</span> Parcels & Ordering Address
                                                             </div>
                                                             <p className="text-neutral-600">
                                                                 Parcels and courier deliveries must be sent directly to the lower campus loading bay store:
@@ -1688,9 +1814,8 @@ export default function CoworkingPage() {
                                                             <div className="p-3 bg-white border border-neutral-200/60 rounded-xs font-mono text-[11px] text-neutral-800 space-y-0.5">
                                                                 <div className="font-sans font-bold text-neutral-900 uppercase text-[10px]">Delivery Address:</div>
                                                                 <div>Lower Campus Store</div>
-                                                                <div>GQ13, E8 SEB. Bldg</div>
-                                                                <div>Via Gate 2, High Street</div>
-                                                                <div>UNSW, Kensington, Sydney, NSW, 2052</div>
+                                                                <div>LG018 Loading Dock, E26 Bioscience South</div>
+                                                                <div>UNSW, Kensington, NSW 2052</div>
                                                             </div>
                                                         </div>
                                                         <div className="pt-1">
@@ -1706,6 +1831,60 @@ export default function CoworkingPage() {
                                                     </div>
 
                                                 </div>
+
+                                                {/* SECTION: LOST A PACKAGE GUIDANCE */}
+                                                <div className="p-5 bg-neutral-50 border border-neutral-200 rounded-xs space-y-4">
+                                                    <div className="border-b border-neutral-200 pb-2">
+                                                        <h4 className="font-extrabold text-black uppercase text-xs flex items-center gap-1.5">
+                                                            <span>🔎</span> Lost a Package?
+                                                        </h4>
+                                                        <p className="text-[11px] text-neutral-500 pt-0.5">
+                                                            We recommend calling or emailing the to first confirm if they have received your parcel.
+                                                        </p>
+                                                    </div>
+
+                                                    <ol className="space-y-3 list-decimal pl-4 text-xs">
+                                                        <li>
+                                                            <strong>Email </strong> <a href="mailto:MCIC@unsw.edu.au" className="font-mono font-bold text-black underline">MCIC@unsw.edu.au</a> to check if a Founders Staff member received it.
+                                                        </li>
+
+                                                        <li>
+                                                            Check the <strong>Mail Delivery Room </strong>next to the UNSW Founders Office (Room Number ##).
+                                                        </li>
+
+                                                        <li className="space-y-2">
+                                                            Call the <strong>Campus Loading Bays:</strong>
+                                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+                                                                {/* LOWER CAMPUS STORE */}
+                                                                <div className="p-3 bg-white border border-neutral-200 rounded-xs space-y-1 text-[11px]">
+                                                                    <div className="font-bold text-black uppercase text-[10px] text-neutral-900">1. Lower Campus Store</div>
+                                                                    <div><strong>Location:</strong> SEB, Building E8, UNSW, 2052</div>
+                                                                    <div><strong>Phone:</strong> <a href="tel:0293854695" className="font-mono text-black underline">(02) 9385 4695</a></div>
+                                                                    <div><strong>Email:</strong> <a href="mailto:LowerStore@unsw.edu.au" className="font-mono text-black underline">LowerStore@unsw.edu.au</a></div>
+                                                                    <div className="text-neutral-500 pt-0.5">Mon - Fri: 7:30am - 3:30pm</div>
+                                                                </div>
+
+                                                                {/* UPPER CAMPUS STORE */}
+                                                                <div className="p-3 bg-white border border-neutral-200 rounded-xs space-y-1 text-[11px]">
+                                                                    <div className="font-bold text-black uppercase text-[10px] text-neutral-900">2. Upper Campus Store</div>
+                                                                    <div><strong>Location:</strong> LG018 Loading Dock, E26 Bioscience South, UNSW, 2052</div>
+                                                                    <div><strong>Phone:</strong> <a href="tel:0293852007" className="font-mono text-black underline">(02) 9385 2007</a></div>
+                                                                    <div><strong>Email:</strong> <a href="mailto:UpperStore@unsw.edu.au" className="font-mono text-black underline">UpperStore@unsw.edu.au</a></div>
+                                                                    <div className="text-neutral-500 pt-0.5">Mon - Fri: 7:30am - 3:30pm</div>
+                                                                </div>
+                                                            </div>
+                                                        </li>
+
+                                                        <li>
+                                                            Call the <strong>Mail room in the Matthews Building </strong> at <a href="tel:0293856764" className="font-mono font-bold text-black underline">(02) 9385 6764</a>.
+                                                        </li>
+
+                                                        <li>
+                                                            Contact the <strong> UNSW Post Office (<a href="https://www.unsw.edu.au/estate/food-retail/explore/australia-post" className="font-mono font-bold text-black underline">Australia Post on campus</a>)</strong>.
+                                                        </li>
+                                                    </ol>
+                                                </div>
+
                                             </div>
                                         )}
                                     </div>
@@ -1892,6 +2071,161 @@ export default function CoworkingPage() {
                                         )}
                                     </div>
 
+                                    {/* 6. FOUNDERS PERKS & PARTNER DISCOUNTS */}
+                                    <div className="py-3 border-b border-gray-200">
+                                        <button
+                                            type="button"
+                                            onClick={() => toggleFaq('perks')}
+                                            className="w-full flex items-center justify-between text-left font-extrabold text-black uppercase text-xs hover:text-[#EAD64D] transition-colors py-2 cursor-pointer"
+                                        >
+                                            <span className="flex items-center gap-2">
+                                                <span>🎁</span> Founders Perks & Software Discounts
+                                            </span>
+                                            <span className="font-mono text-sm">{openFaqId === 'perks' ? '−' : '+'}</span>
+                                        </button>
+
+                                        {openFaqId === 'perks' && (
+                                            <div className="p-6 bg-white text-xs space-y-4 animate-in slide-in-from-top-1 duration-150 text-neutral-600 font-normal leading-relaxed">
+
+                                                <div className="border-b border-neutral-100 pb-2">
+                                                    <p className="text-[11px] text-neutral-500 pt-0.5">
+                                                        Participants of UNSW Founders programs can request access to over <strong>$1 million worth of perks</strong> including top-tier credits and deals from partners <strong>Amazon Web Services (AWS), Airtable, HubSpot, Zeller, Notion, Westpac</strong>, and more. Perks have been carefully chosen across legal, finance, marketing, operations, and technology, with many contributed directly by our <strong>10x Accelerator alumni</strong>.
+                                                    </p>
+                                                </div>
+
+                                                {/* SERVICE OVERVIEW & PARTNERS */}
+                                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+
+                                                    {/* BOX 1: STANDARD PERKS VIA COACH & CONNECT */}
+                                                    <div className="p-4 border border-neutral-200 bg-neutral-50/40 rounded-xs space-y-3 flex flex-col justify-between">
+                                                        <div className="space-y-3">
+                                                            <div className="flex items-center gap-1.5 text-neutral-900 font-bold uppercase tracking-tight text-[10px]">
+                                                                <span>🚀</span> Access Founders Perks
+                                                            </div>
+
+                                                            <p className="text-neutral-600 text-[11px] leading-relaxed">
+                                                                Perks are allocated based on your stage. Book a <strong>Coach & Connect</strong> session to receive 1-on-1 advice and unlock relevant redemption links.
+                                                            </p>
+
+                                                            <div>
+                                                                <a
+                                                                    href="https://unswfounders.com/founders-perks"
+                                                                    target="_blank"
+                                                                    rel="noopener noreferrer"
+                                                                    className="inline-block bg-[#EAD64D] text-black font-extrabold px-3 py-1.5 text-[10px] uppercase tracking-wider rounded-xs hover:bg-black hover:text-white transition-colors"
+                                                                >
+                                                                    Request via Coach & Connect ↗
+                                                                </a>
+                                                            </div>
+
+                                                            <p className="text-neutral-600 text-[11px] leading-relaxed pt-2 border-t border-neutral-200/60">
+                                                                For the Westpac x UNSW Founders Startup Loan, access a heightened level of service designed specifically for our founder community via the dedicated portal.
+                                                            </p>
+                                                            <div>
+                                                                <a
+                                                                    href="https://www.westpac.com.au/business-banking/loans-finance/partnerships/?fid=wbc-bl-unsw-founders"
+                                                                    target="_blank"
+                                                                    rel="noopener noreferrer"
+                                                                    className="inline-block bg-red-600 text-white font-bold px-3 py-1 text-[10px] uppercase tracking-wider rounded-xs hover:bg-black transition-colors"
+                                                                >
+                                                                    Explore Westpac Startup Loan ↗
+                                                                </a>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* BOX 2: PORTCO PERKS (PORTFOLIO COMPANIES) */}
+                                                    <div className="p-4 border border-neutral-200 bg-neutral-50/40 rounded-xs space-y-3 flex flex-col justify-between">
+                                                        <div className="space-y-2">
+                                                            <div className="flex items-center gap-1.5 text-neutral-900 font-bold uppercase tracking-tight text-[10px]">
+                                                                <span>⭐</span> PortCo Perks
+                                                            </div>
+                                                            <p className="text-neutral-600 text-[11px] leading-relaxed">
+                                                                Perks exclusive to UNSW Founders Portfolio Companies. Browse the PortCo Perk Directory and contact <a href="mailto:founders.portfolio@unsw.edu.au" className="underline font-bold text-black">founders.portfolio@unsw.edu.au</a> to claim a perk.
+                                                            </p>
+
+                                                        </div>
+                                                        <div className="pt-2 border-t border-neutral-200/60">
+                                                            <a
+                                                                href="https://docs.superhuman.com/d/Scale-Up-Offering_dtsTwxb-vMs/Founders-Perks_sutKuLoO#Perk-Directory_tuPvRALG"
+                                                                target="_blank"
+                                                                rel="noopener noreferrer"
+                                                                className="inline-block bg-black text-white font-bold px-3 py-1.5 text-[10px] uppercase tracking-wider rounded-xs hover:bg-[#EAD64D] hover:text-black transition-colors"
+                                                            >
+                                                                View PortCo Perks ↗
+                                                            </a>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* BOX 3: BECOME A PERK PARTNER */}
+                                                    <div className="p-4 border border-neutral-200 bg-neutral-50/40 rounded-xs space-y-3 flex flex-col justify-between">
+                                                        <div className="space-y-2">
+                                                            <div className="flex items-center gap-1.5 text-neutral-900 font-bold uppercase tracking-tight text-[10px]">
+                                                                <span>🤝</span> Become a Perk Partner
+                                                            </div>
+                                                            <p className="text-neutral-600 text-[11px] leading-relaxed">
+                                                                Do you know anyone keen to offer products or services to the next generation of high-growth UNSW startups? Direct them to submit their partner application form.
+                                                            </p>
+                                                        </div>
+                                                        <div className="pt-2 border-t border-neutral-200/60">
+                                                            <a
+                                                                href="https://airtable.com/appaeydtdiGbXNul9/pagIAzUWVeG2PVZwX/form"
+                                                                target="_blank"
+                                                                rel="noopener noreferrer"
+                                                                className="inline-block bg-neutral-900 text-white font-bold px-3 py-1.5 text-[10px] uppercase tracking-wider rounded-xs hover:bg-[#EAD64D] hover:text-black transition-colors"
+                                                            >
+                                                                Partner Application Form ↗
+                                                            </a>
+                                                        </div>
+                                                    </div>
+
+                                                </div>
+
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* LOST OR STOLEN CARD FAQ */}
+                                    <div className="py-3 border-b border-gray-200">
+                                        <button
+                                            type="button"
+                                            onClick={() => toggleFaq('lost-card')}
+                                            className="w-full flex items-center justify-between text-left font-extrabold text-black uppercase text-xs hover:text-[#EAD64D] transition-colors py-2 cursor-pointer"
+                                        >
+                                            <span className="flex items-center gap-2">
+                                                <span>💳</span> Lost, stolen, or damaged swipe access card
+                                            </span>
+                                            <span className="font-mono text-sm">{openFaqId === 'lost-card' ? '−' : '+'}</span>
+                                        </button>
+
+                                        {openFaqId === 'lost-card' && (
+                                            <div className="p-6 bg-white text-xs space-y-4 animate-in slide-in-from-top-1 duration-150 text-neutral-600 font-normal leading-relaxed">
+                                                <div className="p-4 bg-neutral-50/80 border border-neutral-200 rounded-xs space-y-3">
+
+                                                    {/* CANCEL CARD / SECURITY CONTACT */}
+                                                    <div className="space-y-1">
+                                                        <p className="text-neutral-600 text-[11px]">
+                                                            If you lose your ID card or suspect it has been stolen, cancel the card immediately by contacting Security on <a href="tel:0293856000" className="text-black font-bold underline hover:text-[#EAD64D]">9385 6000</a> or emailing <a href="mailto:ID.cards@unsw.edu.au" className="text-black font-bold underline hover:text-[#EAD64D]">ID.cards@unsw.edu.au</a>.
+                                                        </p>
+                                                    </div>
+
+                                                    {/* REPLACEMENT FEES & EXCEPTIONS */}
+                                                    <div className="p-3 bg-white border border-neutral-200/80 rounded-xs space-y-1.5 text-[11px]">
+                                                        <ul className="space-y-1 text-neutral-600">
+                                                            <li>
+                                                                • <strong>Replacement Fee:</strong> All replacement ID cards incur a <strong>$25 fee</strong>, unless you can provide a police report confirming your card was stolen.
+                                                            </li>
+                                                            <li>
+                                                                • <strong>Damaged or Faulty Cards:</strong> If your card is damaged or not working, you can get a replacement at <strong>no cost</strong> if you bring the physical card in and trade it in for a new one.
+                                                            </li>
+                                                        </ul>
+                                                    </div>
+
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+
                                     {/* LOST AND FOUND */}
                                     <div className="py-3 border-b border-gray-200">
                                         <button
@@ -1941,6 +2275,85 @@ export default function CoworkingPage() {
 
                                                 </div>
 
+
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* 7. STAY UP TO DATE / NEWSLETTER */}
+                                    <div className="py-3 border-b border-gray-200">
+                                        <button
+                                            type="button"
+                                            onClick={() => toggleFaq('newsletter')}
+                                            className="w-full flex items-center justify-between text-left font-extrabold text-black uppercase text-xs hover:text-[#EAD64D] transition-colors py-2 cursor-pointer"
+                                        >
+                                            <span className="flex items-center gap-2">
+                                                <span>📬</span> Stay Up to Date with UNSW Founders
+                                            </span>
+                                            <span className="font-mono text-sm">{openFaqId === 'newsletter' ? '−' : '+'}</span>
+                                        </button>
+
+                                        {openFaqId === 'newsletter' && (
+                                            <div className="p-6 bg-white text-xs space-y-4 animate-in slide-in-from-top-1 duration-150 text-neutral-600 font-normal leading-relaxed">
+                                                <div className="p-4 border border-neutral-200 bg-neutral-50/40 rounded-xs space-y-3 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                                                    <div className="space-y-1">
+                                                        <p className="text-neutral-600 text-[11px] leading-relaxed">
+                                                            Subscribe to our newsletter to receive the latest updates on upcoming programs, founder stories, startup events, and ecosystem opportunities delivered straight to your inbox.
+                                                        </p>
+                                                    </div>
+                                                    <div className="shrink-0">
+                                                        <a
+                                                            href="https://unswfounders.com/newsletter"
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="inline-block bg-[#EAD64D] text-black font-extrabold px-3 py-1.5 text-[10px] uppercase tracking-wider rounded-xs hover:bg-black hover:text-white transition-colors"
+                                                        >
+                                                            Subscribe Now ↗
+                                                        </a>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* 5. COMMUNITY & NETWORKING EVENTS */}
+                                    <div className="py-3 border-b border-gray-200">
+                                        <button
+                                            type="button"
+                                            onClick={() => toggleFaq('community')}
+                                            className="w-full flex items-center justify-between text-left font-extrabold text-black uppercase text-xs hover:text-[#EAD64D] transition-colors py-2 cursor-pointer"
+                                        >
+                                            <span className="flex items-center gap-2">
+                                                <span>🤝</span> How can I meet people in the UNSW Startup community?
+                                            </span>
+                                            <span className="font-mono text-sm">{openFaqId === 'community' ? '−' : '+'}</span>
+                                        </button>
+
+                                        {openFaqId === 'community' && (
+                                            <div className="p-6 bg-white text-xs space-y-4 animate-in slide-in-from-top-1 duration-150 text-neutral-600 font-normal leading-relaxed">
+
+                                                <div className="border-b border-neutral-100 pb-2">
+                                                    <h4 className="text-black text-xs font-bold">
+                                                        Join our online community page and attend upcoming events:
+                                                    </h4>
+                                                </div>
+
+                                                <div className="p-5 border border-neutral-200 bg-neutral-50/40 rounded-xs space-y-3">
+                                                    <ul className="space-y-3 text-neutral-700 text-xs">
+                                                        <li className="flex items-start gap-2">
+                                                            <span className="text-base leading-none">🌐</span>
+                                                            <div>
+                                                                <strong>Founders Online Community:</strong> <a href="https://community.unswfounders.com/users/sign_in" target="_blank" rel="noopener noreferrer" className="text-black underline hover:text-[#EAD64D]">Sign up via the Founders Website ↗</a>
+                                                            </div>
+                                                        </li>
+                                                        <li className="flex items-start gap-2">
+                                                            <span className="text-base leading-none">🎟️</span>
+                                                            <div>
+                                                                <strong>Events & Workshops:</strong> View upcoming UNSW Founders events on <a href="https://www.eventbrite.com.au/o/unsw-founders-program-17159154125" target="_blank" rel="noopener noreferrer" className="text-black underline hover:text-[#EAD64D]">Eventbrite ↗</a>
+                                                            </div>
+                                                        </li>
+                                                    </ul>
+                                                </div>
 
                                             </div>
                                         )}

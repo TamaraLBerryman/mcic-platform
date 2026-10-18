@@ -479,9 +479,10 @@ export default function BorrowPage({ params }) {
                                     </label>
                                     <input
                                         type="text"
-                                        readOnly
+                                        placeholder="e.g. IPAD_004"
                                         value={editAssetId}
-                                        className="w-full bg-neutral-100 border border-gray-200 text-sm p-3.5 font-mono rounded-sm focus:outline-none text-neutral-600 cursor-not-allowed"
+                                        onChange={(e) => setEditAssetId(e.target.value)}
+                                        className="w-full bg-neutral-50 border border-gray-200 text-sm p-3.5 font-mono rounded-sm focus:outline-none focus:border-black text-black"
                                     />
                                 </div>
 
@@ -536,7 +537,7 @@ export default function BorrowPage({ params }) {
                                             </label>
                                         )}
                                     </div>
-                                    <p className="text-[10px] text-gray-400">Click ✕ on any thumbnail to remove it before saving.</p>
+                                    <p className="text-[10px] text-gray-400">Click ✕ on any image to remove it before saving.</p>
                                 </div>
 
                                 {/* SAVE BUTTON */}
@@ -624,7 +625,7 @@ export default function BorrowPage({ params }) {
                     {/* SECTION 1: CHECKOUT / RESERVATION SECTION */}
                     <div className="p-4 sm:p-5 bg-neutral-50/60 border border-neutral-200/80 rounded-sm space-y-4">
                         <span className="text-[11px] font-extrabold uppercase tracking-wider text-black block border-b border-neutral-200 pb-2">
-                            🎟️ Checkout or Reserve Item
+                            🤝 Checkout or Reserve Item
                         </span>
 
                         {actionSuccess ? (
@@ -859,7 +860,7 @@ export default function BorrowPage({ params }) {
                             className="w-full p-3.5 bg-neutral-50 hover:bg-black hover:text-[#EAD64D] border border-neutral-200 rounded-sm text-center font-extrabold text-xs uppercase tracking-wider transition-colors cursor-pointer flex items-center justify-between group"
                         >
                             <span className="flex items-center gap-2">
-                                <span>⚠️</span>
+                                <span>🚨</span>
                                 <span>Report Issue or Low Stock</span>
                             </span>
                             <span className="text-sm font-mono">{showReportSection ? '−' : '+'}</span>

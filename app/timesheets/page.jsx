@@ -51,8 +51,8 @@ export default function TimesheetsPage() {
             {/* HEADER & TOGGLE */}
             <div className="border-b border-gray-200 pb-3 flex justify-between items-end">
                 <div>
-                    <span className="text-[10px] font-extrabold uppercase tracking-widest text-amber-600">Operations & Payroll</span>
-                    <h1 className="text-xl font-black text-black uppercase tracking-tight">Timesheets & Roster Approvals</h1>
+                    <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight text-black">
+                        Timesheet Approvals</h1>
                 </div>
 
                 <div className="flex bg-neutral-100 p-1 rounded-xs text-xs font-bold">

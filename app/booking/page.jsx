@@ -1524,7 +1524,7 @@ This room does not have private bathrooms. The closest toilets are down the hall
                                 }}
                                 className="text-xs font-bold uppercase tracking-wider text-black underline decoration-2 decoration-[#EAD64D] underline-offset-4 hover:text-neutral-600 transition-colors block pt-2 cursor-pointer"
                             >
-                                Book a physical tour of the MCIC spaces
+                                Book a tour of the MCIC spaces
                             </button>
                             <button
                                 type="button"
@@ -1869,6 +1869,62 @@ This room does not have private bathrooms. The closest toilets are down the hall
                             )}
                         </div>
 
+                        {/* 3. PRINTING & COPYING SERVICES */}
+                        <div>
+                            <button
+                                type="button"
+                                onClick={() => toggleAccordion('printing')}
+                                className="w-full p-4 flex justify-between items-center text-xs font-bold uppercase tracking-wide text-neutral-800 bg-neutral-50/60 hover:bg-neutral-50 border-t border-neutral-100"
+                            >
+                                <span>Can I print or photocopy documents on-site?</span>
+                                <span>{activeAccordion === 'printing' ? '−' : '+'}</span>
+                            </button>
+                            {activeAccordion === 'printing' && (
+                                <div className="p-6 bg-white text-xs space-y-6 animate-in slide-in-from-top-1 duration-150 text-neutral-600 font-normal leading-relaxed">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+                                        {/* LEFT BOX: MCIC DESIGN SPACE PRINTER */}
+                                        <div className="p-5 border border-neutral-200 bg-neutral-50/40 rounded-xs space-y-3 flex flex-col justify-between">
+                                            <div className="space-y-3">
+                                                <div className="flex items-center gap-1.5 text-neutral-900 font-bold uppercase tracking-tight text-[10px]">
+                                                    <span>🖨️</span> MCIC On-Site Printing (Design Space)
+                                                </div>
+                                                <p className="text-neutral-600 text-xs leading-relaxed">
+                                                    There is a printer located in the <strong>MCIC Design Space</strong>. Please note it is <strong>not connected to the UNSW network</strong>, so jobs can only be printed locally via USB flash drive.
+                                                </p>
+                                                <p>
+                                                    For other Event Spaces, if you require 30 or less A4 pages printed daily for an upcoming event, email <a href="mailto:MCIC@UNSW.edu.au" className="font-mono font-bold text-black underline">MCIC@UNSW.edu.au</a> and our team can print them out for you.
+                                                </p>
+                                            </div>
+                                        </div>
+
+                                        {/* RIGHT BOX: HIGH-VOLUME & LIBRARY / POST OFFICE PRINTING */}
+                                        <div className="p-5 border border-neutral-200 bg-neutral-50/40 rounded-xs space-y-4 flex flex-col justify-between">
+                                            <div className="space-y-3">
+                                                <div className="flex items-center gap-1.5 text-neutral-900 font-bold uppercase tracking-tight text-[10px]">
+                                                    <span>📚</span> High-Volume Printing (Library & Post Office)
+                                                </div>
+                                                <p className="text-neutral-600 text-xs leading-relaxed">
+                                                    For larger print volumes (substantially more than 30 pages), please use campus services at the <a href="https://link.mazemap.com/Pd5JYQzv" target="_blank" rel="noopener noreferrer" className="font-bold text-black underline">UNSW Main Library ↗</a> or <a href="https://link.mazemap.com/eZRjrq9D" target="_blank" rel="noopener noreferrer" className="font-bold text-black underline">UNSW Post Office ↗</a>.
+                                                </p>
+
+                                                <div className="p-3 bg-white border border-neutral-200 rounded-xs space-y-2 text-[11px] text-neutral-700">
+                                                    <span className="font-bold text-neutral-900 block uppercase text-[10px]">Library Print & Copy Rules:</span>
+                                                    <ul className="list-disc pl-4 space-y-1 text-neutral-600">
+                                                        <li>Photocopy, scan, and print copies directly at any Print/Copy station.</li>
+                                                        <li>Purchase a reusable photocopy card at the Print/Copy Services desk on <strong>Level 2, Main Library</strong>.</li>
+                                                        <li>Minimum charge is <strong>$5</strong> (covers card cost and initial print credits).</li>
+                                                        <li><em className="text-neutral-500">Unused credit cannot be refunded.</em></li>
+                                                    </ul>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
                         {/* 3. WILL THE SPACE BE SET-UP FOR ME */}
                         <div>
                             <button
@@ -1882,10 +1938,10 @@ This room does not have private bathrooms. The closest toilets are down the hall
                             {activeAccordion === 'setup' && (
                                 <div className="p-6 bg-white text-xs space-y-4 animate-in slide-in-from-top-1 duration-150 text-neutral-600 font-normal leading-relaxed">
                                     <p>
-                                        Please expect to set up the chairs, tables, and operational gear yourself. While we aim to assist or arrange layouts prior to your arrival, this is not always possible as a single venue manager covers all event rooms, building access lines, and active facility maintenance.
+                                        Please expect to set up the chairs, tables, and operational gear yourself. While we aim to assist or arrange layouts prior to your arrival, this is not always possible.
                                     </p>
                                     <p>
-                                        A staff member will always unlock the space, present structural equipment guidelines, and secure the room at check-out. If you require absolute dedicated set-up support or permanent oversight, you must hire casual facility coverage via the booking register.
+                                        A staff member will always unlock the space, show you how to use and find equipment, and lock the room at check-out. If you require support in the room for the entirely of your event you must hire casual through the booking form at a cost of $50 per hour.
                                     </p>
                                 </div>
                             )}
@@ -1980,7 +2036,7 @@ This room does not have private bathrooms. The closest toilets are down the hall
                                 onClick={() => toggleAccordion('consumables')}
                                 className="w-full p-4 flex justify-between items-center text-xs font-bold uppercase tracking-wide text-neutral-800 bg-neutral-50/60 hover:bg-neutral-50 border-t border-neutral-100"
                             >
-                                <span>Can I use the tea, coffee, paper plates, or cups at the facility?</span>
+                                <span>Can I use the milk, tea, coffee, soft drinks, paper plates, or cups at the facility?</span>
                                 <span>{activeAccordion === 'consumables' ? '−' : '+'}</span>
                             </button>
                             {activeAccordion === 'consumables' && (
@@ -1989,7 +2045,7 @@ This room does not have private bathrooms. The closest toilets are down the hall
                                         No. This venue functions under a strict self-service model regarding food, beverages, and event consumables.
                                     </div>
                                     <ul className="list-disc pl-4 space-y-1.5 text-neutral-700 font-medium">
-                                        <li>All visual food items, hot drink stock, and disposable serviceware stored on shelves belong to core programs and cannot be accessed.</li>
+                                        <li>All food items, hot drink stock, and disposable serviceware stored on shelves belong to core Founders programs and cannot be accessed.</li>
                                         <li>Hirers are responsible for bringing all event serviceware including plates, napkins, cups, serving utensils, and cutlery items.</li>
                                         <li>Glassware setups, ceramic mugs and plates, ice buckets and a water dispenser can be added to your booking for an extra fee via the booking form.</li>
                                     </ul>
@@ -2010,11 +2066,11 @@ This room does not have private bathrooms. The closest toilets are down the hall
                             {activeAccordion === 'catering-hub' && (
                                 <div className="p-6 bg-white text-xs space-y-5 animate-in slide-in-from-top-1 duration-150 text-neutral-700 font-medium leading-relaxed">
                                     <div className="space-y-2 pl-2 border-l-2 border-neutral-200 text-neutral-600 font-normal">
-                                        <p>• <strong>Self-Service:</strong> BYO food, drink, and ice. Basic serviceware (plates, napkins, cups, serving utensils, and cutlery items). An urn, water dispenser, glasses, plates, mugs and ice buckets are available for an extra fee via the booking form.</p>
-                                        <p>• <strong>Any Caterer:</strong> No restrictions. You can bring any food or external catering you like.</p>
-                                        <p>• <strong>No Storage:</strong> On-site fridge/cupboards are full. Everything must arrive and leave within your booking window. If you want to keep items cold, please supply your own ice and book the Ice Buckets.</p>
-                                        <p>• <strong>Deliveries:</strong> We will not meet your delivery drivers to collect your order. You must direct and meet your own delivery drivers unless you have paid for casual venue staff (you must select this option in yuor booking form).</p>
-                                        <p>• <strong>Mandatory Cleanup:</strong> Pack up all leftovers and rubbish immediately on conclusion of your event. Large waste goes to bins across the lawn. If you do not leave the space clean, you will be charged a cleaning fee.</p>
+                                        <p><strong>Self-Service:</strong> BYO food, drink, and ice. Basic serviceware (plates, napkins, cups, serving utensils, and cutlery items). An urn, water dispenser, glasses, plates, mugs and ice buckets are available for an extra fee via the booking form.</p>
+                                        <p><strong>Any Caterer:</strong> No restrictions. You can bring any food or external catering you like.</p>
+                                        <p><strong>No Storage:</strong> On-site fridge/cupboards are full. Everything must arrive and leave within your booking window. If you want to keep items cold, please supply your own ice and book the Ice Buckets.</p>
+                                        <p><strong>Deliveries:</strong> We will not meet your delivery drivers to collect your order. You must direct and meet your own delivery drivers unless you have paid for casual venue staff (you must select this option in your booking form).</p>
+                                        <p><strong>Mandatory Cleanup:</strong> Pack up all leftovers and rubbish immediately on conclusion of your event. Large waste goes to bins in the hallway by the back door of the Design Space. If you do not leave the space clean, you will be charged a cleaning fee.</p>
                                     </div>
                                     <div className="space-y-2">
                                         <h4 className="font-bold text-neutral-900 uppercase text-[10px] tracking-wide border-b border-neutral-100 pb-2">
@@ -2028,20 +2084,12 @@ This room does not have private bathrooms. The closest toilets are down the hall
                                                         <th className="p-2.5">Style</th>
                                                         <th className="p-2.5">Price</th>
                                                         <th className="p-2.5">Notice & Delivery Hours</th>
-                                                        <th className="p-2.5">Discounts</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody className="divide-y divide-neutral-100 font-normal text-neutral-600">
                                                     {[
-                                                        { name: "Mad Toppings", url: "https://madtoppings.com.au", style: "Pizza", styleBadge: "bg-neutral-100 text-neutral-800 border-neutral-200", price: "$", priceBadge: "bg-neutral-100 text-neutral-800 border-neutral-200", delivery: "11am – 11pm Daily", discount: "-" },
-                                                        { name: "OOshman", url: "https://ooshman.au", style: "Pizza & Wraps", styleBadge: "bg-neutral-100 text-neutral-800 border-neutral-200", price: "$", priceBadge: "bg-neutral-100 text-neutral-800 border-neutral-200", delivery: "10am – 11:30pm (Late until 2am/3am Thu-Sat)", discount: "40% discount" },
-                                                        { name: "Catering Project", url: "https://www.cateringproject.com.au", style: "Corp Platters", styleBadge: "bg-neutral-100 text-neutral-800 border-neutral-200", price: "$$", priceBadge: "bg-neutral-100 text-neutral-800 border-neutral-200", delivery: "7am – 6pm Mon-Fri (9am-4pm Sat, 9am-2pm Sun)", discount: "-" },
-                                                        { name: "Foodie Del Mar", url: "http://foodiedelmar.com.au/", style: "Canape & Grazing", styleBadge: "bg-neutral-100 text-neutral-800 border-neutral-200", price: "$$", priceBadge: "bg-neutral-100 text-neutral-800 border-neutral-200", delivery: "Flexible delivery timelines upon booking request", discount: "-" },
-                                                        { name: "Mama B’s", url: "https://mamabs.com.au", style: "Vegan Specialty", styleBadge: "bg-neutral-100 text-neutral-800 border-neutral-200", price: "$$", priceBadge: "bg-neutral-100 text-neutral-800 border-neutral-200", delivery: "7am – 6pm Daily (Order by 12pm cutoff)", discount: "-" },
-                                                        { name: "Sals Pizza", url: "https://www.salspizza.com.au", style: "NY Style Pizza", styleBadge: "bg-neutral-100 text-neutral-800 border-neutral-200", price: "$$", priceBadge: "bg-neutral-100 text-neutral-800 border-neutral-200", delivery: "11am – 9pm Sun-Wed (Extended until Midnight Thu-Sat)", discount: "-" },
-                                                        { name: "The Rusty Rabit", url: "https://therustyrabbit.com.au", style: "Breakfast & Coffee", styleBadge: "bg-neutral-100 text-neutral-800 border-neutral-200", price: "$$", priceBadge: "bg-neutral-100 text-neutral-800 border-neutral-200", delivery: "7am – 3:30pm Mon-Fri (8am–3pm Sat-Sun)", discount: "-" },
-                                                        { name: "Racha Syrian Kitchen", url: "https://www.rachasyriankitchen.com.au", style: "Middle Eastern", styleBadge: "bg-neutral-100 text-neutral-800 border-neutral-200", price: "$$$", priceBadge: "bg-neutral-100 text-neutral-800 border-neutral-200", delivery: "11am – 8:30pm Tue-Sun (Closed Mon) • 1 wk notice for 30+", discount: "-" },
-                                                        { name: "Vanilla Blue", url: "https://www.vanillablue.com.au/unsw", style: "Corporate Buffets", styleBadge: "bg-neutral-100 text-neutral-800 border-neutral-200", price: "$$$", priceBadge: "bg-neutral-100 text-neutral-800 border-neutral-200", delivery: "6:30am – 6:30pm Mon-Fri (7:30am–2pm Sat)", discount: "-" }
+                                                        { name: "Mad Toppings", url: "https://madtoppings.com.au", style: "Pizza", styleBadge: "bg-neutral-100 text-neutral-800 border-neutral-200", price: "$", priceBadge: "bg-neutral-100 text-neutral-800 border-neutral-200", delivery: "11am – 11pm Daily" },
+                                                        { name: "OOshman", url: "https://ooshman.au", style: "Pizza & Wraps", styleBadge: "bg-neutral-100 text-neutral-800 border-neutral-200", price: "$", priceBadge: "bg-neutral-100 text-neutral-800 border-neutral-200", delivery: "10am – 11:30pm (Late until 2am/3am Thu-Sat)" }, { name: "Byblos Lebanese Cuisine", url: "https://bybloslebanesecuisine.com.au/", style: "Lebanese & Platters", styleBadge: "bg-neutral-100 text-neutral-800 border-neutral-200", price: "$$", priceBadge: "bg-neutral-100 text-neutral-800 border-neutral-200", delivery: "10am – 9pm Mon-Sat (Closed Sun)" }, { name: "Catering Project", url: "https://www.cateringproject.com.au", style: "Corp Platters", styleBadge: "bg-neutral-100 text-neutral-800 border-neutral-200", price: "$$", priceBadge: "bg-neutral-100 text-neutral-800 border-neutral-200", delivery: "7am – 6pm Mon-Fri (9am-4pm Sat, 9am-2pm Sun)" }, { name: "Foodie Del Mar", url: "http://foodiedelmar.com.au/", style: "Canape & Grazing", styleBadge: "bg-neutral-100 text-neutral-800 border-neutral-200", price: "$$", priceBadge: "bg-neutral-100 text-neutral-800 border-neutral-200", delivery: "Flexible delivery timelines upon booking request" }, { name: "Mama B’s", url: "https://mamabs.com.au", style: "Vegan Specialty", styleBadge: "bg-neutral-100 text-neutral-800 border-neutral-200", price: "$$", priceBadge: "bg-neutral-100 text-neutral-800 border-neutral-200", delivery: "7am – 6pm Daily (Order by 12pm cutoff)" }, { name: "Sals Pizza", url: "https://www.salspizza.com.au", style: "NY Style Pizza", styleBadge: "bg-neutral-100 text-neutral-800 border-neutral-200", price: "$$", priceBadge: "bg-neutral-100 text-neutral-800 border-neutral-200", delivery: "11am – 9pm Sun-Wed (Extended until Midnight Thu-Sat)" }, { name: "The Rusty Rabit", url: "https://therustyrabbit.com.au", style: "Breakfast & Coffee", styleBadge: "bg-neutral-100 text-neutral-800 border-neutral-200", price: "$$", priceBadge: "bg-neutral-100 text-neutral-800 border-neutral-200", delivery: "7am – 3:30pm Mon-Fri (8am–3pm Sat-Sun)" }, { name: "Racha Syrian Kitchen", url: "https://www.rachasyriankitchen.com.au", style: "Middle Eastern", styleBadge: "bg-neutral-100 text-neutral-800 border-neutral-200", price: "$$$", priceBadge: "bg-neutral-100 text-neutral-800 border-neutral-200", delivery: "11am – 8:30pm Tue-Sun (Closed Mon) • 1 wk notice for 30+" }, { name: "Vanilla Blue", url: "https://www.vanillablue.com.au/unsw", style: "Corporate Buffets", styleBadge: "bg-neutral-100 text-neutral-800 border-neutral-200", price: "$$$", priceBadge: "bg-neutral-100 text-neutral-800 border-neutral-200", delivery: "6:30am – 6:30pm Mon-Fri (7:30am–2pm Sat)" }
                                                     ].map((v, i) => (
                                                         <tr key={i} className="hover:bg-neutral-50">
                                                             <td className="p-2.5 font-bold text-neutral-900">
@@ -2060,7 +2108,6 @@ This room does not have private bathrooms. The closest toilets are down the hall
                                                                 </span>
                                                             </td>
                                                             <td className="p-2.5 text-neutral-500 font-medium">{v.delivery}</td>
-                                                            <td className="p-2.5 text-neutral-500 italic">{v.discount}</td>
                                                         </tr>
                                                     ))}
                                                 </tbody>
@@ -2068,7 +2115,7 @@ This room does not have private bathrooms. The closest toilets are down the hall
                                         </div>
                                     </div>
                                     <div className="p-3.5 bg-neutral-900 text-white font-medium rounded-xs">
-                                        📍 <strong>Logistics Reminder:</strong> All selected food vendors must deliver strictly inside your specific booking hours. Early drop-offs will be turned away as we have no space to store.
+                                        All catering must be delivered inside your specific booking hours. Early drop-offs will be turned away as we have no space to store.
                                     </div>
                                 </div>
                             )}
@@ -2164,7 +2211,7 @@ This room does not have private bathrooms. The closest toilets are down the hall
                                             <span className="font-mono font-bold bg-neutral-900 text-white px-2 py-0.5 rounded-xs">$100 FLAT FEE</span>
                                         </div>
                                         <p>
-                                            Leave the space as you found it. Leaving rubbish, promotional materials, unwashed serviceware, or disorganised equipment initiates a cleaning surcharge.
+                                            Leave the space as you found it. Leaving rubbish, promotional materials, or disorganised equipment initiates a cleaning surcharge.
                                         </p>
                                     </div>
                                     <div className="space-y-3">
@@ -2209,20 +2256,21 @@ This room does not have private bathrooms. The closest toilets are down the hall
                             {activeAccordion === 'exit' && (
                                 <div className="p-6 bg-white text-xs space-y-5 animate-in slide-in-from-top-1 duration-150 text-gray-600 font-normal leading-relaxed">
                                     <div className="p-3.5 bg-neutral-900 text-white font-medium rounded-xs">
-                                        Leave the space exactly how you found it. You must clear out all rubbish and pack away equipment before your end time. Never leave the room without notifying venue staff first.
+                                        Leave the space as clean as you found it. You must clear out all rubbish and pack away equipment before your end time. Never leave the room without notifying venue staff first.
                                     </div>
 
                                     <div>
                                         <h5 className="font-bold text-neutral-900 uppercase text-[10px] tracking-wide mb-2">Mandatory Checkout Checklist:</h5>
                                         <ul className="list-disc pl-4 space-y-2 text-neutral-600">
-                                            <li>Power down all AV displays.</li>
+                                            <li>Turn of AV displays.</li>
                                             <li>Put everything you took out back in its place. Flag items if you are unsure where they belong.</li>
                                             <li>Wipe tables, benches, and whiteboards.</li>
                                             <li>Load used glasses or mugs straight into the dishwasher (if full, stack neatly inside the sink).</li>
                                             <li>Do not leave food debris in sink drains.</li>
-                                            <li>Large boxes (e.g., pizza boxes) must go directly out to the commercial waste units across the lawn.</li>
+                                            <li>Large boxes (e.g., pizza boxes) must go into the large bins in the Hallway by the back door of the MCIC Design Space.</li>
                                             <li>Lost items can be taken with you, handed to venue staff, or taken to Gate 2 Security.</li>
-                                            <li>You may be requested to assist setting up the room for the following event during your pack-up time.</li>
+                                            <li>Contact your venue contact to let them know you are ready to depart and need the space checked and locked.</li>
+
                                         </ul>
                                     </div>
                                 </div>
