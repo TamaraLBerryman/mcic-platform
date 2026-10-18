@@ -1648,6 +1648,39 @@ This room does not have private bathrooms. The closest toilets are down the hall
 
                     <div className="border border-gray-200 rounded-sm divide-y divide-gray-200 overflow-hidden bg-white shadow-xs">
 
+                        {/* 15. WHO CAN BOOK OUR SPACES */}
+                        <div>
+                            <button
+                                type="button"
+                                onClick={() => toggleAccordion('eligibility')}
+                                className="w-full p-4 flex justify-between items-center text-xs font-bold uppercase tracking-wide text-neutral-800 bg-neutral-50/60 hover:bg-neutral-50 border-t border-neutral-100 cursor-pointer"
+                            >
+                                <span>Who can book our spaces?</span>
+                                <span>{activeAccordion === 'eligibility' ? '−' : '+'}</span>
+                            </button>
+                            {activeAccordion === 'eligibility' && (
+                                <div className="p-6 bg-white text-xs space-y-4 animate-in slide-in-from-top-1 duration-150 text-neutral-700 font-normal leading-relaxed">
+                                    <p className="font-medium text-neutral-900">
+                                        Anyone can book an event space at the Michael Crouch Innovation Centre.
+                                    </p>
+                                    <ul className="space-y-2.5 text-neutral-700">
+                                        <li>
+                                            <strong>External Bookings:</strong> Charged a full fee.
+                                        </li>
+                                        <li>
+                                            <strong>UNSW Startups & Arc Student Societies:</strong> Fees are completely waived for registered Arc student societies and UNSW startups running entrepreneurship related events (subject to MCIC team approval).
+                                        </li>
+                                        <li>
+                                            <strong>UNSW Departments:</strong> Charged a discounted fee.
+                                        </li>
+                                        <li>
+                                            <strong>Alignment Discounts:</strong> MCIC event spaces are prioritised for initiatives aligned with innovation, entrepreneurship, and creative problem-solving across UNSW, so extra discounts can be applied when an event aligns.
+                                        </li>
+                                    </ul>
+                                </div>
+                            )}
+                        </div>
+
                         {/* 1. LOCATION, TRANSPORT & PARKING */}
                         <div>
                             <button
@@ -2242,7 +2275,6 @@ This room does not have private bathrooms. The closest toilets are down the hall
                                 </div>
                             )}
                         </div>
-
                         {/* 12. BUMP-OUT & VACATING */}
                         <div>
                             <button
@@ -2269,8 +2301,8 @@ This room does not have private bathrooms. The closest toilets are down the hall
                                             <li>Do not leave food debris in sink drains.</li>
                                             <li>Large boxes (e.g., pizza boxes) must go into the large bins in the Hallway by the back door of the MCIC Design Space.</li>
                                             <li>Lost items can be taken with you, handed to venue staff, or taken to Gate 2 Security.</li>
-                                            <li>Contact your venue contact to let them know you are ready to depart and need the space checked and locked.</li>
-
+                                            <li>You may be requested to assist setting up the room for the following event during your pack-up time.</li>
+                                            <li>Contact your venue contact to let them know you are ready to depart and need the space locked.</li>
                                         </ul>
                                     </div>
                                 </div>
@@ -2344,6 +2376,171 @@ This room does not have private bathrooms. The closest toilets are down the hall
                                                 Looking to host a large-scale event. Book rooms and main hall spaces at the Roundhouse directly via <a href="https://www.arc.unsw.edu.au/roundhouse/bookings" target="_blank" rel="noopener noreferrer" className="underline font-bold text-black">Arc Roundhouse Bookings ↗</a>.
                                             </p>
                                         </div>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* 14. FIRST AID, SECURITY, EMERGENCY & SAFETY */}
+                        <div>
+                            <button
+                                type="button"
+                                onClick={() => toggleAccordion('security')}
+                                className="w-full p-4 flex justify-between items-center text-xs font-bold uppercase tracking-wide text-neutral-800 bg-neutral-50/60 hover:bg-neutral-50 border-t border-neutral-100 cursor-pointer"
+                            >
+                                <span>First Aid, Security, Emergency & Safety</span>
+                                <span>{activeAccordion === 'security' ? '−' : '+'}</span>
+                            </button>
+                            {activeAccordion === 'security' && (
+                                <div className="p-6 bg-white text-xs space-y-5 animate-in slide-in-from-top-1 duration-150 text-neutral-700 font-medium leading-relaxed">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+                                        {/* FIRST AID, INJURY & EVACUATION PROCEDURES (LEFT COLUMN) */}
+                                        <div className="p-4 bg-neutral-50 border border-neutral-200 rounded-sm space-y-4 flex flex-col justify-between">
+                                            <div className="space-y-4">
+
+                                                {/* FIRST AID & DEFIBRILLATOR LOCATIONS */}
+                                                <div className="space-y-2">
+                                                    <div className="flex justify-between items-center border-b border-neutral-200 pb-2">
+                                                        <span className="font-extrabold text-black uppercase text-[10px] tracking-wider flex items-center gap-1.5">
+                                                            <span>🩹</span> First Aid & Defibrillator
+                                                        </span>
+                                                        <span className="bg-[#EAD64D] text-black font-extrabold text-[9px] uppercase px-2 py-0.5 rounded-xs">
+                                                            On-Site
+                                                        </span>
+                                                    </div>
+
+                                                    <div className="space-y-1">
+                                                        <span className="font-bold text-neutral-900 block text-[11px]">First Aid Kits Located:</span>
+                                                        <ul className="space-y-1 text-neutral-700 text-[11px]">
+                                                            <li>• Wall beside the Computer in Design Space <em>(Red Bag)</em></li>
+                                                            <li>• On the Red Cabinet in Founders Place <em>(White Box)</em></li>
+                                                            <li>• In UNSW Makerspace beside Ground Floor Event Spaces <em>(White Cabinet)</em></li>
+                                                            <li>• In UNSW Founders Level 1 Copy Room <em>(White Cabinet)</em></li>
+                                                        </ul>
+                                                    </div>
+
+                                                    <div className="p-2.5 bg-red-50/60 border border-red-200/80 rounded-xs text-[11px] text-red-950 mt-2">
+                                                        ⚡ <strong>Defibrillator:</strong> Located on Ground Floor at glass doors between Hilmer Building Foyer and hallway behind MCIC Ground Floor Event Spaces.{' '}
+                                                        <a href="https://link.mazemap.com/0S4Nxpm9" target="_blank" rel="noopener noreferrer" className="font-bold text-red-700 underline hover:text-red-900 inline-flex items-center gap-0.5">
+                                                            View Map Pin ↗
+                                                        </a>
+                                                    </div>
+                                                </div>
+
+                                                {/* IN CASE OF INJURY */}
+                                                <div className="space-y-1.5 pt-3 border-t border-neutral-200/60">
+                                                    <span className="font-bold text-neutral-900 block text-[10px] uppercase tracking-wider">🩺 In Case of Injury:</span>
+                                                    <p className="text-neutral-700 text-[11px]">
+                                                        Depending on severity and preference, seek prompt attention via:
+                                                    </p>
+                                                    <ul className="space-y-1 text-neutral-700 text-[11px]">
+                                                        <li>• <strong>First Aid Officer:</strong> Hamish, Tamara or any Makerspace Staff</li>
+                                                        <li>• <strong>Ambulance:</strong> Call Security on <a href="tel:0293856666" className="font-mono font-bold text-black underline">9385 6666</a> (or ext <span className="font-mono font-bold">56666</span>)</li>
+                                                        <li>• Hospital or nearest medical facility</li>
+                                                        <li>• Treating local doctor</li>
+                                                    </ul>
+                                                </div>
+
+                                                {/* BUILDING EVACUATION */}
+                                                <div className="space-y-2 pt-3 border-t border-neutral-200/60">
+                                                    <div className="flex justify-between items-center border-b border-neutral-200 pb-1.5">
+                                                        <span className="font-extrabold text-black uppercase text-[10px] tracking-wider flex items-center gap-1.5">
+                                                            <span>🚨</span> Building Evacuation Protocols
+                                                        </span>
+                                                    </div>
+
+                                                    <div className="space-y-1.5 text-[11px]">
+                                                        <span className="font-bold text-neutral-900 block">Building & Floor Wardens:</span>
+                                                        <p className="text-neutral-700">
+                                                            Find warden details on <strong>Archibus</strong> under <em>"Emergency Contacts by Building"</em>, or contact Security Ops (<a href="tel:0293856000" className="font-mono font-bold text-black underline">9385 6000</a>) / <a href="mailto:emergency@unsw.edu.au" className="font-mono font-bold text-black underline">emergency@unsw.edu.au</a>.
+                                                        </p>
+                                                    </div>
+
+                                                    <div className="space-y-1.5 text-[11px]">
+                                                        <span className="font-bold text-neutral-900 block">Evacuation Process & Drills:</span>
+                                                        <p className="text-neutral-700">
+                                                            Follow instructions on <strong>orange A3 posters</strong> displayed throughout the building. Annual drills are conducted to ensure safe exit.
+                                                        </p>
+                                                    </div>
+                                                </div>
+
+                                            </div>
+
+                                            {/* EVACUATION LINK */}
+                                            <div className="pt-3 border-t border-neutral-200/60 text-[11px]">
+                                                <p className="text-neutral-600">
+                                                    Additional information available at:
+                                                </p>
+                                                <a href="https://www.estate.unsw.edu.au/emergencies" target="_blank" rel="noopener noreferrer" className="text-black font-bold underline hover:text-[#EAD64D]">
+                                                    UNSW Emergency & Evacuation Procedures ↗
+                                                </a>
+                                            </div>
+                                        </div>
+
+                                        {/* CAMPUS SECURITY & SAFEZONE APP (RIGHT COLUMN) */}
+                                        <div className="p-4 bg-neutral-50 border border-neutral-200 rounded-sm space-y-4 flex flex-col justify-between">
+                                            <div className="space-y-4">
+                                                <div className="flex justify-between items-center border-b border-neutral-200 pb-2">
+                                                    <span className="font-extrabold text-black uppercase text-[10px] tracking-wider flex items-center gap-1.5">
+                                                        <span>🛡️</span> Campus Security & SafeZone
+                                                    </span>
+                                                    <span className="bg-[#EAD64D] text-black font-extrabold text-[9px] uppercase px-2 py-0.5 rounded-xs">
+                                                        24/7 Gate 2
+                                                    </span>
+                                                </div>
+
+                                                <p className="text-neutral-700 text-[11px]">
+                                                    Security is available <strong>24 hours a day, 7 days a week</strong> at Gate 2 on High Street.
+                                                </p>
+
+                                                {/* 24/7 NUMBERS */}
+                                                <div className="p-3 bg-white border border-neutral-200/80 rounded-xs space-y-2">
+                                                    <span className="font-bold text-neutral-900 block uppercase text-[10px] tracking-wide">24/7 Phone Numbers:</span>
+                                                    <div className="space-y-1 text-[11px]">
+                                                        <p>
+                                                            General Operations: <a href="tel:0293856000" className="font-mono font-bold text-black underline">9385 6000</a>
+                                                        </p>
+                                                        <p className="text-red-600 font-bold">
+                                                            Emergency Line: <a href="tel:0293856666" className="font-mono underline">9385 6666</a>
+                                                        </p>
+                                                    </div>
+                                                </div>
+
+                                                {/* SAFEZONE APP CARD */}
+                                                <div className="p-3 bg-white border border-neutral-200/80 rounded-xs space-y-2.5">
+                                                    <div className="flex items-center gap-1.5 text-neutral-900 font-bold uppercase text-[10px] tracking-wide">
+                                                        <span>📲</span> SafeZone App
+                                                    </div>
+                                                    <p className="text-neutral-700 text-[11px]">
+                                                        Download the <strong>SafeZone App</strong> to stay connected with safety alerts, emergency assistance, and first aid response on campus.
+                                                    </p>
+
+                                                    {/* SCREENSHOT CONTAINER */}
+                                                    <div className="border border-neutral-200 rounded-xs overflow-hidden bg-neutral-100">
+                                                        <img
+                                                            src="/images/safezone-app.png"
+                                                            alt="SafeZone App Setup & Features"
+                                                            className="w-full h-auto object-cover block"
+                                                        />
+                                                    </div>
+                                                </div>
+
+                                                <p className="text-neutral-700 text-[11px]">
+                                                    Inquiries: <a href="mailto:security.services@unsw.edu.au" className="font-mono font-bold text-black underline">security.services@unsw.edu.au</a>
+                                                </p>
+                                            </div>
+
+                                            <div className="pt-3 border-t border-neutral-200/60 text-[11px]">
+                                                <p className="text-neutral-600">
+                                                    Additional information available at:
+                                                </p>
+                                                <a href="https://www.estate.unsw.edu.au/protective-services/your-safety" target="_blank" rel="noopener noreferrer" className="text-black font-bold underline hover:text-[#EAD64D]">
+                                                    UNSW Protective Services Portal ↗
+                                                </a>
+                                            </div>
+                                        </div>
+
                                     </div>
                                 </div>
                             )}
