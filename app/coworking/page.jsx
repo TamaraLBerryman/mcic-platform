@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from 'react';
+import Link from 'next/link';
 
 export default function CoworkingPage() {
     // Navigation tab state: 'apply' | 'floorplan'
@@ -141,52 +142,142 @@ export default function CoworkingPage() {
         { lvl: 7, seats: '10 seats', code: 'Kens HILMER E10 Lv7 723', remarks: 'Enter via SEB E8' }
     ];
 
-    // Floorplan Desk Pods Data Structure
+    // Updated Data Structure grouped by Pods
     const deskPods = [
         {
-            id: 'pod-staff',
-            title: 'UNSW Founders Staff & Operations Bay',
+            id: 'pod-0',
+            podLabel: 'POD 0',
             category: 'staff',
-            desks: [
-                { name: 'Tamara Berryman', role: 'Operations Lead', startup: 'UNSW Founders' },
-                { name: 'David Smith', role: 'Venture Manager', startup: 'UNSW Founders' },
-                { name: 'Victoria Lin', role: 'Program Ops', startup: 'UNSW Founders' },
-                { name: 'Staff Desk 04', role: 'Guest Advisor', startup: 'UNSW Founders' }
+            rows: [
+                { id: 'r1', is2Col: true, desks: [{ name: '2. Dina Titkova', role: 'Senior Manager, Entrepreneurship' }, { name: '3. Celine Olarte', role: 'Program Coordinator' }] }
             ]
         },
         {
-            id: 'pod-hotdesks-north',
-            title: 'North Wing Hot Desks (With Monitors & USB-C Hubs)',
-            category: 'hotdesk',
-            desks: [
-                { name: 'Hotdesk Station 01', role: 'Open Seating', startup: 'Available' },
-                { name: 'Hotdesk Station 02', role: 'Open Seating', startup: 'Available' },
-                { name: 'Hotdesk Station 03', role: 'Open Seating', startup: 'Available' },
-                { name: 'Hotdesk Station 04', role: 'Open Seating', startup: 'Available' },
-                { name: 'Hotdesk Station 05', role: 'Open Seating', startup: 'Available' },
-                { name: 'Hotdesk Station 06', role: 'Open Seating', startup: 'Available' }
+            id: 'pod-1',
+            podLabel: 'POD 1',
+            category: 'staff',
+            rows: [
+                { id: 'r2', is2Col: true, desks: [{ name: '4. Steven', role: 'Project Officer - Splice' }, { name: '5. Nina Juhl', role: 'Senior Manager, Entrepreneurship' }] },
+                { id: 'r3', is2Col: true, desks: [{ name: '6. Maddison McCoy', role: 'Community Manager, Engineering' }, { name: '7. Wisiani Wijaya', role: 'Investment Portfolio Coordinator' }] }
             ]
         },
         {
-            id: 'pod-10x-residents-1',
-            title: '10x Accelerator Resident Desk Bay A',
+            id: 'pod-2',
+            podLabel: 'POD 2',
+            category: 'staff',
+            rows: [
+                { id: 'r4', is2Col: true, desks: [{ name: '8. Vern Chan', role: 'Global Program Manager' }, { name: '9. Hotdesk', role: '(Founders Staff Only)' }] },
+                { id: 'r5', is2Col: true, desks: [{ name: '10. Sasha Whittle', role: 'Program Manager' }, { name: '11. Joseph Po', role: 'Health Accelerator Program Manager' }] }
+            ]
+        },
+        {
+            id: 'pod-3',
+            podLabel: 'POD 3',
+            category: 'staff',
+            rows: [
+                { id: 'r6', is2Col: true, desks: [{ name: '12. Mariana Luis Castillo Patron', role: 'Community Manager' }, { name: '13. Georgia Lyons', role: 'Program Manager' }] },
+                { id: 'r7', is2Col: true, desks: [{ name: '14. Ria Kapoor', role: 'Comms Intern' }, { name: '15. Eleni Assargiotis', role: 'Program Manager, Foundry 10x' }] }
+            ]
+        },
+        {
+            id: 'pod-4',
+            podLabel: 'POD 4',
+            category: 'staff',
+            rows: [
+                { id: 'r8', is2Col: true, desks: [{ name: '16. Priscilla Tan', role: 'Program Manager, Edu Entre' }, { name: '17. Hotdesk', role: '(Founders Staff Only)' }] },
+                { id: 'r9', is2Col: true, desks: [{ name: '18. Hamish McFarlane', role: 'MCIC Makerspace Coordinator' }, { name: '19. Tamara Berryman', role: 'Event Coordinator' }] }
+            ]
+        },
+        {
+            id: 'pod-5',
+            podLabel: 'POD 5',
             category: 'resident',
-            desks: [
-                { name: 'Solaris AI Bay 1', startup: 'Solaris AI', role: '10x Founder' },
-                { name: 'Solaris AI Bay 2', startup: 'Solaris AI', role: '10x Engineer' },
-                { name: 'BioMesh Tech Bay 1', startup: 'BioMesh Tech', role: 'Health 10x Founder' },
-                { name: 'BioMesh Tech Bay 2', startup: 'BioMesh Tech', role: 'Lead Researcher' }
+            rows: [
+                { id: 'r10', is2Col: false, desks: [{ name: '20. Reckro', role: 'Reuben Roy' }, { name: '21. Reckro' }, { name: '22. Hotdesk', type: 'hotdesk-red' }] },
+                { id: 'r11', is2Col: false, desks: [{ name: '23. Talk Lawyers', role: 'Simon Lim' }, { name: '24. Green Dynamic' }, { name: '25. Green Dynamic' }] }
             ]
         },
         {
-            id: 'pod-10x-residents-2',
-            title: '10x Accelerator Resident Desk Bay B',
+            id: 'pod-6',
+            podLabel: 'POD 6',
             category: 'resident',
-            desks: [
-                { name: 'QuantumLeap Bay 1', startup: 'QuantumLeap', role: '10x Founder' },
-                { name: 'QuantumLeap Bay 2', startup: 'QuantumLeap', role: 'CTO' },
-                { name: 'EcoCarbon Bay 1', startup: 'EcoCarbon', role: 'Pre-10x Cohort' },
-                { name: 'EcoCarbon Bay 2', startup: 'EcoCarbon', role: 'Co-Founder' }
+            rows: [
+                { id: 'r12', is2Col: false, desks: [{ name: '26. Peak Medical' }, { name: '27. Peak Medical' }, { name: '28. Hotdesk', type: 'hotdesk-red' }] },
+                { id: 'r13', is2Col: false, desks: [{ name: '29. Gridsight' }, { name: '30. Gridsight' }, { name: '31. Gridsight' }] }
+            ]
+        },
+        {
+            id: 'pod-7',
+            podLabel: 'POD 7',
+            category: 'resident',
+            rows: [
+                { id: 'r14', is2Col: false, desks: [{ name: '32. Extraterrestrial Power', role: 'Peter Toth' }, { name: '33. Extraterrestrial Power' }, { name: '34. Extraterrestrial Power', role: 'Jacques-Samuel Prolon' }] }
+            ]
+        },
+        {
+            id: 'framery-block',
+            category: 'amenity',
+            desks: [{ name: 'Meeting Pod' }, { name: 'Meeting Pod' }]
+        },
+        {
+            id: 'pod-8',
+            podLabel: 'POD 8',
+            category: 'resident',
+            rows: [
+                { id: 'r15', is2Col: true, desks: [{ name: '35. Vesiculate', role: 'Chin (Ken) Wong' }, { name: '37. Square Storm Interactive', role: 'Matt Cabanag' }] }
+            ]
+        },
+        {
+            id: 'pod-9',
+            podLabel: 'POD 9',
+            category: 'resident',
+            rows: [
+                { id: 'r16', is2Col: true, desks: [{ name: '38. ConnectOnion' }, { name: '40. Clave Systems' }] },
+                { id: 'r17', is2Col: true, desks: [{ name: '41. ConnectOnion', role: 'Aaron' }, { name: '43. Clave Systems', role: 'Sam Brew' }] }
+            ]
+        },
+        {
+            id: 'pod-10',
+            podLabel: 'POD 10',
+            category: 'resident',
+            rows: [
+                { id: 'r18', is2Col: false, desks: [{ name: '44. Vixia' }, { name: '45. DocuBuild' }, { name: '46. Hotdesk', type: 'hotdesk-red' }] },
+                { id: 'r19', is2Col: false, desks: [{ name: '47. Tendor', role: 'Jason Cai' }, { name: '48. Tendor' }, { name: '49. Tendor' }] }
+            ]
+        },
+        {
+            id: 'pod-11',
+            podLabel: 'POD 11',
+            category: 'resident',
+            rows: [
+                { id: 'r20', is2Col: false, desks: [{ name: '50. Zenith' }, { name: '51. Zenith' }, { name: '52. Zenith' }] },
+                { id: 'r21', is2Col: false, desks: [{ name: '53. Zenith' }, { name: '54. Zenith' }, { name: '55. Zenith' }] }
+            ]
+        },
+        {
+            id: 'pod-12',
+            podLabel: 'POD 12',
+            category: 'resident',
+            rows: [
+                { id: 'r22', is2Col: false, desks: [{ name: '56. Innersteps', role: 'Jesse' }, { name: '57. Innersteps' }, { name: '58. Innersteps', role: 'Matt' }] },
+                { id: 'r23', is2Col: false, desks: [{ name: '59. Vocare' }, { name: '60. Vocare' }, { name: '61. Vocare' }] }
+            ]
+        },
+        {
+            id: 'pod-13',
+            podLabel: 'POD 13',
+            category: 'resident',
+            rows: [
+                { id: 'r24', is2Col: false, desks: [{ name: '62. Rhombus AI' }, { name: '63. Rhombus AI' }, { name: '64. Rhombus AI' }] },
+                { id: 'r25', is2Col: false, desks: [{ name: '65. Hello solar again' }, { name: '66. Hoogly' }, { name: '67. Hoogly', role: 'Mohit Midha' }] }
+            ]
+        },
+        {
+            id: 'pod-14',
+            podLabel: 'POD 14',
+            category: 'resident',
+            rows: [
+                { id: 'r26', is2Col: true, desks: [{ name: '68. Hello solar again' }, { name: '70. Hello solar again' }] }
             ]
         }
     ];
@@ -317,7 +408,17 @@ export default function CoworkingPage() {
                             <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
                                 <button
                                     type="button"
-                                    onClick={handleSkipToForm}
+                                    onClick={() => {
+                                        setActiveTab('apply');
+                                        requestAnimationFrame(() => {
+                                            setTimeout(() => {
+                                                const target = document.getElementById('booking-form') || document.querySelector('form');
+                                                if (target) {
+                                                    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                                                }
+                                            }, 100);
+                                        });
+                                    }}
                                     className="bg-[#EAD64D] text-black font-extrabold py-3 px-6 text-xs uppercase tracking-wider rounded-xs hover:bg-black hover:text-white transition-colors cursor-pointer text-center"
                                 >
                                     Apply For Access ➔
@@ -326,10 +427,15 @@ export default function CoworkingPage() {
                                 <button
                                     type="button"
                                     onClick={() => {
-                                        const target = document.getElementById('booking-form') || document.querySelector('form');
-                                        if (target) {
-                                            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                                        }
+                                        setActiveTab('apply');
+                                        requestAnimationFrame(() => {
+                                            setTimeout(() => {
+                                                const target = document.getElementById('booking-form') || document.querySelector('form');
+                                                if (target) {
+                                                    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                                                }
+                                            }, 100);
+                                        });
                                     }}
                                     className="bg-white text-black border border-gray-300 font-extrabold py-3 px-6 text-xs uppercase tracking-wider rounded-xs hover:border-black hover:bg-neutral-50 transition-colors cursor-pointer text-center"
                                 >
@@ -360,7 +466,7 @@ export default function CoworkingPage() {
                     {/* INCLUDED RESIDENT BENEFITS BAR (MINIMAL & INLINE) */}
                     <div className="pt-6 border-t border-gray-100">
                         <span className="text-[10px] font-mono font-bold uppercase tracking-widest text-gray-400 block mb-4">
-                            Included Resident Benefits
+                            Included Benefits
                         </span>
 
                         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-y-4 gap-x-6 items-center">
@@ -2634,11 +2740,12 @@ export default function CoworkingPage() {
                     {/* ============================================================== */}
                     {activeTab === 'floorplan' && (
                         <div className="space-y-8 animate-in fade-in duration-200">
+
+                            {/* HEADER & LEGEND */}
                             <div className="bg-white border border-gray-200 p-6 rounded-sm shadow-xs space-y-4">
                                 <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 border-b border-gray-100 pb-4">
                                     <div>
-                                        <h2 className="text-xl font-extrabold text-black">MCIC Level 1 Layout Map</h2>
-                                        <p className="text-xs text-neutral-500 font-normal">Interactive seating allocations across staff, resident startups, and hot desks.</p>
+                                        <h2 className="text-xl font-extrabold text-black">UNSW Founders Desk Map</h2>
                                     </div>
 
                                     <input
@@ -2652,145 +2759,168 @@ export default function CoworkingPage() {
 
                                 <div className="flex flex-wrap gap-4 text-[11px] font-bold uppercase tracking-wider">
                                     <div className="flex items-center gap-1.5">
-                                        <span className="w-3.5 h-3.5 bg-[#EAD64D] border border-amber-400 rounded-xs inline-block"></span>
+                                        <span className="w-3.5 h-3.5 bg-[#FFD966] border border-amber-400 rounded-xs inline-block"></span>
                                         <span>UNSW Founders Staff</span>
                                     </div>
                                     <div className="flex items-center gap-1.5">
-                                        <span className="w-3.5 h-3.5 bg-[#FFF2CC] border border-amber-200 rounded-xs inline-block"></span>
+                                        <span className="w-3.5 h-3.5 bg-black border border-neutral-900 rounded-xs inline-block"></span>
                                         <span>Resident Startups</span>
                                     </div>
                                     <div className="flex items-center gap-1.5">
-                                        <span className="w-3.5 h-3.5 bg-[#CCEEFF] border border-sky-300 rounded-xs inline-block"></span>
+                                        <span className="w-3.5 h-3.5 bg-red-600 border border-red-700 rounded-xs inline-block"></span>
                                         <span>Hot Desks</span>
                                     </div>
                                     <div className="flex items-center gap-1.5">
                                         <span className="w-3.5 h-3.5 bg-[#E2EFDA] border border-green-300 rounded-xs inline-block"></span>
-                                        <span>Founders Place / Flex</span>
+                                        <span>Founders Amenities</span>
                                     </div>
                                 </div>
                             </div>
 
-                            <div className="bg-white border border-gray-200 p-6 md:p-8 rounded-sm shadow-xs space-y-6 overflow-x-auto">
-                                <div className="grid grid-cols-12 gap-2 text-center text-[10px] font-bold uppercase tracking-wider">
-                                    <div className="col-span-6 bg-[#E2EFDA] border border-green-200 p-4 rounded-xs flex items-center justify-center">
-                                        <span>🍳 Main Level 1 Kitchen & Dining Area</span>
+                            {/* MAIN FLOORPLAN VIEWPORT */}
+                            <div className="bg-white border border-gray-200 p-6 md:p-8 rounded-sm shadow-xs space-y-4 overflow-x-auto min-w-[950px]">
+
+                                {/* TOP AMENITIES ROW */}
+                                <div className="grid grid-cols-12 gap-2 text-center text-[11px] font-extrabold text-black uppercase tracking-tight">
+                                    <div className="col-span-5 bg-[#E2EFDA] border border-green-300 p-3 rounded-xs flex items-center justify-center">
+                                        <span>Kitchen</span>
                                     </div>
-                                    <div className="col-span-2 bg-[#E2EFDA] border border-green-200 p-4 rounded-xs flex items-center justify-center">
+                                    <div className="col-span-2 bg-[#E2EFDA] border border-green-300 p-3 rounded-xs flex items-center justify-center">
                                         <span>Copy Room</span>
                                     </div>
-                                    <div className="col-span-1 bg-[#FFF2CC] border border-amber-200 p-2 rounded-xs flex items-center justify-center text-[9px]">
-                                        David's Office
+                                    <div className="col-span-1 bg-[#FFD966] border border-amber-400 p-2 rounded-xs flex flex-col items-center justify-center text-[9px]">
+                                        <span className="font-extrabold">1. David's Office</span>
                                     </div>
-                                    <div className="col-span-3 bg-neutral-100 border border-gray-200 p-2 rounded-xs flex items-center justify-center text-[9px] text-gray-500">
-                                        MSE Offices
+                                    <div className="col-span-4 grid grid-cols-3 gap-2">
+                                        <div className="bg-neutral-200 border border-gray-300 p-2 rounded-xs flex items-center justify-center text-[9px] text-neutral-700 font-bold">
+                                            Materials Science Office
+                                        </div>
+                                        <div className="bg-neutral-200 border border-gray-300 p-2 rounded-xs flex items-center justify-center text-[9px] text-neutral-700 font-bold">
+                                            Materials Science Office
+                                        </div>
+                                        <div className="bg-neutral-200 border border-gray-300 p-2 rounded-xs flex items-center justify-center text-[9px] text-neutral-700 font-bold">
+                                            Materials Science Office
+                                        </div>
                                     </div>
                                 </div>
 
+                                {/* BODY GRID */}
                                 <div className="grid grid-cols-12 gap-4">
-                                    <div className="col-span-12 lg:col-span-7 space-y-4">
-                                        <div className="text-xs font-bold uppercase tracking-wider text-neutral-400 border-b border-gray-100 pb-1">
-                                            Level 1 Main Workspace Bays
-                                        </div>
 
-                                        <div className="space-y-3">
-                                            {deskPods.map((pod) => {
-                                                const matchesSearch = searchQuery === '' || pod.desks.some(d =>
-                                                    (d.name && d.name.toLowerCase().includes(searchQuery.toLowerCase())) ||
-                                                    (d.startup && d.startup.toLowerCase().includes(searchQuery.toLowerCase())) ||
-                                                    (d.role && d.role.toLowerCase().includes(searchQuery.toLowerCase()))
-                                                );
-
+                                    {/* LEFT SIDE: POD GROUPS (MERGED LABELS) */}
+                                    <div className="col-span-5 space-y-3">
+                                        {deskPods.map((pod) => {
+                                            // MEETING PODS BLOCK
+                                            if (pod.category === 'amenity') {
                                                 return (
-                                                    <div
-                                                        key={pod.id}
-                                                        className={`border rounded-xs p-3 transition-all ${matchesSearch ? 'opacity-100 scale-100' : 'opacity-30 scale-[0.99]'
-                                                            } ${pod.category === 'staff'
-                                                                ? 'bg-[#EAD64D]/15 border-[#EAD64D]'
-                                                                : pod.category === 'hotdesk'
-                                                                    ? 'bg-[#CCEEFF]/20 border-sky-300'
-                                                                    : pod.category === 'amenity'
-                                                                        ? 'bg-neutral-100 border-gray-300'
-                                                                        : 'bg-[#FFF2CC]/30 border-amber-200'
-                                                            }`}
-                                                    >
-                                                        <div className="flex justify-between items-center mb-2">
-                                                            <span className="text-[11px] font-extrabold uppercase tracking-tight text-black">
-                                                                {pod.title}
-                                                            </span>
-                                                            <span className="text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 bg-white border border-gray-200 rounded-xs text-neutral-500">
-                                                                {pod.desks.length} Desks
-                                                            </span>
-                                                        </div>
-
-                                                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
-                                                            {pod.desks.map((desk, idx) => (
-                                                                <div
-                                                                    key={idx}
-                                                                    onClick={() => setSelectedEntity(desk)}
-                                                                    className={`p-2 rounded-xs border text-left cursor-pointer transition-colors ${pod.category === 'staff'
-                                                                        ? 'bg-[#EAD64D] border-amber-400 text-black hover:bg-black hover:text-white'
-                                                                        : pod.category === 'hotdesk'
-                                                                            ? 'bg-[#CCEEFF] border-sky-300 text-sky-950 hover:bg-sky-600 hover:text-white'
-                                                                            : pod.category === 'amenity'
-                                                                                ? 'bg-neutral-800 text-white border-neutral-900'
-                                                                                : 'bg-[#FFF2CC] border-amber-300 text-black hover:bg-black hover:text-white'
-                                                                        }`}
-                                                                >
-                                                                    <div className="font-extrabold text-[11px] leading-tight">
-                                                                        {desk.name}
-                                                                    </div>
-                                                                    {(desk.startup || desk.role) && (
-                                                                        <div className="text-[9px] opacity-80 mt-0.5 truncate font-medium">
-                                                                            {desk.startup || desk.role}
-                                                                        </div>
-                                                                    )}
-                                                                </div>
-                                                            ))}
-                                                        </div>
+                                                    <div key={pod.id} className="grid grid-cols-2 gap-2 my-3">
+                                                        {pod.desks.map((desk, idx) => (
+                                                            <div
+                                                                key={idx}
+                                                                className="bg-[#E2EFDA] border border-green-300 text-center py-3 rounded-xs text-[11px] font-extrabold text-black uppercase"
+                                                            >
+                                                                {desk.name}
+                                                            </div>
+                                                        ))}
                                                     </div>
                                                 );
-                                            })}
-                                        </div>
+                                            }
+
+                                            // Check search matching across all desks in the pod
+                                            const matchesSearch = searchQuery === '' || pod.rows.some(r =>
+                                                r.desks.some(d =>
+                                                    (d.name && d.name.toLowerCase().includes(searchQuery.toLowerCase())) ||
+                                                    (d.role && d.role.toLowerCase().includes(searchQuery.toLowerCase()))
+                                                )
+                                            );
+
+                                            return (
+                                                <div
+                                                    key={pod.id}
+                                                    className={`flex gap-2 items-stretch transition-all ${matchesSearch ? 'opacity-100' : 'opacity-25'}`}
+                                                >
+                                                    {/* UNIFIED MERGED POD SIDEBAR */}
+                                                    <div className="w-14 flex-shrink-0 bg-neutral-100 border border-gray-200 rounded-xs flex items-center justify-center text-[9px] font-mono font-extrabold text-neutral-700 uppercase p-1">
+                                                        {pod.podLabel}
+                                                    </div>
+
+                                                    {/* DESK ROWS WITHIN POD */}
+                                                    <div className={`flex-1 space-y-1.5 p-1.5 rounded-xs border ${pod.category === 'staff'
+                                                        ? 'bg-[#FFD966]/20 border-amber-300'
+                                                        : 'bg-neutral-50 border-gray-200'
+                                                        }`}>
+                                                        {pod.rows.map((row) => (
+                                                            <div
+                                                                key={row.id}
+                                                                className={`grid gap-1.5 ${row.is2Col ? 'grid-cols-2' : 'grid-cols-3'}`}
+                                                            >
+                                                                {row.desks.map((desk, idx) => {
+                                                                    const isStaff = pod.category === 'staff';
+                                                                    const isRedHotdesk = desk.type === 'hotdesk-red';
+
+                                                                    return (
+                                                                        <div
+                                                                            key={idx}
+                                                                            onClick={() => setSelectedEntity(desk)}
+                                                                            className={`p-2 rounded-xs border text-center cursor-pointer flex flex-col justify-center transition-all ${isStaff
+                                                                                ? 'bg-[#FFD966] border-amber-400 text-black hover:bg-black hover:text-white'
+                                                                                : isRedHotdesk
+                                                                                    ? 'bg-red-600 border-red-700 text-white hover:bg-black'
+                                                                                    : 'bg-black border-neutral-900 text-white hover:bg-[#FFD966] hover:text-black'
+                                                                                }`}
+                                                                        >
+                                                                            <div className="font-extrabold text-[10px] leading-tight">
+                                                                                {desk.name}
+                                                                            </div>
+                                                                            {desk.role && (
+                                                                                <div className="text-[8px] opacity-80 mt-0.5 leading-tight font-medium truncate">
+                                                                                    {desk.role}
+                                                                                </div>
+                                                                            )}
+                                                                        </div>
+                                                                    );
+                                                                })}
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
                                     </div>
 
-                                    <div className="hidden lg:flex col-span-1 bg-neutral-900 text-white rounded-xs items-center justify-center p-2 writing-mode-vertical">
-                                        <span className="text-[10px] font-mono tracking-widest uppercase rotate-180 text-neutral-400">
-                                            Main Access Corridor / Hallway
+                                    {/* MIDDLE SECTION: MATERIALS SCIENCE LABS */}
+                                    <div className="col-span-4 bg-neutral-200 border border-gray-300 rounded-xs flex items-center justify-center p-6 text-center">
+                                        <span className="text-sm font-black uppercase tracking-wider text-neutral-700">
+                                            Materials Science Labs
                                         </span>
                                     </div>
 
-                                    <div className="col-span-12 lg:col-span-4 space-y-4">
-                                        <div className="text-xs font-bold uppercase tracking-wider text-neutral-400 border-b border-gray-100 pb-1">
-                                            Founders Place & Open Access Area
+                                    {/* RIGHT SIDE: FOUNDERS PLACE */}
+                                    <div className="col-span-3 flex flex-col gap-3">
+                                        <div className="flex-1 bg-[#E2EFDA] border border-green-300 p-6 rounded-xs flex items-center justify-center text-center">
+                                            <div>
+                                                <h3 className="font-black text-base text-black uppercase tracking-tight">Founders Place</h3>
+                                                <span className="text-xs font-semibold text-neutral-700 block mt-0.5">(Event Space)</span>
+                                            </div>
                                         </div>
 
-                                        <div className="bg-[#E2EFDA] border border-green-300 p-6 rounded-xs space-y-6">
-                                            <div className="space-y-2 border-b border-green-200 pb-4">
-                                                <div className="inline-block bg-green-700 text-white text-[9px] font-extrabold uppercase tracking-widest px-2 py-0.5 rounded-xs">
-                                                    Ground/Level 1 Flexible Space
-                                                </div>
-                                                <h3 className="font-extrabold text-base text-black">Founders Place (Event Space)</h3>
-                                                <p className="text-xs text-neutral-700 leading-relaxed">
-                                                    Houses key community events, hackathons, pitch nights, and First Thursdays networking sessions.
-                                                </p>
-                                            </div>
-
-                                            <div className="space-y-2">
-                                                <h3 className="font-extrabold text-base text-black">Founders Place (Group Study & Open Access)</h3>
-                                                <p className="text-xs text-neutral-700 leading-relaxed">
-                                                    Features 15 Founder Place hotdesks, shared kitchen nook, whiteboards, presentation screens, and phone booths for casual resident work.
-                                                </p>
+                                        <div className="flex-1 bg-[#E2EFDA] border border-green-300 p-6 rounded-xs flex items-center justify-center text-center">
+                                            <div>
+                                                <h3 className="font-black text-base text-black uppercase tracking-tight">Founders Place</h3>
+                                                <span className="text-xs font-semibold text-neutral-700 block mt-0.5">(Group Study)</span>
                                             </div>
                                         </div>
                                     </div>
+
                                 </div>
+
                             </div>
 
+                            {/* SELECTED ALLOCATION POPUP */}
                             {selectedEntity && (
-                                <div className="p-4 bg-[#EAD64D] border border-amber-400 text-black rounded-sm flex justify-between items-center text-xs font-bold">
+                                <div className="p-4 bg-[#FFD966] border border-amber-400 text-black rounded-sm flex justify-between items-center text-xs font-bold">
                                     <div>
                                         <span>Selected Allocation: <strong>{selectedEntity.name}</strong></span>
-                                        {selectedEntity.startup && <span className="ml-2 font-normal">({selectedEntity.startup})</span>}
                                         {selectedEntity.role && <span className="ml-2 font-normal">// {selectedEntity.role}</span>}
                                     </div>
                                     <button
@@ -2805,9 +2935,261 @@ export default function CoworkingPage() {
 
                         </div>
                     )}
-
                 </section>
+                {/* ============================================================== */}
+                {/* TAB 4: BOOK STARTUP SUPPORT ('officehours')                     */}
+                {/* ============================================================== */}
+                {activeTab === 'officehours' && (
+                    <div className="space-y-8 animate-in fade-in duration-200">
 
+                        <section className="bg-white border border-gray-200 p-6 md:p-8 rounded-sm shadow-xs space-y-8">
+
+                            {/* SECTION HEADER */}
+                            <div className="border-b border-gray-200 pb-4">
+                                <h2 className="text-2xl font-black uppercase tracking-tight text-neutral-900">
+                                    Book Startup Support
+                                </h2>
+                                <p className="text-sm text-neutral-600 mt-1 max-w-3xl">
+                                    Connect 1:1 with industry legal experts, financial advisors, brand strategists, and UNSW startup coaches.
+                                </p>
+                            </div>
+
+                            {/* ADVISOR CARDS GRID */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+                                {/* MARK ALLEN LEGAL */}
+                                <div className="bg-white border border-neutral-200 rounded-sm shadow-xs p-6 flex flex-col justify-between hover:border-neutral-300 transition-all duration-150">
+                                    <div>
+                                        <div className="flex items-center justify-between gap-2 mb-3">
+                                            <span className="text-[10px] font-extrabold uppercase tracking-wider bg-neutral-100 text-neutral-700 px-2.5 py-1 rounded-xs">
+                                                Legal & IP Advisory
+                                            </span>
+                                        </div>
+
+                                        <h3 className="text-lg font-bold text-neutral-900 leading-snug">
+                                            Office Hours: Legal
+                                        </h3>
+                                        <p className="text-xs font-semibold text-neutral-500 mt-1 flex items-center gap-1">
+                                            ⏱ Duration: <span className="text-neutral-800">25 min</span>
+                                        </p>
+
+                                        <div className="mt-3 text-xs bg-neutral-50 p-3 rounded-xs border border-neutral-100 space-y-1">
+                                            <p className="font-semibold text-neutral-800">
+                                                📍 <span className="font-bold">Location:</span> Fishbowl private meeting room. Ground floor of the Hilmer Building.
+                                            </p>
+                                            <a
+                                                href="https://unswfounders.com/visit-us"
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="inline-block text-[#2B549A] font-bold hover:underline"
+                                            >
+                                                Google Directions / Map ↗
+                                            </a>
+                                        </div>
+
+                                        <p className="text-xs text-neutral-600 leading-relaxed mt-4">
+                                            Mark specialises in founder agreements, investment / investment hygiene, patent and university research extraction, contract law, deep tech and SaaS.
+                                        </p>
+
+                                        <div className="mt-3 text-[11px] italic text-amber-700 bg-amber-50 p-2 rounded-xs border border-amber-200">
+                                            <span className="font-bold text-neutral-800">Requirements for securing a meeting:</span>
+                                            <ul className="list-disc list-inside text-neutral-600 mt-1 space-y-0.5">
+                                                <li>Incorporated company</li>
+                                                <li>A clear ask / and prepare documents for sharing before the meeting</li>
+                                            </ul>
+                                        </div>
+
+                                        <div className="mt-3 text-xs space-x-3">
+                                            <span className="font-bold text-neutral-800">Read More:</span>
+                                            <a href="https://www.smh.com.au/business/companies/wake-up-moment-nuix-whistleblower-s-lawyer-breaks-silence-20210625-p584dx.html" target="_blank" rel="noopener noreferrer" className="text-neutral-500 hover:text-black underline font-medium">
+                                                SMH Profile ↗
+                                            </a>
+                                        </div>
+                                    </div>
+
+                                    <div className="mt-6 pt-4 border-t border-neutral-100">
+                                        <a
+                                            href="https://calendly.com/mcic-1/office-hours-with-mark-allen-legal?month=2026-11"
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="block w-full bg-black text-[#EAD64D] hover:bg-neutral-800 text-center text-xs font-extrabold uppercase tracking-wider py-3 rounded-sm transition-all duration-150 cursor-pointer shadow-xs"
+                                        >
+                                            Book Here ↗
+                                        </a>
+                                    </div>
+                                </div>
+
+                                {/* WAYNE WANDERS (FINANCE) */}
+                                <div className="bg-white border border-neutral-200 rounded-sm shadow-xs p-6 flex flex-col justify-between hover:border-neutral-300 transition-all duration-150">
+                                    <div>
+                                        <div className="flex items-center justify-between gap-2 mb-3">
+                                            <span className="text-[10px] font-extrabold uppercase tracking-wider bg-neutral-100 text-neutral-700 px-2.5 py-1 rounded-xs">
+                                                Finance & Business Strategy
+                                            </span>
+                                        </div>
+
+                                        <h3 className="text-lg font-bold text-neutral-900 leading-snug">
+                                            Office Hours: Finance
+                                        </h3>
+                                        <p className="text-xs font-semibold text-neutral-500 mt-1 flex items-center gap-1">
+                                            ⏱ Duration: <span className="text-neutral-800">45 min</span>
+                                        </p>
+
+                                        <div className="mt-3 text-xs bg-neutral-50 p-3 rounded-xs border border-neutral-100 space-y-1">
+                                            <p className="font-semibold text-neutral-800">
+                                                📍 <span className="font-bold">Location:</span> Hilmer Building, Level 1 Foyer Meeting Room.
+                                            </p>
+                                            <a
+                                                href="https://unswfounders.com/visit-us"
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="inline-block text-[#2B549A] font-bold hover:underline"
+                                            >
+                                                Google Directions / Map ↗
+                                            </a>
+                                        </div>
+
+                                        <p className="text-xs text-neutral-600 leading-relaxed mt-4">
+                                            Wayne Wanders is a seasoned Chartered Accountant with over 35 years of experience.
+                                        </p>
+
+                                        <div className="mt-3 text-xs">
+                                            <span className="font-bold text-neutral-800">Wayne can help you with:</span>
+                                            <ul className="list-disc list-inside text-neutral-600 mt-1 space-y-0.5">
+                                                <li>Refining and developing your business strategy</li>
+                                                <li>Financial modeling and cash flow</li>
+                                                <li>Understanding financing options & investor readiness</li>
+                                                <li>Grants, funding programs & financial forecasting</li>
+
+                                            </ul>
+                                        </div>
+                                    </div>
+
+                                    <div className="mt-6 pt-4 border-t border-neutral-100">
+                                        <a
+                                            href="https://calendly.com/mcic-1/new-meeting?month=2026-11"
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="block w-full bg-black text-[#EAD64D] hover:bg-neutral-800 text-center text-xs font-extrabold uppercase tracking-wider py-3 rounded-sm transition-all duration-150 cursor-pointer shadow-xs"
+                                        >
+                                            Book Here ↗
+                                        </a>
+                                    </div>
+                                </div>
+
+                                {/* GUNJAN PODDAR (BRAND & GTM) */}
+                                <div className="bg-white border border-neutral-200 rounded-sm shadow-xs p-6 flex flex-col justify-between hover:border-neutral-300 transition-all duration-150">
+                                    <div>
+                                        <div className="flex items-center justify-between gap-2 mb-3">
+                                            <span className="text-[10px] font-extrabold uppercase tracking-wider bg-neutral-100 text-neutral-700 px-2.5 py-1 rounded-xs">
+                                                Brand & Market Growth
+                                            </span>
+                                            <span className="text-[10px] font-bold uppercase tracking-wider bg-[#EAD64D] text-black px-2 py-0.5 rounded-xs">
+                                                Virtual Meeting
+                                            </span>
+                                        </div>
+
+                                        <h3 className="text-lg font-bold text-neutral-900 leading-snug">
+                                            Office Hours: Brand, Pitch & GTM Strategy
+                                        </h3>
+                                        <p className="text-xs font-semibold text-neutral-500 mt-1 flex items-center gap-1">
+                                            ⏱ Duration: <span className="text-neutral-800">30 min</span>
+                                        </p>
+
+                                        <div className="mt-3 text-xs bg-neutral-50 p-3 rounded-xs border border-neutral-100 space-y-1">
+                                            <p className="font-semibold text-neutral-800">
+                                                📍 <span className="font-bold">Location:</span> Online (details provided upon confirmation)
+                                            </p>
+                                        </div>
+
+                                        <p className="text-xs text-neutral-600 leading-relaxed mt-4">
+                                            Mentorship session with Gunjan Poddar (Creative Marketing Strategist, ex-BBDO, Ogilvy, Leo Burnett, Amazon) for founders looking to translate technical products into a market-leading global brand.
+                                        </p>
+
+                                        <p className="mt-3 text-[11px] italic text-amber-700 bg-amber-50 p-2 rounded-xs border border-amber-200">
+                                            Please complete intake questions during booking so we can dive straight into tactics.
+                                        </p>
+                                    </div>
+
+                                    <div className="mt-6 pt-4 border-t border-neutral-100">
+                                        <a
+                                            href="https://calendly.com/gp-mentorship/founder-mentorship-brand-pitch-gtm-strategy?month=2026-10"
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="block w-full bg-black text-[#EAD64D] hover:bg-neutral-800 text-center text-xs font-extrabold uppercase tracking-wider py-3 rounded-sm transition-all duration-150 cursor-pointer shadow-xs"
+                                        >
+                                            Book Here ↗
+                                        </a>
+                                    </div>
+                                </div>
+
+                                {/* COACH & CONNECT */}
+                                <div className="bg-white border border-neutral-200 rounded-sm shadow-xs p-6 flex flex-col justify-between hover:border-neutral-300 transition-all duration-150">
+                                    <div>
+                                        <div className="flex items-center justify-between gap-2 mb-3">
+                                            <span className="text-[10px] font-extrabold uppercase tracking-wider bg-neutral-100 text-neutral-700 px-2.5 py-1 rounded-xs">
+                                                Startup Coaching
+                                            </span>
+                                        </div>
+
+                                        <h3 className="text-lg font-bold text-neutral-900 leading-snug">
+                                            Coach & Connect: Range of UNSW Startup Coaches
+                                        </h3>
+                                        <p className="text-xs font-semibold text-neutral-500 mt-1 flex items-center gap-1">
+                                            ⏱ Duration: <span className="text-neutral-800">Flexible</span>
+                                        </p>
+
+                                        <div className="mt-3 text-xs bg-neutral-50 p-3 rounded-xs border border-neutral-100 space-y-1">
+                                            <p className="font-semibold text-neutral-800">
+                                                📍 <span className="font-bold">Location:</span> Online (details provided upon confirmation)
+                                            </p>
+                                        </div>
+
+                                        <p className="text-xs text-neutral-600 leading-relaxed mt-4">
+                                            Coach & Connect links people who have an innovative idea or existing business with an experienced startup coach. Available for UNSW staff, students, or alumni at any stage of their entrepreneurial journey.
+                                        </p>
+                                    </div>
+
+                                    <div className="mt-6 pt-4 border-t border-neutral-100">
+                                        <a
+                                            href="https://unswfounders.com/coach-connect"
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="block w-full bg-black text-[#EAD64D] hover:bg-neutral-800 text-center text-xs font-extrabold uppercase tracking-wider py-3 rounded-sm transition-all duration-150 cursor-pointer shadow-xs"
+                                        >
+                                            Apply Today ↗
+                                        </a>
+                                    </div>
+                                </div>
+
+                            </div>
+
+                            {/* INTERESTED IN OFFERING OFFICE HOURS? CALLOUT SECTION */}
+                            <div className="bg-neutral-900 text-white rounded-sm p-6 md:p-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 border-l-4 border-[#EAD64D] shadow-xs mt-8">
+                                <div className="space-y-2 max-w-2xl">
+                                    <div className="inline-flex items-center gap-2 bg-[#EAD64D] text-black text-[10px] font-extrabold uppercase tracking-widest px-2.5 py-0.5 rounded-xs">
+                                        <span>💡</span> Mentors & Industry Experts
+                                    </div>
+                                    <h3 className="text-xl font-black uppercase tracking-tight text-white">
+                                        Interested in Offering Office Hours or becoming a mentor?
+                                    </h3>
+                                    <p className="text-xs text-neutral-300 leading-relaxed">
+                                        Are you an experienced founder, industry specialist, or domain expert wanting to mentor emerging startups? Let us know if you'd like to host office hours at MCIC or connect with the UNSW Founders community to help with other programs.
+                                    </p>
+                                </div>
+
+                                <div className="w-full md:w-auto flex-shrink-0">
+                                    <Link
+                                        href="/contact"
+                                        className="w-full md:w-auto bg-[#EAD64D] text-black hover:bg-white font-extrabold text-xs uppercase tracking-wider py-3 px-6 rounded-xs transition-colors duration-150 text-center cursor-pointer block"
+                                    >
+                                        Get in Touch ↗
+                                    </Link>
+                                </div>                            </div>
+
+                        </section>
+                    </div>
+                )}
             </div >
 
         </main >
