@@ -1013,11 +1013,11 @@ This room does not have private bathrooms. The closest toilets are down the hall
                             <input type="time" value={formData.bumpIn} onChange={e => setFormData({ ...formData, bumpIn: e.target.value })} className="w-full p-2 border border-gray-200 text-xs font-semibold rounded-sm bg-white text-black outline-none focus:border-neutral-400" />
                         </div>
                         <div className="space-y-1">
-                            <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Event Starts (Arrival)</label>
+                            <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Event Starts (Guest Arrival)</label>
                             <input type="time" value={formData.eventStart} onChange={e => setFormData({ ...formData, eventStart: e.target.value })} className="w-full p-2 border border-gray-200 text-xs font-semibold rounded-sm bg-white text-black outline-none focus:border-neutral-400" />
                         </div>
                         <div className="space-y-1">
-                            <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Event Ends (Departure)</label>
+                            <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Event Ends (Guest Departure)</label>
                             <input type="time" value={formData.eventEnd} onChange={e => setFormData({ ...formData, eventEnd: e.target.value })} className="w-full p-2 border border-gray-200 text-xs font-semibold rounded-sm bg-white text-black outline-none focus:border-neutral-400" />
                         </div>
                         <div className="space-y-1">
@@ -1113,8 +1113,8 @@ This room does not have private bathrooms. The closest toilets are down the hall
                                             className="w-full p-2 border border-gray-200 rounded-sm text-xs font-semibold bg-white text-black outline-none appearance-none cursor-pointer focus:border-neutral-400"
                                             style={{ backgroundImage: 'url("data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'16\' height=\'16\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'gray\' stroke-width=\'2\'><polyline points=\'6 9 12 15 18 9\'></polyline></svg>")', backgroundPosition: 'right 8px center', backgroundRepeat: 'no-repeat' }}
                                         >
-                                            <option>Workshop Style</option>
-                                            <option>Lecture Style</option>
+                                            <option>Workshop Style/Group Tables</option>
+                                            <option>Lecture/Theatre Style</option>
                                             <option>Clear Open Floor</option>
                                             <option>
                                                 No specific layout required (e.g. for a tour or walkthrough)
@@ -1126,7 +1126,7 @@ This room does not have private bathrooms. The closest toilets are down the hall
                                     <td className="p-2">
                                         <input
                                             type="text"
-                                            placeholder={row.layout === 'Other (Please explain in description)' ? "Explain your custom setup layout requirements..." : "Describe transitions..."}
+                                            placeholder={row.layout === 'Other (Please explain in description)' ? "Explain your custom setup layout requirements..." : "e.g. 10 tables setup for groups of 8..."}
                                             value={row.description}
                                             onChange={(e) => updateRunsheetRow(index, 'description', e.target.value)}
                                             className="w-full p-2 border border-gray-200 rounded-sm text-xs font-medium bg-white text-black outline-none focus:border-neutral-400"
@@ -1506,13 +1506,13 @@ This room does not have private bathrooms. The closest toilets are down the hall
                         </h1>
                         <div className="text-gray-600 text-sm leading-relaxed space-y-3">
                             <p>
-                                Thank you for your interest in booking one of the Michael Crouch Innovation Centre (MCIC) Event Spaces.
+                                Thank you for your interest in booking one of the Michael Crouch Innovation Centre (MCIC) Event Spaces located on the Ground Floor and Level 1 of the Kens HILMER E10 Building.
                             </p>
                             <p>
                                 Please explore our spaces below and complete the Booking Form to submit an Expression of Interest. A quote will be automatically calculated for you before final submission of your booking form.
                             </p>
                             <p>
-                                Internal Departments receive a significant discount to use our spaces while external hirers will pay full price. Discounts will be automatically applied when generating your quote.
+                                Internal Departments and Student Societies receive a significant discount to use our spaces while external hirers will pay full price. Discounts will be automatically applied when generating your quote.
                             </p>
                             <button
                                 type="button"
@@ -1625,7 +1625,7 @@ This room does not have private bathrooms. The closest toilets are down the hall
                             <div className="space-y-4">
                                 <div>
                                     <span className="text-[9px] font-black tracking-widest text-neutral-400 uppercase">
-                                        {showroomSpace.includes('Level 1') ? 'MCIC - Level 1' : 'MCIC - Ground Floor'}
+                                        {showroomSpace.includes('Level 1') ? 'MCIC - Level 1 - Room 124' : 'MCIC - Ground Floor'}
                                     </span>
                                     <h4 className="text-xl font-black tracking-tight text-black mt-0.5">
                                         {showroomSpace.replace('MCIC Ground - ', '').replace('MCIC Level 1 - ', '')}
@@ -1677,6 +1677,35 @@ This room does not have private bathrooms. The closest toilets are down the hall
                                             <strong>Alignment Discounts:</strong> MCIC event spaces are prioritised for initiatives aligned with innovation, entrepreneurship, and creative problem-solving across UNSW, so extra discounts can be applied when an event aligns.
                                         </li>
                                     </ul>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* 10. OPERATING HOURS & STAFFING FEES */}
+                        <div>
+                            <button
+                                type="button"
+                                onClick={() => toggleAccordion('hours')}
+                                className="w-full p-4 flex justify-between items-center text-xs font-bold uppercase tracking-wide text-neutral-800 bg-neutral-50/60 hover:bg-neutral-50 border-t border-neutral-100"
+                            >
+                                <span>Operating Hours & Staffing Fees</span>
+                                <span>{activeAccordion === 'hours' ? '−' : '+'}</span>
+                            </button>
+                            {activeAccordion === 'hours' && (
+                                <div className="p-6 bg-white text-xs space-y-4 animate-in slide-in-from-top-1 duration-150 text-gray-600 font-normal leading-relaxed">
+                                    <p>
+                                        The venue space is available for reservation 24/7; however, variable fees apply outside regular working hours:
+                                    </p>
+                                    <div className="space-y-3">
+                                        <p>
+                                            <strong className="text-neutral-900 block uppercase text-[10px] tracking-wide mb-0.5">Standard Office Hours (9:00am – 4:00pm)</strong>
+                                            No additional expenses automatically apply during these hours.
+                                        </p>
+                                        <p>
+                                            <strong className="text-neutral-900 block uppercase text-[10px] tracking-wide mb-0.5">Outside Office Hours (Before 9:00am or After 4:00pm)</strong>
+                                            Hiring a dedicated casual staff support member is required. This costs $50 per hour (3-hour minimum block).
+                                        </p>
+                                    </div>
                                 </div>
                             )}
                         </div>
@@ -1971,10 +2000,35 @@ This room does not have private bathrooms. The closest toilets are down the hall
                             {activeAccordion === 'setup' && (
                                 <div className="p-6 bg-white text-xs space-y-4 animate-in slide-in-from-top-1 duration-150 text-neutral-600 font-normal leading-relaxed">
                                     <p>
-                                        Please expect to set up the chairs, tables, and operational gear yourself. While we aim to assist or arrange layouts prior to your arrival, this is not always possible.
+                                        Please expect to set up the chairs, tables, and equipment yourself. While we aim to assist or arrange layouts prior to your arrival, this is not always possible.
                                     </p>
                                     <p>
-                                        A staff member will always unlock the space, show you how to use and find equipment, and lock the room at check-out. If you require support in the room for the entirely of your event you must hire casual through the booking form at a cost of $50 per hour.
+                                        A staff member will always unlock the space, show you how to use and find equipment, and lock the room at check-out. If you require support in the room for the entirely of your event you must hire casual through the booking form at a cost of $50 per hour (minimum 3 hours).
+                                    </p>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* WHAT HOURS SHOULD I BOOK THE SPACE */}
+                        <div>
+                            <button
+                                type="button"
+                                onClick={() => toggleAccordion('bookingHours')}
+                                className="w-full p-4 flex justify-between items-center text-xs font-bold uppercase tracking-wide text-neutral-800 bg-neutral-50/60 hover:bg-neutral-50 border-t border-neutral-100"
+                            >
+                                <span>What hours should I book the space for?</span>
+                                <span>{activeAccordion === 'bookingHours' ? '−' : '+'}</span>
+                            </button>
+                            {activeAccordion === 'bookingHours' && (
+                                <div className="p-6 bg-white text-xs space-y-4 animate-in slide-in-from-top-1 duration-150 text-neutral-600 font-normal leading-relaxed">
+                                    <p>
+                                        Please book the space for the entire period you require access—from the moment you need to enter for setup to the exact time you will depart after cleaning up and packing down  (not just the time your event runs).
+                                    </p>
+                                    <p>
+                                        You will <strong>not</strong> have access to the space before or after your confirmed booking window. Be sure to factor in sufficient time for setting up equipment, tables, and chairs prior to your event, as well as clearing away rubbish and tidying the room afterward. While we aim to assist or arrange layouts prior to your arrival, this is not always possible.
+                                    </p>
+                                    <p>
+                                        A staff member will always unlock the space, show you how to use and find equipment, and lock the room at check-out. If you require support in the room for the entirely of your event you must hire casual through the booking form at a cost of $50 per hour (minimum 3 hours).
                                     </p>
                                 </div>
                             )}
@@ -2037,6 +2091,36 @@ This room does not have private bathrooms. The closest toilets are down the hall
                             )}
                         </div>
 
+                        {/* WHEN ARE BOOKINGS OPEN / AVAILABILITY */}
+                        <div>
+                            <button
+                                type="button"
+                                onClick={() => toggleAccordion('availability')}
+                                className="w-full p-4 flex justify-between items-center text-xs font-bold uppercase tracking-wide text-neutral-800 bg-neutral-50/60 hover:bg-neutral-50 border-t border-neutral-100"
+                            >
+                                <span>When can I book the space / How far in advance?</span>
+                                <span>{activeAccordion === 'availability' ? '−' : '+'}</span>
+                            </button>
+                            {activeAccordion === 'availability' && (
+                                <div className="p-6 bg-white text-xs space-y-4 animate-in slide-in-from-top-1 duration-150 text-neutral-600 font-normal leading-relaxed">
+                                    <p>
+                                        Our spaces are subject to a standard booking lockout until closer to term start. This allows our internal UNSW Founders team to finalise program schedules and secure priority space allocations.
+                                    </p>
+                                    <p>
+                                        <strong>Lockout dates are as follows:</strong>
+                                        <ul>
+                                            <li>Term 1 2027 (8 Feb - 28 May): Bookings open from 20 November 2026</li>
+                                            <li>Term 2 2027 (24 April - 10 Sept): Bookings open from 23 April 2027</li>
+                                            <li>Term 3 2027 (6 Sept - 9 December): Bookings open from 6 August 2027</li>
+                                        </ul>
+                                    </p>
+                                    <p>
+                                        Because we receive high-volume booking requests from across the university, spaces are allocated on a <strong>first-come, first-served basis</strong>.
+                                    </p>
+                                </div>
+                            )}
+                        </div>
+
                         {/* 6. STORAGE PROTOCOLS */}
                         <div>
                             <button
@@ -2056,7 +2140,10 @@ This room does not have private bathrooms. The closest toilets are down the hall
                                         We simply do not have storage facilities to hold your items. The on-site kitchen cupboards and fridge are completely full and restricted to UNSW Founders Staff.
                                     </p>
                                     <p>
-                                        All items, banners, and food supplies must arrive with your team at check-in and be completely evacuated at checkout to ensure subsequent bookings can load in seamlessly.
+                                        All items, banners, and food supplies must arrive with your team at check-in and be completely evacuated at checkout to ensure subsequent bookings can load in seamlessly. Please ensure your caterer can collect all items within your booking window.
+                                    </p>
+                                    <p>
+                                        We can make exceptions on limited occasions, if you abslutely require storage please contact MCIC@unsw.edu.au as soon as possible.
                                     </p>
                                 </div>
                             )}
@@ -2099,7 +2186,7 @@ This room does not have private bathrooms. The closest toilets are down the hall
                             {activeAccordion === 'catering-hub' && (
                                 <div className="p-6 bg-white text-xs space-y-5 animate-in slide-in-from-top-1 duration-150 text-neutral-700 font-medium leading-relaxed">
                                     <div className="space-y-2 pl-2 border-l-2 border-neutral-200 text-neutral-600 font-normal">
-                                        <p><strong>Self-Service:</strong> BYO food, drink, and ice. Basic serviceware (plates, napkins, cups, serving utensils, and cutlery items). An urn, water dispenser, glasses, plates, mugs and ice buckets are available for an extra fee via the booking form.</p>
+                                        <p><strong>Self-Service:</strong> BYO food, drink, ice and serviceware (plates, napkins, cups, serving utensils, and cutlery items). An urn, water dispenser, glasses, plates, mugs and ice buckets are available for an extra fee via the booking form.</p>
                                         <p><strong>Any Caterer:</strong> No restrictions. You can bring any food or external catering you like.</p>
                                         <p><strong>No Storage:</strong> On-site fridge/cupboards are full. Everything must arrive and leave within your booking window. If you want to keep items cold, please supply your own ice and book the Ice Buckets.</p>
                                         <p><strong>Deliveries:</strong> We will not meet your delivery drivers to collect your order. You must direct and meet your own delivery drivers unless you have paid for casual venue staff (you must select this option in your booking form).</p>
@@ -2188,35 +2275,6 @@ This room does not have private bathrooms. The closest toilets are down the hall
                             )}
                         </div>
 
-                        {/* 10. OPERATING HOURS & STAFFING FEES */}
-                        <div>
-                            <button
-                                type="button"
-                                onClick={() => toggleAccordion('hours')}
-                                className="w-full p-4 flex justify-between items-center text-xs font-bold uppercase tracking-wide text-neutral-800 bg-neutral-50/60 hover:bg-neutral-50 border-t border-neutral-100"
-                            >
-                                <span>Operating Hours & Staffing Fees</span>
-                                <span>{activeAccordion === 'hours' ? '−' : '+'}</span>
-                            </button>
-                            {activeAccordion === 'hours' && (
-                                <div className="p-6 bg-white text-xs space-y-4 animate-in slide-in-from-top-1 duration-150 text-gray-600 font-normal leading-relaxed">
-                                    <p>
-                                        The venue space is available for reservation 24/7; however, variable fees apply outside regular working hours:
-                                    </p>
-                                    <div className="space-y-3">
-                                        <p>
-                                            <strong className="text-neutral-900 block uppercase text-[10px] tracking-wide mb-0.5">Standard Office Hours (9:00am – 4:00pm)</strong>
-                                            No additional expenses automatically apply during these hours.
-                                        </p>
-                                        <p>
-                                            <strong className="text-neutral-900 block uppercase text-[10px] tracking-wide mb-0.5">Outside Office Hours (Before 9:00am or After 4:00pm)</strong>
-                                            Hiring a dedicated casual staff support member is required. This costs $50 per hour (3-hour minimum block).
-                                        </p>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-
                         {/* 11. CANCELLATION & FEES */}
                         <div>
                             <button
@@ -2296,7 +2354,7 @@ This room does not have private bathrooms. The closest toilets are down the hall
                                         <ul className="list-disc pl-4 space-y-2 text-neutral-600">
                                             <li>Turn of AV displays.</li>
                                             <li>Put everything you took out back in its place. Flag items if you are unsure where they belong.</li>
-                                            <li>Wipe tables, benches, and whiteboards.</li>
+                                            <li>Use the cleaning supplies provided to wipe tables, benches, and whiteboards.</li>
                                             <li>Load used glasses or mugs straight into the dishwasher (if full, stack neatly inside the sink).</li>
                                             <li>Do not leave food debris in sink drains.</li>
                                             <li>Large boxes (e.g., pizza boxes) must go into the large bins in the Hallway by the back door of the MCIC Design Space.</li>
@@ -2362,7 +2420,7 @@ This room does not have private bathrooms. The closest toilets are down the hall
                                                 <span className="bg-[#EAD64D] text-black font-extrabold text-[9px] uppercase px-2 py-0.5 rounded-xs">For a Cost</span>
                                             </div>
                                             <p className="text-neutral-700 text-[11px]">
-                                                For larger campus venues, lecture theatres, outdoor spaces, and dedicated event support, explore options through <a href="https://www.venueandeventservices.unsw.edu.au/venues" target="_blank" rel="noopener noreferrer" className="underline font-bold text-black">UNSW Venue & Event Services ↗</a>.
+                                                For larger campus venues, lecture theatres, outdoor spaces, rooms in the Chancellery (Board Room, Meeting Rooms) etc. explore options through <a href="https://www.venueandeventservices.unsw.edu.au/venues" target="_blank" rel="noopener noreferrer" className="underline font-bold text-black">UNSW Venue & Event Services ↗</a>.
                                             </p>
                                         </div>
 
