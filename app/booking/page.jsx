@@ -179,6 +179,7 @@ export default function EventBookingForm() {
 
     const venueShowroom = {
         'MCIC Ground - Entire Space': {
+            roomNumber: 'Rooms G22 & G26',
             imgs: [
                 '/images/venues/full-space-1.JPG',
                 '/images/venues/full-space-2.JPG',
@@ -225,6 +226,7 @@ This room does not have private bathrooms. The closest toilets are down the hall
 • <strong>Fire Extinguishers:</strong> Located in XX. Please report any incidents or safety hazards immediately to the Venue Staff Member.`
         },
         'MCIC Ground - Event Space': {
+            roomNumber: 'Room G26',
             imgs: [
                 '/images/venues/event-space-1.JPG',
                 '/images/venues/event-space-2.JPG',
@@ -259,6 +261,7 @@ This room does not have private bathrooms. The closest toilets are down the hall
 • <strong>Fire Extinguishers:</strong> Located in XX. Please report any incidents or safety hazards immediately to the Venue Staff Member.`
         },
         'MCIC Ground - Design Space': {
+            roomNumber: 'Room G22',
             imgs: [
                 '/images/venues/event-space-1.JPG',
                 '/images/venues/event-space-2.JPG',
@@ -290,6 +293,7 @@ This room does not have private bathrooms. The closest toilets are down the hall
 • <strong>Fire Extinguishers:</strong> Located in the XX. Please report any incidents or safety hazards immediately to the Venue Staff Member.`
         },
         'MCIC Level 1 - Founders Place': {
+            roomNumber: 'Room 124',
             imgs: [
                 '/images/venues/founders-place-1.JPG',
                 '/images/venues/founders-place-2.JPG',
@@ -321,6 +325,7 @@ This room does not have private bathrooms. The closest toilets are down the hall
 <strong>Please note:</strong> This room is an open design (no doors). While the hallway it backs onto is very quiet as it only leads to a few labs that do not run large classes and only students with certain access on their swipe card can access, it may not be appropriate for highly confidential or sensitive team meetings.`
         },
         'MCIC Level 1 - Group Study': {
+            roomNumber: '', // No room number needed
             imgs: [
                 '/images/venues/group-study-2.JPG',
                 '/images/venues/group-study-1.JPG'
@@ -1625,7 +1630,11 @@ This room does not have private bathrooms. The closest toilets are down the hall
                             <div className="space-y-4">
                                 <div>
                                     <span className="text-[9px] font-black tracking-widest text-neutral-400 uppercase">
-                                        {showroomSpace.includes('Level 1') ? 'MCIC - Level 1 - Room 124' : 'MCIC - Ground Floor'}
+                                        {showroomSpace.includes('Entire Space') && 'MCIC - Ground Floor - Rooms G22 & G26'}
+                                        {showroomSpace.includes('Event Space') && 'MCIC - Ground Floor - Room G26'}
+                                        {showroomSpace.includes('Design Space') && 'MCIC - Ground Floor - Room G22'}
+                                        {showroomSpace.includes('Founders Place') && 'MCIC - Level 1 - Room 124'}
+                                        {showroomSpace.includes('Group Study') && 'MCIC - Level 1'}
                                     </span>
                                     <h4 className="text-xl font-black tracking-tight text-black mt-0.5">
                                         {showroomSpace.replace('MCIC Ground - ', '').replace('MCIC Level 1 - ', '')}
@@ -2435,6 +2444,28 @@ This room does not have private bathrooms. The closest toilets are down the hall
                                             </p>
                                         </div>
                                     </div>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* DO I NEED TO WRITE MY OWN RISK ASSESSMENT */}
+                        <div>
+                            <button
+                                type="button"
+                                onClick={() => toggleAccordion('riskAssessment')}
+                                className="w-full p-4 flex justify-between items-center text-xs font-bold uppercase tracking-wide text-neutral-800 bg-neutral-50/60 hover:bg-neutral-50 border-t border-neutral-100"
+                            >
+                                <span>Do I need to write my own risk assessment for an event in one of your spaces?</span>
+                                <span>{activeAccordion === 'riskAssessment' ? '−' : '+'}</span>
+                            </button>
+                            {activeAccordion === 'riskAssessment' && (
+                                <div className="p-6 bg-white text-xs space-y-4 animate-in slide-in-from-top-1 duration-150 text-neutral-600 font-normal leading-relaxed">
+                                    <p>
+                                        No, you do not need to create your own risk assessment for standard events hosted in our facilities.
+                                    </p>
+                                    <p>
+                                        We have an official UNSW risk assessment covering general events within the Michael Crouch Innovation Centre (MCIC) Event Spaces: <strong>Risk Assessment #1120290</strong>. If your event involves specialised equipment or high-risk activities beyond standard event operations, please notify our team prior to your booking.
+                                    </p>
                                 </div>
                             )}
                         </div>
