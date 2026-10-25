@@ -1933,43 +1933,10 @@ export default function CoworkingPage() {
                                                             <div className="flex items-center gap-1.5 text-neutral-900 font-bold uppercase tracking-tight text-[10px]">
                                                                 <span>✉️</span> Standard Mail
                                                             </div>
-                                                            <p className="text-neutral-600">
-                                                                Standard mail will be delivered to <strong>Locker 118</strong> located in the corridor on the Ground Floor outside the MCIC.
-                                                            </p>
-                                                            <div className="p-4 bg-neutral-50 border border-neutral-200 rounded-xs space-y-3">
-
-                                                                {!isUnlocked ? (
-                                                                    <form onSubmit={handleUnlockLockerCode} className="space-y-2 pt-1">
-                                                                        <label className="text-[11px] font-medium text-neutral-600 block">
-                                                                            Enter your zID to view the locker code:
-                                                                        </label>
-                                                                        <div className="flex gap-2">
-                                                                            <input
-                                                                                type="text"
-                                                                                required
-                                                                                placeholder="e.g. z5555555"
-                                                                                value={userZid}
-                                                                                onChange={(e) => setUserZid(e.target.value)}
-                                                                                className="p-2 border border-neutral-300 bg-white text-xs font-mono rounded-xs outline-none focus:border-black text-black flex-1"
-                                                                            />
-                                                                            <button
-                                                                                type="submit"
-                                                                                className="bg-black text-[#EAD64D] font-extrabold px-3 py-2 text-xs uppercase tracking-wider rounded-xs hover:bg-[#EAD64D] hover:text-black transition-colors cursor-pointer shrink-0"
-                                                                            >
-                                                                                Reveal Code
-                                                                            </button>
-                                                                        </div>
-                                                                    </form>
-                                                                ) : (
-                                                                    <div className="p-3 bg-white border border-emerald-300 rounded-xs space-y-1 animate-in fade-in duration-150">
-                                                                        <span className="text-[10px] font-bold text-emerald-800 uppercase block">
-                                                                            ✓ Authenticated ({userZid})
-                                                                        </span>
-                                                                        <p className="text-neutral-700 text-xs">
-                                                                            Combination Lock Code: <strong className="font-mono text-black bg-neutral-100 px-2 py-0.5 border border-neutral-200 rounded-xs text-sm">3010</strong>
-                                                                        </p>
-                                                                    </div>
-                                                                )}
+                                                            <div>
+                                                                <p className="text-neutral-600">
+                                                                    Standard mail will be delivered to <strong>Locker 118</strong> located in the corridor on the Ground Floor outside the MCIC. There is no lock on this locker so anyone can open it.
+                                                                </p>
                                                             </div>
                                                         </div>
                                                         <div className="p-2.5 bg-amber-50/60 border border-amber-200 rounded-xs text-[11px] text-amber-900 font-medium">

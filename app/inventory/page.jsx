@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from 'react';
+import Link from 'next/link';
 import { db } from '../lib/firebase';
 import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
 
@@ -45,18 +46,42 @@ export default function InventoryPage() {
                 <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                     <div className="space-y-1">
                         <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight text-black">
-                            Inventory</h1>
+                            Inventory Hub
+                        </h1>
                         <p className="text-gray-600 text-xs sm:text-sm">Search, Check-Out, Book and Report Broken Items.</p>
                     </div>
+
                     <div>
-                        <a
+                        <Link
                             href="/inventory/add"
                             className="inline-block bg-black text-white hover:bg-[#EAD64D] hover:text-black transition-colors px-4 py-2.5 rounded-sm font-bold text-xs uppercase tracking-wider"
                         >
                             + Add New Item
-                        </a>
+                        </Link>
                     </div>
                 </header>
+
+                {/* SUB-NAVIGATION TAB BAR */}
+                <div className="flex items-center gap-2 border-b border-gray-200 pb-2 overflow-x-auto text-xs font-bold uppercase tracking-wider">
+                    <Link
+                        href="/inventory"
+                        className="px-3.5 py-2 bg-black text-white rounded-sm shrink-0"
+                    >
+                        🗄️ General Inventory
+                    </Link>
+                    <Link
+                        href="/lockers"
+                        className="px-3.5 py-2 text-gray-600 hover:text-black hover:bg-gray-100 rounded-sm transition-colors shrink-0"
+                    >
+                        🔒 Lockers
+                    </Link>
+                    <Link
+                        href="/kitchen"
+                        className="px-3.5 py-2 text-gray-600 hover:text-black hover:bg-gray-100 rounded-sm transition-colors shrink-0"
+                    >
+                        🍽️ Kitchens
+                    </Link>
+                </div>
 
                 {/* SEARCH BAR */}
                 <div className="bg-white p-4 border border-gray-200 rounded-sm shadow-xs">
@@ -84,7 +109,6 @@ export default function InventoryPage() {
                             return (
                                 <div key={item.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-5 hover:bg-neutral-50/50 transition-colors gap-4">
                                     <div className="flex items-center gap-4">
-                                        {/* THUMBNAIL PHOTO DISPLAY */}
                                         <div className="w-16 h-16 bg-neutral-100 border border-gray-200 rounded-sm shrink-0 overflow-hidden flex items-center justify-center">
                                             {item.image ? (
                                                 <img
@@ -97,11 +121,9 @@ export default function InventoryPage() {
                                             )}
                                         </div>
 
-                                        {/* ITEM DETAILS */}
                                         <div className="space-y-1">
                                             <div>
-                                                <span className={`font-mono text-[10px] font-bold uppercase px-2.5 py-0.5 rounded-sm border ${isAvailable ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'
-                                                    }`}>
+                                                <span className={`font-mono text-[10px] font-bold uppercase px-2.5 py-0.5 rounded-sm border ${isAvailable ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
                                                     {isAvailable ? 'Available' : `Borrowed by ${item.user || '-'}`}
                                                 </span>
                                             </div>
@@ -112,12 +134,10 @@ export default function InventoryPage() {
                                         </div>
                                     </div>
 
-                                    {/* ACTION LINK */}
                                     <div className="sm:w-auto w-full shrink-0 pt-2 sm:pt-0">
                                         <a
                                             href={`/borrow/${item.id.toLowerCase()}`}
-                                            className={`inline-block text-center w-full sm:w-auto px-5 py-2.5 text-[10px] font-bold uppercase tracking-wider rounded-sm transition-colors ${isAvailable ? 'bg-black text-white hover:bg-[#EAD64D] hover:text-black' : 'bg-neutral-900 text-white hover:bg-red-600'
-                                                }`}
+                                            className={`inline-block text-center w-full sm:w-auto px-5 py-2.5 text-[10px] font-bold uppercase tracking-wider rounded-sm transition-colors ${isAvailable ? 'bg-black text-white hover:bg-[#EAD64D] hover:text-black' : 'bg-neutral-900 text-white hover:bg-red-600'}`}
                                         >
                                             {isAvailable ? 'Select Item ↗' : 'Return Item ↩'}
                                         </a>
