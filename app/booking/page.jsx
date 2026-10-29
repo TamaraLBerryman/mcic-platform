@@ -81,7 +81,16 @@ const ROOM_INCLUSIONS = {
     'MCIC Level 1 - Group Study': [
         'Open Co-working Setup',
         'Shared Kitchenette Access'
+    ],
+
+    'MCIC Ground - Colonnade': [
+        'Covered Outdoor Walkway outside MCIC Event & Design Spaces',
+    ],
+
+    'MCIC Ground - AI Makerspace': [
+        'Our AI Makerspace is a space to test and refine AI technologies. It includes workstations and a supercomputer for AI research and development.',
     ]
+
 };
 
 // MOCK EXTERNAL BOOKINGS FOR THE SELECTED TIME SLOT
@@ -105,7 +114,14 @@ export default function EventBookingForm() {
     const [conductError, setConductError] = useState(false);
     const [selectedSlots, setSelectedSlots] = useState([]);
     const [calendarValidationError, setCalendarValidationError] = useState(false);
-
+    const [layoutMode, setLayoutMode] = useState('workshop'); // 'tour' | 'delegation' | 'workshop' | 'lecture'
+    // Add this near the top of EventBookingForm (below state variables)
+    const isSlotBlockedByCalendar = (roomName, timeSlot) => {
+        const roomBusyRanges = liveBusySlots[roomName] || [];
+        return roomBusyRanges.some(range => {
+            return timeSlot >= range.start && timeSlot < range.end;
+        });
+    };
     // ACCORDION REFERENCE STATES
     const [activeAccordion, setActiveAccordion] = useState(null);
     const [copiedWifi, setCopiedWifi] = useState(false);
@@ -113,6 +129,9 @@ export default function EventBookingForm() {
     const [runsheetRows, setRunsheetRows] = useState([
         { time: '', layout: 'Workshop Style', description: 'e.g. Access Venue & bump-in/setup' }
     ]);
+
+    const [liveBusySlots, setLiveBusySlots] = useState({});
+    const [isLoadingAvailability, setIsLoadingAvailability] = useState(false);
 
     const [formData, setFormData] = useState({
         bookingIntent: "",
@@ -129,6 +148,7 @@ export default function EventBookingForm() {
         runsheetObjectives: '',
         postToPublicDirectory: false,
         useRegistrationPortal: false,
+        hasOwnRegistrationPortal: false,
         sameAsMain: false,
         mainContact: { name: '', email: '', phone: '' },
         onDayContact: { name: '', email: '', phone: '' },
@@ -137,6 +157,19 @@ export default function EventBookingForm() {
         eventStart: '',
         eventEnd: '',
         bumpOut: '',
+
+        // NEW GENERAL HIRER QUESTIONS
+        isInnovationOrEntrepreneurship: null, // "Yes" | "No"
+        wantsCasualStaff: null,              // "Yes" | "No"
+        needsJudgeHelp: null,                 // "Yes" | "No"
+
+        // NEW FOUNDERS STAFF INTERNAL QUESTIONS
+        tamaraPresence: 'Not at all', // 'Whole event' | 'Setup' | 'Formalities' | 'Not at all'
+        needsFoundersCasualStaff: 'No', // 'Yes' | 'No'
+        casualStaffDetails: [
+            { preferredStaff: '', shiftStart: '', shiftEnd: '', tasks: '' }
+        ],
+
         av: {
             textMics: 0,
             handheldMics: 0,
@@ -167,6 +200,11 @@ export default function EventBookingForm() {
         alcohol: null
     });
 
+    const CASUAL_STAFF_LIST = [
+        "Ivara", "Henry", "Wonyoung", "Hanisha", "Hudson", "Harry", "Luka",
+        "Julian", "Reuben", "William", "Sarah", "Julie", "Aryan", "Shetal",
+        "Thomas", "Alex", "Sam", "Victoria", "Rita", "Chiragm", "Lucas", "Armin", "Nicole"
+    ];
     const [quote, setQuote] = useState({ base: 0, staff: 0, total: 0 });
     const [hasSubmitted, setHasSubmitted] = useState(false);
 
@@ -353,6 +391,25 @@ This room does not have private bathrooms. The closest toilets are down the hall
 • <strong>Fire Extinguishers:</strong> Located XX. Please report any incidents or safety hazards immediately to the Venue Staff Member.<br /><br />
 <strong>Please note:</strong> This room has no walls or doors. When not booked, it is used as a co-working space for Founders and a study space for Materials Science students.`
         },
+
+        'MCIC Ground - Colonnade': {
+            roomNumber: 'Ground Floor Outdoor Colonnade',
+            imgs: [
+                '/images/venues/colonnade-1.JPG',
+                '/images/venues/colonnade-2.JPG'
+            ],
+            description: `The covered outdoor Colonnade running along the Ground Floor of the Hilmer Building. Ideal for outdoor registration, pop-up exhibitions or catering setups. Can be booked alongside MCIC Event or Design Space bookings<br /><br />`
+        },
+        'MCIC Ground - AI Makerspace - COMING SOON': {
+            roomNumber: 'Room G17',
+            imgs: [
+                '/images/venues/AI-1.JPG',
+                '/images/venues/AI-2.JPG'
+            ],
+            description: `Our AI Makerspace is a place to test and refine AI technologies. It includes workstations and a supercomputer for AI research and development.
+<br /><br />`
+        }
+
     };
 
     const [selectedCalendarDate, setSelectedCalendarDate] = useState(new Date());
@@ -702,6 +759,115 @@ This room does not have private bathrooms. The closest toilets are down the hall
         );
     };
 
+    const renderEventDetailsSection = () => {
+        return (
+            <section key="event-details-block" className="bg-white p-8 border border-gray-200 rounded-sm shadow-sm space-y-6">
+                <h3 className="text-lg font-extrabold tracking-tight uppercase text-black border-b border-neutral-100 pb-2">Event Details</h3>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div className="md:col-span-2 space-y-2">
+                        <label className="text-xs font-bold uppercase tracking-wider text-gray-500 block">Event Name</label>
+                        <input type="text" value={formData.eventName} onChange={(e) => setFormData(prev => ({ ...prev, eventName: e.target.value }))} placeholder="e.g. HDR Pitching Workshop" className="w-full p-3 border border-gray-200 bg-white text-sm font-medium rounded-sm text-black outline-none" />
+                    </div>
+                    <div className="space-y-2">
+                        <label className="text-xs font-bold uppercase tracking-wider text-gray-500 block">Expected Attendees</label>
+                        <input
+                            type="number"
+                            min="0"
+                            placeholder="0"
+                            value={formData.attendees || ''}
+                            onChange={(e) => setFormData(prev => ({ ...prev, attendees: parseInt(e.target.value) || 0 }))}
+                            className="w-full p-3 border border-gray-200 bg-white text-sm text-black font-medium rounded-sm outline-none"
+                        />
+                    </div>
+                </div>
+
+                {!isCalendarOption(formData.bookingIntent) && formData.attendees > 0 && (
+                    <div className="p-4 bg-neutral-900 text-white rounded-sm border border-neutral-800 space-y-1">
+                        <span className="text-[9px] font-black tracking-widest text-white uppercase block">Suggested Target Allocation</span>
+                        <h4 className="text-xs font-bold">Recommended: {localActiveSuggestedContext.name}</h4>
+                        <p className="text-[11px] text-neutral-400 font-normal leading-normal">{localActiveSuggestedContext.note}</p>
+                    </div>
+                )}
+
+                <div className="p-5 bg-neutral-50 border border-gray-200 rounded-sm space-y-4">
+                    <label className="text-[11px] font-black uppercase tracking-wider text-gray-500 block">Booking times (Please book 30 minutes to 1 hour for bump-in and bump-out)</label>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Bump-In Time (Access)</label>
+                            <input type="time" value={formData.bumpIn} onChange={e => setFormData({ ...formData, bumpIn: e.target.value })} className="w-full p-2 border border-gray-200 text-xs font-semibold rounded-sm bg-white text-black outline-none focus:border-neutral-400" />
+                        </div>
+                        <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Event Starts (Guest Arrival)</label>
+                            <input type="time" value={formData.eventStart} onChange={e => setFormData({ ...formData, eventStart: e.target.value })} className="w-full p-2 border border-gray-200 text-xs font-semibold rounded-sm bg-white text-black outline-none focus:border-neutral-400" />
+                        </div>
+                        <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Event Ends (Guest Departure)</label>
+                            <input type="time" value={formData.eventEnd} onChange={e => setFormData({ ...formData, eventEnd: e.target.value })} className="w-full p-2 border border-gray-200 text-xs font-semibold rounded-sm bg-white text-black outline-none focus:border-neutral-400" />
+                        </div>
+                        <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Bump-Out (Lock-up)</label>
+                            <input type="time" value={formData.bumpOut} onChange={e => setFormData({ ...formData, bumpOut: e.target.value })} className="w-full p-2 border border-gray-200 text-xs font-semibold rounded-sm bg-white text-black outline-none focus:border-neutral-400" />
+                        </div>
+                    </div>
+                </div>
+
+                <div className="space-y-2 pt-2">
+                    <label className="text-xs font-bold uppercase tracking-wider text-gray-500 block">Event Description</label>
+                    <textarea
+                        placeholder="Outline event focus..."
+                        className="w-full p-4 border border-gray-200 bg-white text-sm text-black font-medium rounded-sm h-28 resize-none outline-none"
+                        value={formData.eventDescription} onChange={(e) => setFormData(prev => ({ ...prev, eventDescription: e.target.value }))}
+                    />
+                </div>
+
+                {departmentType === 'UNSW Founders' && (
+                    <div className="pt-4 border-t border-gray-100 mt-2 space-y-3 animate-in fade-in duration-200">
+                        <label className="text-xs font-bold uppercase tracking-wider text-gray-500 block">Select an option below to quick-fill this form</label>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                            <button
+                                key="btn-tour"
+                                type="button"
+                                onClick={() => applyEventTemplate('tour')}
+                                className="p-3 text-left border border-neutral-200 rounded-sm hover:border-black hover:bg-neutral-50/50 transition-all flex flex-col justify-between bg-neutral-50/30 cursor-pointer"
+                            >
+                                <span className="text-xs font-bold text-black block">Tour</span>
+                                <span className="text-[10px] text-gray-500 font-normal mt-1">No specific layout</span>
+                            </button>
+                            <button
+                                key="btn-delegation"
+                                type="button"
+                                onClick={() => applyEventTemplate('delegation')}
+                                className="p-3 text-left border border-neutral-200 rounded-sm hover:border-black hover:bg-neutral-50/50 transition-all flex flex-col justify-between bg-neutral-50/30 cursor-pointer"
+                            >
+                                <span className="text-xs font-bold text-black block">Delegation Visit</span>
+                                <span className="text-[10px] text-gray-500 font-normal mt-1">Boardroom setup & tea/coffee on arrival</span>
+                            </button>
+                            <button
+                                key="btn-workshop"
+                                type="button"
+                                onClick={() => applyEventTemplate('workshop')}
+                                className="p-3 text-left border border-neutral-200 rounded-sm hover:border-black hover:bg-neutral-50/50 transition-all flex flex-col justify-between bg-neutral-50/30 cursor-pointer"
+                            >
+                                <span className="text-xs font-bold text-black block">Standard Workshop</span>
+                                <span className="text-[10px] text-gray-500 font-normal mt-1">Workshop layout</span>
+                            </button>
+                            <button
+                                key="btn-lecture"
+                                type="button"
+                                onClick={() => applyEventTemplate('lecture')}
+                                className="p-3 text-left border border-neutral-200 rounded-sm hover:border-black hover:bg-neutral-50/50 transition-all flex flex-col justify-between bg-neutral-50/30 cursor-pointer"
+                            >
+                                <span className="text-xs font-bold text-black block">Lecture/Networking Event</span>
+                                <span className="text-[10px] text-gray-500 font-normal mt-1">Theatre layout, networking etc.</span>
+                            </button>
+                        </div>
+                    </div>
+                )}
+            </section>
+        );
+    };
+
     // Sub-sections
     const renderAffiliationSection = () => (
         <section key="affiliation-block" className="bg-white p-8 border border-gray-200 rounded-sm shadow-sm space-y-6">
@@ -803,281 +969,6 @@ This room does not have private bathrooms. The closest toilets are down the hall
     );
 
 
-    const renderEventDetailsSection = () => {
-        // Local state initialization to track the active furniture visual presentation mode
-        const [layoutMode, setLayoutMode] = useState('workshop'); // 'tour' | 'workshop' | 'lecture'
-
-        // Handler to programmatically load standard event template configurations without overwriting times
-        const applyEventTemplate = (type) => {
-            setLayoutMode(type);
-            if (type === 'tour') {
-                setFormData(prev => ({
-                    ...prev,
-                    isTourOnly: true,
-                    eventDescription: "Facility walkthrough and tour overview look at the space tools."
-                }));
-                setRunsheetRows([
-                    { time: '', layout: 'Clear Open Floor', description: 'Cohort facility walkthrough and site overview.' }
-                ]);
-            } else if (type === 'workshop') {
-                setFormData(prev => ({
-                    ...prev,
-                    isTourOnly: false,
-                    eventDescription: "Standard collaborative day workshop containing split breakout groups."
-                }));
-                setRunsheetRows([
-                    { time: '', layout: 'Workshop Style', description: 'Facilitator access & bump-in setup' },
-                    { time: '', layout: 'Workshop Style', description: 'Morning session track & interactive challenge' },
-                    { time: '', layout: 'Workshop Style', description: 'Lunch break period' },
-                    { time: '', layout: 'Workshop Style', description: 'Afternoon retrospective group share' },
-                    { time: '', layout: 'Workshop Style', description: 'Bump-out packdown and floor reset' }
-                ]);
-            } else if (type === 'lecture') {
-                setFormData(prev => ({
-                    ...prev,
-                    isTourOnly: false,
-                    eventDescription: "Evening panel discussion sequence with networking drinks component."
-                }));
-                setRunsheetRows([
-                    { time: '', layout: 'Lecture Style', description: 'AV Sound check and panel check-in' },
-                    { time: '', layout: 'Lecture Style', description: 'Keynote speakers and Q&A sequence' },
-                    { time: '', layout: 'Clear Open Floor', description: 'Networking beverages & catering access' },
-                    { time: '', layout: 'Lecture Style', description: 'Lock-up and final venue exit bump-out' }
-                ]);
-            }
-        };
-
-        // Helper to determine active highlighting style classes for the interactive floorplan vector grid
-        const getMapHighlightClasses = (targetSpace) => {
-            const currentSpace = formData.space;
-            if (currentSpace === 'MCIC Ground - Entire Space' && (targetSpace === 'Event Space' || targetSpace === 'Design Space')) {
-                return "fill-neutral-900 stroke-black text-white font-black opacity-100 transition-all duration-300";
-            }
-            if (currentSpace.includes(targetSpace)) {
-                return "fill-neutral-900 stroke-black text-white font-black opacity-100 transition-all duration-300";
-            }
-            return "fill-neutral-50 stroke-neutral-200 text-neutral-400 hover:fill-neutral-100/70 hover:stroke-neutral-350 cursor-pointer transition-all duration-200";
-        };
-
-        // Generates the furniture layouts based on active room selection and preset layout target modes
-        const getFloorplanConfig = () => {
-            const space = formData.space;
-
-            if (layoutMode === 'tour') {
-                return {
-                    title: "Clear Floor Layout (Tour Mode)",
-                    furniture: null
-                };
-            }
-
-            if (layoutMode === 'lecture') {
-                const showDesign = space === 'MCIC Ground - Design Space' || space === 'MCIC Ground - Entire Space';
-                const showEvent = space === 'MCIC Ground - Event Space' || space === 'MCIC Ground - Entire Space';
-
-                return {
-                    title: "Evening Lecture / Networking Config (~120 Seats Total)",
-                    furniture: (
-                        <g opacity="0.9" className="animate-in fade-in duration-300">
-                            {/* 60 Seats in Event Space plus Front Stage setup */}
-                            {showEvent && (
-                                <g fill={space === 'MCIC Ground - Event Space' ? '#FFF' : '#A3A3A3'} stroke={space === 'MCIC Ground - Event Space' ? '#000' : '#525252'} strokeWidth="0.5" opacity={space === 'MCIC Ground - Design Space' ? 0.35 : 1}>
-                                    {/* Stage Platform */}
-                                    <rect x="365" y="60" width="45" height="50" rx="1" fill="#404040" stroke="#171717" />
-                                    <text x="387" y="89" textAnchor="middle" fill="#FFF" className="text-[7px] uppercase font-bold tracking-tight">Stage</text>
-
-                                    {/* 6 Columns x 10 Rows Matrix mapping 60 Lecture chairs */}
-                                    {Array.from({ length: 6 }).map((_, col) =>
-                                        Array.from({ length: 10 }).map((_, row) => {
-                                            const cx = 210 + (col * 24);
-                                            const cy = 20 + (row * 13);
-                                            if (cx >= 360 && cy >= 55 && cy <= 115) return null;
-                                            return <rect key={`l-ev-${col}-${row}`} x={cx} y={cy} width="6" height="6" rx="0.5" />;
-                                        })
-                                    )}
-                                </g>
-                            )}
-
-                            {/* Seating Overflow up to 120 + Long Catering Tables in Design Space */}
-                            {showDesign && (
-                                <g opacity={space === 'MCIC Ground - Event Space' ? 0.35 : 1}>
-                                    {/* Overflow seating blocks */}
-                                    <g fill={space === 'MCIC Ground - Design Space' ? '#FFF' : '#A3A3A3'} stroke={space === 'MCIC Ground - Design Space' ? '#000' : '#525252'} strokeWidth="0.5">
-                                        {Array.from({ length: 4 }).map((_, col) =>
-                                            Array.from({ length: 10 }).map((_, row) => (
-                                                <rect key={`l-ds-${col}-${row}`} x={100 + (col * 22)} y={20 + (row * 13)} width="6" height="6" rx="0.5" />
-                                            ))
-                                        )}
-                                    </g>
-
-                                    {/* Long Catering Tables */}
-                                    <g fill="#D4D4D4" stroke="#404040" strokeWidth="1">
-                                        {/* Table in the middle of Design Space room */}
-                                        <rect x="65" y="50" width="14" height="45" rx="1" />
-                                        <text x="72" y="73" textAnchor="middle" fill="#171717" className="text-[5px] font-bold uppercase tracking-tight transform rotate-90 origin-center">Catering Table</text>
-
-                                        {/* Table fixed at back wall boundary */}
-                                        <rect x="22" y="30" width="14" height="60" rx="1" />
-                                        <text x="29" y="60" textAnchor="middle" fill="#171717" className="text-[5px] font-bold uppercase tracking-tight transform rotate-90 origin-center">Back Buffet Table</text>
-                                    </g>
-                                </g>
-                            )}
-                        </g>
-                    )
-                };
-            }
-
-            // Default to Collaborative Day Workshop Layout mode configurations (Tables with 8 chairs surrounding)
-            const showDesign = space === 'MCIC Ground - Design Space' || space === 'MCIC Ground - Entire Space';
-            const showEvent = space === 'MCIC Ground - Event Space' || space === 'MCIC Ground - Entire Space';
-
-            return {
-                title: "Standard Workshop Layout (8 Chairs Per Team Table Pod)",
-                furniture: (
-                    <g opacity="0.9" className="animate-in fade-in duration-300">
-                        {/* Sub-renderer utility layout to place a team table pod block mapping layout */}
-                        {(() => {
-                            const makePod = (x, y, label, isActiveZone) => (
-                                <g key={label} fill={isActiveZone ? '#FFF' : '#A3A3A3'} stroke={isActiveZone ? '#000' : '#525252'}>
-                                    <rect x={x} y={y} width="32" height="18" rx="1" fill="#E5E5E5" stroke="#737373" strokeWidth="1" />
-                                    <text x={x + 16} y={y + 11} textAnchor="middle" fill="#171717" className="text-[6px] font-bold tracking-tighter">{label}</text>
-                                    {/* 8 surrounding chairs */}
-                                    <rect x={x + 3} y={y - 5} width="5" height="4" rx="0.5" />
-                                    <rect x={x + 13} y={y - 5} width="5" height="4" rx="0.5" />
-                                    <rect x={x + 23} y={y - 5} width="5" height="4" rx="0.5" />
-                                    <rect x={x + 3} y={y + 19} width="5" height="4" rx="0.5" />
-                                    <rect x={x + 13} y={y + 19} width="5" height="4" rx="0.5" />
-                                    <rect x={x + 23} y={y + 19} width="5" height="4" rx="0.5" />
-                                    <rect x={x - 6} y={y + 7} width="4" height="5" rx="0.5" />
-                                    <rect x={x + 34} y={y + 7} width="4" height="5" rx="0.5" />
-                                </g>
-                            );
-
-                            return (
-                                <>
-                                    {showDesign && (
-                                        <g opacity={space === 'MCIC Ground - Event Space' ? 0.35 : 1}>
-                                            {makePod(35, 30, "POD A", space !== 'MCIC Ground - Event Space')}
-                                            {makePod(105, 30, "POD B", space !== 'MCIC Ground - Event Space')}
-                                            {makePod(35, 110, "POD C", space !== 'MCIC Ground - Event Space')}
-                                            {makePod(105, 110, "POD D", space !== 'MCIC Ground - Event Space')}
-                                        </g>
-                                    )}
-                                    {showEvent && (
-                                        <g opacity={space === 'MCIC Ground - Design Space' ? 0.35 : 1}>
-                                            {makePod(220, 30, "POD E", space !== 'MCIC Ground - Design Space')}
-                                            {makePod(290, 30, "POD F", space !== 'MCIC Ground - Design Space')}
-                                            {makePod(220, 110, "POD G", space !== 'MCIC Ground - Design Space')}
-                                            {makePod(290, 110, "POD H", space !== 'MCIC Ground - Design Space')}
-                                        </g>
-                                    )}
-                                </>
-                            );
-                        })()}
-                    </g>
-                )
-            };
-        };
-
-        const activeFloorplan = getFloorplanConfig();
-
-        return (
-            <section key="event-details-block" className="bg-white p-8 border border-gray-200 rounded-sm shadow-sm space-y-6">
-                <h3 className="text-lg font-extrabold tracking-tight uppercase text-black border-b border-neutral-100 pb-2">Event Details</h3>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div className="md:col-span-2 space-y-2">
-                        <label className="text-xs font-bold uppercase tracking-wider text-gray-500 block">Event Name</label>
-                        <input type="text" value={formData.eventName} onChange={(e) => setFormData(prev => ({ ...prev, eventName: e.target.value }))} placeholder="e.g. HDR Pitching Workshop" className="w-full p-3 border border-gray-200 bg-white text-sm font-medium rounded-sm text-black outline-none" />
-                    </div>
-                    <div className="space-y-2">
-                        <label className="text-xs font-bold uppercase tracking-wider text-gray-500 block">Expected Attendees</label>
-                        <input
-                            type="number"
-                            min="0"
-                            placeholder="0"
-                            value={formData.attendees || ''}
-                            onChange={(e) => setFormData(prev => ({ ...prev, attendees: parseInt(e.target.value) || 0 }))}
-                            className="w-full p-3 border border-gray-200 bg-white text-sm text-black font-medium rounded-sm outline-none"
-                        />
-                    </div>
-                </div>
-
-                {!isCalendarOption(formData.bookingIntent) && formData.attendees > 0 && (
-                    <div className="p-4 bg-neutral-900 text-white rounded-sm border border-neutral-800 space-y-1">
-                        <span className="text-[9px] font-black tracking-widest text-white uppercase block">Suggested Target Allocation</span>
-                        <h4 className="text-xs font-bold">Recommended: {localActiveSuggestedContext.name}</h4>
-                        <p className="text-[11px] text-neutral-400 font-normal leading-normal">{localActiveSuggestedContext.note}</p>
-                    </div>
-                )}
-
-                <div className="p-5 bg-neutral-50 border border-gray-200 rounded-sm space-y-4">
-                    <label className="text-[11px] font-black uppercase tracking-wider text-gray-500 block">Booking times</label>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <div className="space-y-1">
-                            <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Bump-In Time (Access)</label>
-                            <input type="time" value={formData.bumpIn} onChange={e => setFormData({ ...formData, bumpIn: e.target.value })} className="w-full p-2 border border-gray-200 text-xs font-semibold rounded-sm bg-white text-black outline-none focus:border-neutral-400" />
-                        </div>
-                        <div className="space-y-1">
-                            <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Event Starts (Guest Arrival)</label>
-                            <input type="time" value={formData.eventStart} onChange={e => setFormData({ ...formData, eventStart: e.target.value })} className="w-full p-2 border border-gray-200 text-xs font-semibold rounded-sm bg-white text-black outline-none focus:border-neutral-400" />
-                        </div>
-                        <div className="space-y-1">
-                            <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Event Ends (Guest Departure)</label>
-                            <input type="time" value={formData.eventEnd} onChange={e => setFormData({ ...formData, eventEnd: e.target.value })} className="w-full p-2 border border-gray-200 text-xs font-semibold rounded-sm bg-white text-black outline-none focus:border-neutral-400" />
-                        </div>
-                        <div className="space-y-1">
-                            <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Bump-Out (Lock-up)</label>
-                            <input type="time" value={formData.bumpOut} onChange={e => setFormData({ ...formData, bumpOut: e.target.value })} className="w-full p-2 border border-gray-200 text-xs font-semibold rounded-sm bg-white text-black outline-none focus:border-neutral-400" />
-                        </div>
-                    </div>
-                </div>
-
-                <div className="space-y-2 pt-2">
-                    <label className="text-xs font-bold uppercase tracking-wider text-gray-500 block">Event Description</label>
-                    <textarea
-                        placeholder="Outline event focus..."
-                        className="w-full p-4 border border-gray-200 bg-white text-sm text-black font-medium rounded-sm h-28 resize-none outline-none"
-                        value={formData.eventDescription} onChange={(e) => setFormData(prev => ({ ...prev, eventDescription: e.target.value }))}
-                    />
-                </div>
-
-                {departmentType === 'UNSW Founders' && (
-                    <div className="pt-4 border-t border-gray-100 mt-2 space-y-3 animate-in fade-in duration-200">
-                        <label className="text-xs font-bold uppercase tracking-wider text-gray-500 block">Tour & Format Specifics</label>
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                            <button
-                                key="btn-tour"
-                                type="button"
-                                onClick={() => applyEventTemplate('tour')}
-                                className="p-3 text-left border border-neutral-200 rounded-sm hover:border-black hover:bg-neutral-50/50 transition-all flex flex-col justify-between bg-neutral-50/30"
-                            >
-                                <span className="text-xs font-bold text-black block">Is This Simply A Tour?</span>
-                                <span className="text-[10px] text-gray-500 font-normal mt-1">Populates clear open floor layout schedule details</span>
-                            </button>
-                            <button
-                                key="btn-workshop"
-                                type="button"
-                                onClick={() => applyEventTemplate('workshop')}
-                                className="p-3 text-left border border-neutral-200 rounded-sm hover:border-black hover:bg-neutral-50/50 transition-all flex flex-col justify-between bg-neutral-50/30"
-                            >
-                                <span className="text-xs font-bold text-black block">Standard Workshop</span>
-                                <span className="text-[10px] text-gray-500 font-normal mt-1">Populates full sequential breakdown parameters</span>
-                            </button>
-                            <button
-                                key="btn-lecture"
-                                type="button"
-                                onClick={() => applyEventTemplate('lecture')}
-                                className="p-3 text-left border border-neutral-200 rounded-sm hover:border-black hover:bg-neutral-50/50 transition-all flex flex-col justify-between bg-neutral-50/30"
-                            >
-                                <span className="text-xs font-bold text-black block">Evening Lecture Event</span>
-                                <span className="text-[10px] text-gray-500 font-normal mt-1">Populates panel timeline and layout structures</span>
-                            </button>
-                        </div>
-                    </div>
-                )}
-            </section>
-        );
-    };
     const renderTimesAndRunsheetSection = () => (
         <section key="times-runsheet-block" className="bg-white p-8 border border-gray-200 rounded-sm shadow-sm space-y-6">
             <h3 className="text-lg font-extrabold tracking-tight uppercase text-black border-b border-neutral-100 pb-2">
@@ -1086,7 +977,7 @@ This room does not have private bathrooms. The closest toilets are down the hall
 
             <div className="space-y-3 pt-2">
                 <div>
-                    <label className="text-xs font-bold tracking-wider text-gray-500 block">Tell us what's happening when so we can prepare the AV at the right time e.g start the livestream, or appear on time to assist you re-arrange the furniture throughout the booking.</label>
+                    <label className="text-xs font-bold tracking-wider text-gray-500 block">Tell us what's happening when so we can help in high friction moments. E.g Tell us when you need to video record, re-arrange furniture, receive and serve catering etc.</label>
                 </div>
 
                 <div className="border border-gray-200 rounded-sm overflow-hidden shadow-sm bg-white">
@@ -1118,12 +1009,12 @@ This room does not have private bathrooms. The closest toilets are down the hall
                                             className="w-full p-2 border border-gray-200 rounded-sm text-xs font-semibold bg-white text-black outline-none appearance-none cursor-pointer focus:border-neutral-400"
                                             style={{ backgroundImage: 'url("data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'16\' height=\'16\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'gray\' stroke-width=\'2\'><polyline points=\'6 9 12 15 18 9\'></polyline></svg>")', backgroundPosition: 'right 8px center', backgroundRepeat: 'no-repeat' }}
                                         >
+                                            <option>Boardroom Style</option>
                                             <option>Workshop Style/Group Tables</option>
                                             <option>Lecture/Theatre Style</option>
                                             <option>Clear Open Floor</option>
-                                            <option>
-                                                No specific layout required (e.g. for a tour or walkthrough)
-                                            </option>
+                                            <option>No specific layout required (e.g. for a tour or walkthrough)</option>
+                                            <option>Other (Please explain in description)</option>
 
                                             <option>Other (Please explain in description)</option>
                                         </select>
@@ -1165,79 +1056,6 @@ This room does not have private bathrooms. The closest toilets are down the hall
             </div>
         </section>
     );
-
-    const renderFloorplanSection = () => {
-        const activeFloorplan = getFloorplanConfig();
-
-        return (
-            <section key="floorplan-section" className="bg-white p-8 border border-gray-200 rounded-sm shadow-sm space-y-6">
-                <h3 className="text-lg font-extrabold tracking-tight uppercase text-black border-b border-neutral-100 pb-2">
-                    Floorplan & Setup
-                </h3>
-
-                {/* DYNAMIC INTERACTIVE VECTOR BLUEPRINT MAP GRID */}
-                <div className="space-y-2">
-                    <label className="text-xs font-bold uppercase tracking-wider text-gray-500 block">Interactive Floorplan Grid Blueprint</label>
-                    <div className="border border-neutral-200 rounded-sm p-4 bg-white flex flex-col items-center justify-center space-y-3 shadow-xs">
-                        <div className="w-full max-w-2xl aspect-[21/9] relative select-none">
-                            <svg viewBox="0 0 430 170" className="w-full h-full font-sans">
-                                {/* Outer layout base framing metrics envelope */}
-                                <rect x="2" y="2" width="426" height="166" rx="2" fill="none" stroke="#E5E5E5" strokeWidth="1.5" strokeDasharray="4 3" />
-
-                                {/* Design Space Zone Area block shape select */}
-                                <g onClick={() => setFormData(prev => ({ ...prev, space: 'MCIC Ground - Design Space' }))} className="group">
-                                    <rect x="10" y="10" width="180" height="150" rx="1" className={getMapHighlightClasses('Design Space')} strokeWidth="1.5" />
-                                    {formData.space !== 'MCIC Ground - Design Space' && formData.space !== 'MCIC Ground - Entire Space' && (
-                                        <>
-                                            <text x="100" y="80" textAnchor="middle" className="text-[10px] font-bold uppercase tracking-wider pointer-events-none">Design Space</text>
-                                            <text x="100" y="100" textAnchor="middle" className="text-[8px] opacity-60 pointer-events-none font-medium">Cap: 35-50</text>
-                                        </>
-                                    )}
-                                </g>
-
-                                {/* Center Concertina Wall Track Partition Line Break */}
-                                <line x1="190" y1="10" x2="190" y2="160" stroke={formData.space === 'MCIC Ground - Entire Space' ? "#FFF" : "#A3A3A3"} strokeWidth="2" strokeDasharray={formData.space === 'MCIC Ground - Entire Space' ? "0" : "3 3"} className="z-10 relative transition-colors duration-300" />
-
-                                {/* Event Space Zone Area block shape select */}
-                                <g onClick={() => setFormData(prev => ({ ...prev, space: 'MCIC Ground - Event Space' }))} className="group">
-                                    <rect x="190" y="10" width="230" height="150" rx="1" className={getMapHighlightClasses('Event Space')} strokeWidth="1.5" />
-
-                                    {/* Two wall-integrated kitchen counters setup directly pinned inside the event space parameters */}
-                                    <g fill="#E5E5E5" stroke="#737373" strokeWidth="0.8" opacity="0.85">
-                                        <rect x="360" y="10" width="50" height="12" />
-                                        <text x="385" y="18" textAnchor="middle" fill="#525252" className="text-[5px] font-black uppercase font-mono tracking-tighter">Kitchen A</text>
-
-                                        <rect x="360" y="148" width="50" height="12" />
-                                        <text x="385" y="156" textAnchor="middle" fill="#525252" className="text-[5px] font-black uppercase font-mono tracking-tighter">Kitchen B</text>
-                                    </g>
-
-                                    {formData.space !== 'MCIC Ground - Event Space' && formData.space !== 'MCIC Ground - Entire Space' && (
-                                        <>
-                                            <text x="290" y="80" textAnchor="middle" className="text-[10px] font-bold uppercase tracking-wider pointer-events-none">Event Space</text>
-                                            <text x="290" y="100" textAnchor="middle" className="text-[8px] opacity-60 pointer-events-none font-medium">Cap: 75-120</text>
-                                        </>
-                                    )}
-                                </g>
-
-                                {/* FURNITURE LAYOUT PREVIEW CHANGER COMPONENT */}
-                                {!formData.space.includes('Level 1') && activeFloorplan.furniture}
-                            </svg>
-                        </div>
-                        <div className="text-center">
-                            <p className="text-[10px] font-black uppercase tracking-wide text-black bg-neutral-100 px-3 py-1 rounded-sm border border-neutral-250 inline-block">
-                                {formData.space.includes('Level 1') ? "Level 1 Open Plan Setup" : activeFloorplan.title}
-                            </p>
-                            <p className="text-[9px] text-gray-400 font-medium mt-1">
-                                {formData.space.includes('Level 1')
-                                    ? `Selected: ${formData.space} (Interactive configurations update specific ground floor allocations)`
-                                    : `Click directly inside the blueprint boundary frames above to shift targeted allocation parameters.`}
-                            </p>
-                        </div>
-                    </div>
-                </div>
-            </section>
-        );
-    };
 
     const renderAvAndEquipmentSection = () => {
         // Master list of all shared/add-on equipment with overall hub capacities
@@ -1465,7 +1283,7 @@ This room does not have private bathrooms. The closest toilets are down the hall
                         <span>💡</span> Self-Catering Policy
                     </div>
                     <p>
-                        Anyone using our spaces will need to organise their own catering configuration parameters. Pre-approved campus vendor rules are available in the Guidelines Hub above.
+                        Anyone using our spaces will need to organise their own catering and servicware.
                     </p>
 
                     <div className="pt-3 border-t border-dashed border-neutral-200/80">
@@ -1481,10 +1299,7 @@ This room does not have private bathrooms. The closest toilets are down the hall
                             />
                             <div className="flex flex-col">
                                 <span className="text-xs font-bold uppercase tracking-tight text-black">
-                                    I acknowledge this is a self-catering space *
-                                </span>
-                                <span className="text-[11px] text-gray-500 font-normal mt-0.5">
-                                    Tick to confirm responsibility over logistics.
+                                    I acknowledge this is a self-catering space
                                 </span>
                             </div>
                         </label>
@@ -1695,7 +1510,7 @@ This room does not have private bathrooms. The closest toilets are down the hall
                             <button
                                 type="button"
                                 onClick={() => toggleAccordion('hours')}
-                                className="w-full p-4 flex justify-between items-center text-xs font-bold uppercase tracking-wide text-neutral-800 bg-neutral-50/60 hover:bg-neutral-50 border-t border-neutral-100"
+                                className="w-full p-4 flex justify-between items-center text-xs font-bold uppercase tracking-wide text-neutral-800 bg-neutral-50/60 hover:bg-neutral-50 border-t border-neutral-100 cursor-pointer"
                             >
                                 <span>Operating Hours & Staffing Fees</span>
                                 <span>{activeAccordion === 'hours' ? '−' : '+'}</span>
@@ -1712,7 +1527,7 @@ This room does not have private bathrooms. The closest toilets are down the hall
                                         </p>
                                         <p>
                                             <strong className="text-neutral-900 block uppercase text-[10px] tracking-wide mb-0.5">Outside Office Hours (Before 9:00am or After 4:00pm)</strong>
-                                            Hiring a dedicated casual staff support member is required. This costs $50 per hour (3-hour minimum block).
+                                            Hiring a dedicated casual staff support member is required. This costs $50 per hour (3-hour minimum block). Sunday or Public Holiday shifts require a 4-hour minimum.
                                         </p>
                                     </div>
                                 </div>
@@ -1724,7 +1539,7 @@ This room does not have private bathrooms. The closest toilets are down the hall
                             <button
                                 type="button"
                                 onClick={() => toggleAccordion('location-transport')}
-                                className="w-full p-4 flex justify-between items-center text-xs font-bold uppercase tracking-wide text-neutral-800 bg-neutral-50/60 hover:bg-neutral-50"
+                                className="w-full p-4 flex justify-between items-center text-xs font-bold uppercase tracking-wide text-neutral-800 bg-neutral-50/60 hover:bg-neutral-50 border-t border-neutral-100 cursor-pointer"
                             >
                                 <span>Location, Transport, Parking & Deliveries</span>
                                 <span>{activeAccordion === 'location-transport' ? '−' : '+'}</span>
@@ -1813,13 +1628,26 @@ This room does not have private bathrooms. The closest toilets are down the hall
                                         </div>
                                     </div>
 
-                                    <div className="space-y-1">
+                                    {/* DELIVERIES, LOADING DOCK & MAP IMAGE */}
+                                    <div className="space-y-3">
                                         <span className="font-bold text-neutral-900 uppercase text-[10px] tracking-wide block border-b border-neutral-100 pb-1">
                                             Deliveries & Loading Dock
                                         </span>
                                         <p className="pt-1">
-                                            Couriers should enter via Gate 2 on High Street. Instruct them to either park in the Loading Bays at Gate 2 Entrance or proceed down the avenue to the E10 Hilmer Building. Note that vehicles cannot stay parked after drop-off and must move on immediately.
+                                            Couriers should enter via Gate 2 on High Street. Instruct them to either park in the Loading Bays at Gate 2 Entrance or proceed down the avenue to the E10 Hilmer Building. Note that vehicles cannot stay parked after drop-off and must move on immediately. More information on Loading Bays in the image below.
                                         </p>
+
+                                        {/* LOADING BAY DIAGRAM IMAGE */}
+                                        <div className="mt-3 border border-neutral-200 rounded-sm overflow-hidden bg-neutral-900 p-2 shadow-sm">
+                                            <img
+                                                src="/images/LoadingBays.jpg"
+                                                alt="MCIC Loading Bays Map & Gate 2 Access Guide"
+                                                className="w-full h-auto rounded-xs object-cover hover:opacity-95 transition-opacity"
+                                            />
+                                            <div className="p-2 text-[10px] text-neutral-400 font-mono text-center">
+                                                🗺️ Gate 2 Access Routes & 15-Minute Loading Zone Map
+                                            </div>
+                                        </div>
                                     </div>
 
                                     <div className="p-3.5 bg-neutral-900 text-white font-medium rounded-xs flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -1836,12 +1664,13 @@ This room does not have private bathrooms. The closest toilets are down the hall
                                 </div>
                             )}
                         </div>
+
                         {/* 2. DIGITAL & WI-FI ACCESS */}
                         <div>
                             <button
                                 type="button"
                                 onClick={() => toggleAccordion('digital')}
-                                className="w-full p-4 flex justify-between items-center text-xs font-bold uppercase tracking-wide text-neutral-800 bg-neutral-50/60 hover:bg-neutral-50 border-t border-neutral-100"
+                                className="w-full p-4 flex justify-between items-center text-xs font-bold uppercase tracking-wide text-neutral-800 bg-neutral-50/60 hover:bg-neutral-50 border-t border-neutral-100 cursor-pointer"
                             >
                                 <span>Can I access WiFi for myself and my attendees?</span>
                                 <span>{activeAccordion === 'digital' ? '−' : '+'}</span>
@@ -1904,7 +1733,6 @@ This room does not have private bathrooms. The closest toilets are down the hall
                                                             <li>Tap <strong>Submit</strong>.</li>
                                                         </ul>
                                                         <p className="text-[11px] text-neutral-500 italic">You will see a welcome screen confirming your temporary access.</p>
-                                                        {/* Step 2 Image Placeholder */}
                                                         <img src="/images/wifi/step2.png" alt="Step 2 - Captive Portal Registration" className="mt-2 rounded-xs border border-neutral-200 max-h-36 object-contain bg-white p-1" />
                                                     </li>
 
@@ -1915,13 +1743,11 @@ This room does not have private bathrooms. The closest toilets are down the hall
 
                                                     <li className="space-y-1">
                                                         <strong>Step 4</strong> — In the email, select <strong>click here</strong>.
-                                                        {/* Step 4 Image Placeholder */}
                                                         <img src="/images/wifi/step4.png" alt="Step 4 - Activation Email Link" className="mt-2 rounded-xs border border-neutral-200 max-h-36 object-contain bg-white p-1" />
                                                     </li>
 
                                                     <li className="space-y-1">
                                                         <strong>Step 5</strong> — You will then be prompted to Confirm or Reject access. Select <strong>Confirm</strong>.
-                                                        {/* Step 5 Image Placeholder */}
                                                         <img src="/images/wifi/step5.png" alt="Step 5 - Confirm Access" className="mt-2 rounded-xs border border-neutral-200 max-h-36 object-contain bg-white p-1" />
                                                     </li>
                                                 </ol>
@@ -1945,7 +1771,7 @@ This room does not have private bathrooms. The closest toilets are down the hall
                             <button
                                 type="button"
                                 onClick={() => toggleAccordion('printing')}
-                                className="w-full p-4 flex justify-between items-center text-xs font-bold uppercase tracking-wide text-neutral-800 bg-neutral-50/60 hover:bg-neutral-50 border-t border-neutral-100"
+                                className="w-full p-4 flex justify-between items-center text-xs font-bold uppercase tracking-wide text-neutral-800 bg-neutral-50/60 hover:bg-neutral-50 border-t border-neutral-100 cursor-pointer"
                             >
                                 <span>Can I print or photocopy documents on-site?</span>
                                 <span>{activeAccordion === 'printing' ? '−' : '+'}</span>
@@ -2001,7 +1827,7 @@ This room does not have private bathrooms. The closest toilets are down the hall
                             <button
                                 type="button"
                                 onClick={() => toggleAccordion('setup')}
-                                className="w-full p-4 flex justify-between items-center text-xs font-bold uppercase tracking-wide text-neutral-800 bg-neutral-50/60 hover:bg-neutral-50 border-t border-neutral-100"
+                                className="w-full p-4 flex justify-between items-center text-xs font-bold uppercase tracking-wide text-neutral-800 bg-neutral-50/60 hover:bg-neutral-50 border-t border-neutral-100 cursor-pointer"
                             >
                                 <span>Will the space be set-up for me?</span>
                                 <span>{activeAccordion === 'setup' ? '−' : '+'}</span>
@@ -2012,7 +1838,7 @@ This room does not have private bathrooms. The closest toilets are down the hall
                                         Please expect to set up the chairs, tables, and equipment yourself. While we aim to assist or arrange layouts prior to your arrival, this is not always possible.
                                     </p>
                                     <p>
-                                        A staff member will always unlock the space, show you how to use and find equipment, and lock the room at check-out. If you require support in the room for the entirely of your event you must hire casual through the booking form at a cost of $50 per hour (minimum 3 hours).
+                                        A staff member will always unlock the space, show you how to use and find equipment, and lock the room at check-out. If you require support in the room for the entirety of your event you must hire casual staff through the booking form at a cost of $50 per hour (minimum 3 hours).
                                     </p>
                                 </div>
                             )}
@@ -2023,7 +1849,7 @@ This room does not have private bathrooms. The closest toilets are down the hall
                             <button
                                 type="button"
                                 onClick={() => toggleAccordion('bookingHours')}
-                                className="w-full p-4 flex justify-between items-center text-xs font-bold uppercase tracking-wide text-neutral-800 bg-neutral-50/60 hover:bg-neutral-50 border-t border-neutral-100"
+                                className="w-full p-4 flex justify-between items-center text-xs font-bold uppercase tracking-wide text-neutral-800 bg-neutral-50/60 hover:bg-neutral-50 border-t border-neutral-100 cursor-pointer"
                             >
                                 <span>What hours should I book the space for?</span>
                                 <span>{activeAccordion === 'bookingHours' ? '−' : '+'}</span>
@@ -2031,13 +1857,13 @@ This room does not have private bathrooms. The closest toilets are down the hall
                             {activeAccordion === 'bookingHours' && (
                                 <div className="p-6 bg-white text-xs space-y-4 animate-in slide-in-from-top-1 duration-150 text-neutral-600 font-normal leading-relaxed">
                                     <p>
-                                        Please book the space for the entire period you require access—from the moment you need to enter for setup to the exact time you will depart after cleaning up and packing down  (not just the time your event runs).
+                                        Please book the space for the entire period you require access—from the moment you need to enter for setup to the exact time you will depart after cleaning up and packing down (not just the time your event runs).
                                     </p>
                                     <p>
-                                        You will <strong>not</strong> have access to the space before or after your confirmed booking window. Be sure to factor in sufficient time for setting up equipment, tables, and chairs prior to your event, as well as clearing away rubbish and tidying the room afterward. While we aim to assist or arrange layouts prior to your arrival, this is not always possible.
+                                        You will <strong>not</strong> have access to the space before or after your confirmed booking window. Be sure to factor in sufficient time for setting up equipment, tables, and chairs prior to your event, as well as clearing away rubbish and tidying the room afterward.
                                     </p>
                                     <p>
-                                        A staff member will always unlock the space, show you how to use and find equipment, and lock the room at check-out. If you require support in the room for the entirely of your event you must hire casual through the booking form at a cost of $50 per hour (minimum 3 hours).
+                                        A staff member will always unlock the space, show you how to use and find equipment, and lock the room at check-out. If you require support in the room for the entirety of your event you must hire casual staff through the booking form at a cost of $50 per hour (minimum 3 hours).
                                     </p>
                                 </div>
                             )}
@@ -2048,7 +1874,7 @@ This room does not have private bathrooms. The closest toilets are down the hall
                             <button
                                 type="button"
                                 onClick={() => toggleAccordion('staff')}
-                                className="w-full p-4 flex justify-between items-center text-xs font-bold uppercase tracking-wide text-neutral-800 bg-neutral-50/60 hover:bg-neutral-50 border-t border-neutral-100"
+                                className="w-full p-4 flex justify-between items-center text-xs font-bold uppercase tracking-wide text-neutral-800 bg-neutral-50/60 hover:bg-neutral-50 border-t border-neutral-100 cursor-pointer"
                             >
                                 <span>Will there be staff to help me at all times?</span>
                                 <span>{activeAccordion === 'staff' ? '−' : '+'}</span>
@@ -2059,7 +1885,7 @@ This room does not have private bathrooms. The closest toilets are down the hall
                                         A staff member will be on-site to facilitate check-in, demonstrate core AV equipment controls, and securely lock the facility doors at the conclusion of your reservation window.
                                     </p>
                                     <p>
-                                        Throughout your event window, staff remain inside the core building infrastructure and can be paged immediately to troubleshoot unexpected technical issues. You can also log specific critical assistance times in advance so they can allocate direct floor space to you. Staff do not maintain an ongoing presence inside your room unless dedicated coverage is requested.
+                                        Throughout your event window, staff remain inside the core building infrastructure and can be paged immediately to troubleshoot unexpected technical issues. Staff do not maintain an ongoing presence inside your room unless dedicated casual staffing coverage is requested ($50/hr, min 3 hours).
                                     </p>
                                 </div>
                             )}
@@ -2070,7 +1896,7 @@ This room does not have private bathrooms. The closest toilets are down the hall
                             <button
                                 type="button"
                                 onClick={() => toggleAccordion('host-responsibility')}
-                                className="w-full p-4 flex justify-between items-center text-xs font-bold uppercase tracking-wide text-neutral-800 bg-neutral-50/60 hover:bg-neutral-50 border-t border-neutral-100"
+                                className="w-full p-4 flex justify-between items-center text-xs font-bold uppercase tracking-wide text-neutral-800 bg-neutral-50/60 hover:bg-neutral-50 border-t border-neutral-100 cursor-pointer"
                             >
                                 <span>Do I need to be there the whole time if I have guests in the space?</span>
                                 <span>{activeAccordion === 'host-responsibility' ? '−' : '+'}</span>
@@ -2105,7 +1931,7 @@ This room does not have private bathrooms. The closest toilets are down the hall
                             <button
                                 type="button"
                                 onClick={() => toggleAccordion('availability')}
-                                className="w-full p-4 flex justify-between items-center text-xs font-bold uppercase tracking-wide text-neutral-800 bg-neutral-50/60 hover:bg-neutral-50 border-t border-neutral-100"
+                                className="w-full p-4 flex justify-between items-center text-xs font-bold uppercase tracking-wide text-neutral-800 bg-neutral-50/60 hover:bg-neutral-50 border-t border-neutral-100 cursor-pointer"
                             >
                                 <span>When can I book the space / How far in advance?</span>
                                 <span>{activeAccordion === 'availability' ? '−' : '+'}</span>
@@ -2115,16 +1941,16 @@ This room does not have private bathrooms. The closest toilets are down the hall
                                     <p>
                                         Our spaces are subject to a standard booking lockout until closer to term start. This allows our internal UNSW Founders team to finalise program schedules and secure priority space allocations.
                                     </p>
-                                    <p>
-                                        <strong>Lockout dates are as follows:</strong>
-                                        <ul>
-                                            <li>Term 1 2027 (8 Feb - 28 May): Bookings open from 20 November 2026</li>
-                                            <li>Term 2 2027 (24 April - 10 Sept): Bookings open from 23 April 2027</li>
-                                            <li>Term 3 2027 (6 Sept - 9 December): Bookings open from 6 August 2027</li>
+                                    <div className="p-3 bg-neutral-50 border border-neutral-200 rounded-xs space-y-1 text-neutral-800">
+                                        <strong className="block uppercase text-[10px] tracking-wide">Lockout dates are as follows:</strong>
+                                        <ul className="list-disc pl-4 space-y-1 text-[11px] text-neutral-700">
+                                            <li><strong>Term 1 2027</strong> (8 Feb - 28 May): Bookings open from 20 November 2026</li>
+                                            <li><strong>Term 2 2027</strong> (24 April - 10 Sept): Bookings open from 23 April 2027</li>
+                                            <li><strong>Term 3 2027</strong> (6 Sept - 9 December): Bookings open from 6 August 2027</li>
                                         </ul>
-                                    </p>
+                                    </div>
                                     <p>
-                                        Because we receive high-volume booking requests from across the university, spaces are allocated on a <strong>first-come, first-served basis</strong>.
+                                        Because we receive high-volume booking requests from across the university, spaces are allocated on a <strong>first-come, first-served basis</strong> once lockouts expire.
                                     </p>
                                 </div>
                             )}
@@ -2135,7 +1961,7 @@ This room does not have private bathrooms. The closest toilets are down the hall
                             <button
                                 type="button"
                                 onClick={() => toggleAccordion('storage')}
-                                className="w-full p-4 flex justify-between items-center text-xs font-bold uppercase tracking-wide text-neutral-800 bg-neutral-50/60 hover:bg-neutral-50 border-t border-neutral-100"
+                                className="w-full p-4 flex justify-between items-center text-xs font-bold uppercase tracking-wide text-neutral-800 bg-neutral-50/60 hover:bg-neutral-50 border-t border-neutral-100 cursor-pointer"
                             >
                                 <span>Can I store items in the space before or after my event?</span>
                                 <span>{activeAccordion === 'storage' ? '−' : '+'}</span>
@@ -2152,7 +1978,7 @@ This room does not have private bathrooms. The closest toilets are down the hall
                                         All items, banners, and food supplies must arrive with your team at check-in and be completely evacuated at checkout to ensure subsequent bookings can load in seamlessly. Please ensure your caterer can collect all items within your booking window.
                                     </p>
                                     <p>
-                                        We can make exceptions on limited occasions, if you abslutely require storage please contact MCIC@unsw.edu.au as soon as possible.
+                                        If you absolutely require exceptional storage arrangements, please contact <a href="mailto:MCIC@unsw.edu.au" className="font-bold text-black underline">MCIC@unsw.edu.au</a> as soon as possible.
                                     </p>
                                 </div>
                             )}
@@ -2163,7 +1989,7 @@ This room does not have private bathrooms. The closest toilets are down the hall
                             <button
                                 type="button"
                                 onClick={() => toggleAccordion('consumables')}
-                                className="w-full p-4 flex justify-between items-center text-xs font-bold uppercase tracking-wide text-neutral-800 bg-neutral-50/60 hover:bg-neutral-50 border-t border-neutral-100"
+                                className="w-full p-4 flex justify-between items-center text-xs font-bold uppercase tracking-wide text-neutral-800 bg-neutral-50/60 hover:bg-neutral-50 border-t border-neutral-100 cursor-pointer"
                             >
                                 <span>Can I use the milk, tea, coffee, soft drinks, paper plates, or cups at the facility?</span>
                                 <span>{activeAccordion === 'consumables' ? '−' : '+'}</span>
@@ -2187,7 +2013,7 @@ This room does not have private bathrooms. The closest toilets are down the hall
                             <button
                                 type="button"
                                 onClick={() => toggleAccordion('catering-hub')}
-                                className="w-full p-4 flex justify-between items-center text-xs font-bold uppercase tracking-wide text-neutral-800 bg-neutral-50/60 hover:bg-neutral-50 border-t border-neutral-100"
+                                className="w-full p-4 flex justify-between items-center text-xs font-bold uppercase tracking-wide text-neutral-800 bg-neutral-50/60 hover:bg-neutral-50 border-t border-neutral-100 cursor-pointer"
                             >
                                 <span>How does Catering work?</span>
                                 <span>{activeAccordion === 'catering-hub' ? '−' : '+'}</span>
@@ -2199,7 +2025,7 @@ This room does not have private bathrooms. The closest toilets are down the hall
                                         <p><strong>Any Caterer:</strong> No restrictions. You can bring any food or external catering you like.</p>
                                         <p><strong>No Storage:</strong> On-site fridge/cupboards are full. Everything must arrive and leave within your booking window. If you want to keep items cold, please supply your own ice and book the Ice Buckets.</p>
                                         <p><strong>Deliveries:</strong> We will not meet your delivery drivers to collect your order. You must direct and meet your own delivery drivers unless you have paid for casual venue staff (you must select this option in your booking form).</p>
-                                        <p><strong>Mandatory Cleanup:</strong> Pack up all leftovers and rubbish immediately on conclusion of your event. Large waste goes to bins in the hallway by the back door of the Design Space. If you do not leave the space clean, you will be charged a cleaning fee.</p>
+                                        <p><strong>Mandatory Cleanup:</strong> Pack up all leftovers and rubbish immediately on conclusion of your event. Large waste goes to bins in the hallway by the back door of the Design Space. If you do not leave the space clean, you will be charged a cleaning fee ($200 + GST minimum).</p>
                                     </div>
                                     <div className="space-y-2">
                                         <h4 className="font-bold text-neutral-900 uppercase text-[10px] tracking-wide border-b border-neutral-100 pb-2">
@@ -2218,7 +2044,15 @@ This room does not have private bathrooms. The closest toilets are down the hall
                                                 <tbody className="divide-y divide-neutral-100 font-normal text-neutral-600">
                                                     {[
                                                         { name: "Mad Toppings", url: "https://madtoppings.com.au", style: "Pizza", styleBadge: "bg-neutral-100 text-neutral-800 border-neutral-200", price: "$", priceBadge: "bg-neutral-100 text-neutral-800 border-neutral-200", delivery: "11am – 11pm Daily" },
-                                                        { name: "OOshman", url: "https://ooshman.au", style: "Pizza & Wraps", styleBadge: "bg-neutral-100 text-neutral-800 border-neutral-200", price: "$", priceBadge: "bg-neutral-100 text-neutral-800 border-neutral-200", delivery: "10am – 11:30pm (Late until 2am/3am Thu-Sat)" }, { name: "Byblos Lebanese Cuisine", url: "https://bybloslebanesecuisine.com.au/", style: "Lebanese & Platters", styleBadge: "bg-neutral-100 text-neutral-800 border-neutral-200", price: "$$", priceBadge: "bg-neutral-100 text-neutral-800 border-neutral-200", delivery: "10am – 9pm Mon-Sat (Closed Sun)" }, { name: "Catering Project", url: "https://www.cateringproject.com.au", style: "Corp Platters", styleBadge: "bg-neutral-100 text-neutral-800 border-neutral-200", price: "$$", priceBadge: "bg-neutral-100 text-neutral-800 border-neutral-200", delivery: "7am – 6pm Mon-Fri (9am-4pm Sat, 9am-2pm Sun)" }, { name: "Foodie Del Mar", url: "http://foodiedelmar.com.au/", style: "Canape & Grazing", styleBadge: "bg-neutral-100 text-neutral-800 border-neutral-200", price: "$$", priceBadge: "bg-neutral-100 text-neutral-800 border-neutral-200", delivery: "Flexible delivery timelines upon booking request" }, { name: "Mama B’s", url: "https://mamabs.com.au", style: "Vegan Specialty", styleBadge: "bg-neutral-100 text-neutral-800 border-neutral-200", price: "$$", priceBadge: "bg-neutral-100 text-neutral-800 border-neutral-200", delivery: "7am – 6pm Daily (Order by 12pm cutoff)" }, { name: "Sals Pizza", url: "https://www.salspizza.com.au", style: "NY Style Pizza", styleBadge: "bg-neutral-100 text-neutral-800 border-neutral-200", price: "$$", priceBadge: "bg-neutral-100 text-neutral-800 border-neutral-200", delivery: "11am – 9pm Sun-Wed (Extended until Midnight Thu-Sat)" }, { name: "The Rusty Rabit", url: "https://therustyrabbit.com.au", style: "Breakfast & Coffee", styleBadge: "bg-neutral-100 text-neutral-800 border-neutral-200", price: "$$", priceBadge: "bg-neutral-100 text-neutral-800 border-neutral-200", delivery: "7am – 3:30pm Mon-Fri (8am–3pm Sat-Sun)" }, { name: "Racha Syrian Kitchen", url: "https://www.rachasyriankitchen.com.au", style: "Middle Eastern", styleBadge: "bg-neutral-100 text-neutral-800 border-neutral-200", price: "$$$", priceBadge: "bg-neutral-100 text-neutral-800 border-neutral-200", delivery: "11am – 8:30pm Tue-Sun (Closed Mon) • 1 wk notice for 30+" }, { name: "Vanilla Blue", url: "https://www.vanillablue.com.au/unsw", style: "Corporate Buffets", styleBadge: "bg-neutral-100 text-neutral-800 border-neutral-200", price: "$$$", priceBadge: "bg-neutral-100 text-neutral-800 border-neutral-200", delivery: "6:30am – 6:30pm Mon-Fri (7:30am–2pm Sat)" }
+                                                        { name: "OOshman", url: "https://ooshman.au", style: "Pizza & Wraps", styleBadge: "bg-neutral-100 text-neutral-800 border-neutral-200", price: "$", priceBadge: "bg-neutral-100 text-neutral-800 border-neutral-200", delivery: "10am – 11:30pm (Late until 2am/3am Thu-Sat)" },
+                                                        { name: "Byblos Lebanese Cuisine", url: "https://bybloslebanesecuisine.com.au/", style: "Lebanese & Platters", styleBadge: "bg-neutral-100 text-neutral-800 border-neutral-200", price: "$$", priceBadge: "bg-neutral-100 text-neutral-800 border-neutral-200", delivery: "10am – 9pm Mon-Sat (Closed Sun)" },
+                                                        { name: "Catering Project", url: "https://www.cateringproject.com.au", style: "Corp Platters", styleBadge: "bg-neutral-100 text-neutral-800 border-neutral-200", price: "$$", priceBadge: "bg-neutral-100 text-neutral-800 border-neutral-200", delivery: "7am – 6pm Mon-Fri (9am-4pm Sat, 9am-2pm Sun)" },
+                                                        { name: "Foodie Del Mar", url: "http://foodiedelmar.com.au/", style: "Canape & Grazing", styleBadge: "bg-neutral-100 text-neutral-800 border-neutral-200", price: "$$", priceBadge: "bg-neutral-100 text-neutral-800 border-neutral-200", delivery: "Flexible delivery timelines upon booking request" },
+                                                        { name: "Mama B’s", url: "https://mamabs.com.au", style: "Vegan Specialty", styleBadge: "bg-neutral-100 text-neutral-800 border-neutral-200", price: "$$", priceBadge: "bg-neutral-100 text-neutral-800 border-neutral-200", delivery: "7am – 6pm Daily (Order by 12pm cutoff)" },
+                                                        { name: "Sals Pizza", url: "https://www.salspizza.com.au", style: "NY Style Pizza", styleBadge: "bg-neutral-100 text-neutral-800 border-neutral-200", price: "$$", priceBadge: "bg-neutral-100 text-neutral-800 border-neutral-200", delivery: "11am – 9pm Sun-Wed (Extended until Midnight Thu-Sat)" },
+                                                        { name: "The Rusty Rabit", url: "https://therustyrabbit.com.au", style: "Breakfast & Coffee", styleBadge: "bg-neutral-100 text-neutral-800 border-neutral-200", price: "$$", priceBadge: "bg-neutral-100 text-neutral-800 border-neutral-200", delivery: "7am – 3:30pm Mon-Fri (8am–3pm Sat-Sun)" },
+                                                        { name: "Racha Syrian Kitchen", url: "https://www.rachasyriankitchen.com.au", style: "Middle Eastern", styleBadge: "bg-neutral-100 text-neutral-800 border-neutral-200", price: "$$$", priceBadge: "bg-neutral-100 text-neutral-800 border-neutral-200", delivery: "11am – 8:30pm Tue-Sun (Closed Mon) • 1 wk notice for 30+" },
+                                                        { name: "Vanilla Blue", url: "https://www.vanillablue.com.au/unsw", style: "Corporate Buffets", styleBadge: "bg-neutral-100 text-neutral-800 border-neutral-200", price: "$$$", priceBadge: "bg-neutral-100 text-neutral-800 border-neutral-200", delivery: "6:30am – 6:30pm Mon-Fri (7:30am–2pm Sat)" }
                                                     ].map((v, i) => (
                                                         <tr key={i} className="hover:bg-neutral-50">
                                                             <td className="p-2.5 font-bold text-neutral-900">
@@ -2250,76 +2084,194 @@ This room does not have private bathrooms. The closest toilets are down the hall
                             )}
                         </div>
 
-                        {/* 9. SHOULD I BOOK CASUAL STAFF */}
+                        {/* SERVING ALCOHOL & RSA COMPLIANCE */}
                         <div>
                             <button
                                 type="button"
-                                onClick={() => toggleAccordion('casual-staff')}
-                                className="w-full p-4 flex justify-between items-center text-xs font-bold uppercase tracking-wide text-neutral-800 bg-neutral-50/60 hover:bg-neutral-50 border-t border-neutral-100"
+                                onClick={() => toggleAccordion('alcohol-rsa')}
+                                className="w-full p-4 flex justify-between items-center text-xs font-bold uppercase tracking-wide text-neutral-800 bg-neutral-50/60 hover:bg-neutral-50 border-t border-neutral-100 cursor-pointer"
                             >
-                                <span>Should I book your casual staff for my event?</span>
-                                <span>{activeAccordion === 'casual-staff' ? '−' : '+'}</span>
+                                <span>Can I serve alcohol at my event?</span>
+                                <span>{activeAccordion === 'alcohol-rsa' ? '−' : '+'}</span>
                             </button>
-                            {activeAccordion === 'casual-staff' && (
-                                <div className="p-6 bg-white text-xs space-y-4 animate-in slide-in-from-top-1 duration-150 text-gray-600 font-normal leading-relaxed">
-                                    <p className="text-neutral-700 font-medium">
-                                        Booking casual staff depends entirely on the timing and complexity of your event:
+                            {activeAccordion === 'alcohol-rsa' && (
+                                <div className="p-6 bg-white text-xs space-y-4 animate-in slide-in-from-top-1 duration-150 text-neutral-600 font-normal leading-relaxed">
+                                    <p className="font-medium text-neutral-900">
+                                        Yes, serving alcohol is permitted, provided you strictly comply with NSW liquor legislation and UNSW venue safety policies:
                                     </p>
-                                    <div className="space-y-4 text-neutral-700 font-medium">
-                                        <div className="p-3.5 bg-neutral-900 text-white font-medium rounded-xs">
-                                            <strong className="block uppercase text-[10px] tracking-wide mb-0.5">Mandatory Staffing (After-Hours)</strong>
-                                            If your booking starts before 9:00am or extends past 4:00pm, hiring dedicated casual staff is mandatory.
+
+                                    <ul className="space-y-3 text-neutral-700">
+                                        <li className="p-3 bg-neutral-50 border border-neutral-200 rounded-xs space-y-1">
+                                            <strong className="text-neutral-900 block uppercase text-[10px] tracking-wide">1. Mandatory RSA Holder & Proof Submission</strong>
+                                            <p className="text-neutral-600 text-xs">
+                                                Anyone responsible for supervising or serving alcohol must hold a valid <strong>NSW Responsible Service of Alcohol (RSA) Competency Card</strong>. A photocopy of this card must be submitted to venue management prior to your event commencement.
+                                            </p>
+                                        </li>
+
+                                        <li className="p-3 bg-neutral-50 border border-neutral-200 rounded-xs space-y-1">
+                                            <strong className="text-neutral-900 block uppercase text-[10px] tracking-wide">2. Option to Hire RSA-Certified Venue Staff</strong>
+                                            <p className="text-neutral-600 text-xs">
+                                                If you or your catering team do not hold an RSA card—or if you prefer not to manage service compliance yourself—you can <strong>hire an RSA-certified MCIC casual staff member</strong> directly via the booking form ($50/hr; 3-hr minimum Mon–Sat, 4-hr minimum Sun/Public Holidays). They will oversee a Gallery / Self-Service Station. You will still be resonsible for providing all alcohol, serviceware, ice etc. and ensuring your guests are of legal drinking age.
+                                            </p>
+                                        </li>
+
+                                        <li className="p-3 bg-neutral-50 border border-neutral-200 rounded-xs space-y-1">
+                                            <strong className="text-neutral-900 block uppercase text-[10px] tracking-wide">3. Service Models: Bartender vs. Gallery Self-Service</strong>
+                                            <div className="space-y-1 text-xs text-neutral-600">
+                                                <p>Alcohol can be served in two ways depending on your event setup:</p>
+                                                <p>• <strong>Dedicated Bartender Service:</strong> Drinks are actively poured and handed out by an RSA holder.</p>
+                                                <p>• <strong>Gallery / Self-Service Station:</strong> Drinks (e.g. wine/beer) can be set out on tables for self-service during exhibitions, networking, or gallery-style events. Under NSW liquor guidelines, an RSA cardholder must still actively oversee the drink station to monitor consumption and prevent underaged access.</p>
+                                            </div>
+                                        </li>
+
+                                        <li className="p-3 bg-neutral-50 border border-neutral-200 rounded-xs space-y-1">
+                                            <strong className="text-neutral-900 block uppercase text-[10px] tracking-wide">4. Responsible Consumption & Underage Guests</strong>
+                                            <p className="text-neutral-600 text-xs">
+                                                Food and non-alcoholic beverage options must be freely available whenever alcohol is served. Venue staff reserve the right to immediately suspend alcohol service if RSA documentation is missing, if minors are present without explicit prior safety arrangements, or if unsafe behaviour occurs.
+                                            </p>
+                                        </li>
+                                    </ul>
+                                </div>
+                            )}
+                        </div>
+                        {/* TICKETING & REGISTRATION FAQ */}
+                        <div>
+                            <button
+                                type="button"
+                                onClick={() => toggleAccordion('ticketing')}
+                                className="w-full p-4 flex justify-between items-center text-xs font-bold uppercase tracking-wide text-neutral-800 bg-neutral-50/60 hover:bg-neutral-50 border-t border-neutral-100 cursor-pointer"
+                            >
+                                <span>How does event ticketing, registration & fee splitting work?</span>
+                                <span>{activeAccordion === 'ticketing' ? '−' : '+'}</span>
+                            </button>
+                            {activeAccordion === 'ticketing' && (
+                                <div className="p-6 bg-white text-xs space-y-5 animate-in slide-in-from-top-1 duration-150 text-neutral-600 font-normal leading-relaxed">
+
+                                    {/* HIRER SELF-MANAGEMENT */}
+                                    <div className="space-y-2 border-b border-neutral-100 pb-3">
+                                        <span className="font-bold text-neutral-900 uppercase block text-[11px]">Option 1: Managing Your Own Ticketing (Default)</span>
+                                        <p className="text-neutral-700">
+                                            By default, event hosts manage their own attendee registration using their preferred ticketing platform (e.g., <strong>Humanitix, Luma, Eventbrite</strong>, or internal web forms). You retain full legal and financial responsibility for managing guest lists, door check-ins, and issuing ticket refunds if your event is cancelled or postponed.
+                                        </p>
+                                    </div>
+
+                                    {/* VENUE ASSISTED / OFFICIAL TICKETING */}
+                                    <div className="space-y-2 border-b border-neutral-100 pb-3">
+                                        <span className="font-bold text-neutral-900 uppercase block text-[11px]">Option 2: UNSW Founders / Venue-Managed Ticketing</span>
+                                        <p className="text-neutral-700">
+                                            Upon request or by mutual agreement, UNSW Founders can assist with managing registration and attendee check-ins through our nominated venue ticketing channels.
+                                        </p>
+                                    </div>
+
+                                    {/* THREE-WAY MONEY SPLIT EXPLAINED */}
+                                    <div className="space-y-3 border-b border-neutral-100 pb-3">
+                                        <div className="flex justify-between items-center">
+                                            <span className="font-bold text-neutral-900 uppercase">Paid Events & Fee Breakdown</span>
                                         </div>
-                                        <div>
-                                            <strong className="text-neutral-900 block uppercase text-[10px] tracking-wide mb-1">Optional Staffing (Standard Hours)</strong>
-                                            During core office hours (9:00am – 4:00pm), standard staffing covers room unlock, basic orientation, final checkout and is on call for ad-hoc requests (located within the building at all times). You should opt to pay for casual staff ($50/hr, minimum 3 hours) if:
-                                            <ul className="list-disc pl-4 mt-2 space-y-1 font-normal text-gray-600">
-                                                <li>You require tables, chairs, stage configurations fully staged prior to arrival (You will still need to include this set-up time in your booking).</li>
-                                                <li>You want a staff member present inside the space to continuously assist with microphones, live streams, or slides.</li>
-                                                <li>You need event support with registration, catering deliveries and set-up, or various room layout changes.</li>
-                                            </ul>
+                                        <p className="text-neutral-600 text-[11px]">
+                                            When UNSW Founders manages ticketing for a paid event, ticket revenues collected from attendees are split to cover platform and venue costs before paying out net earnings to the event host:
+                                        </p>
+
+                                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 text-[11px]">
+                                            <div className="p-3 bg-neutral-50 border border-neutral-200 rounded-xs space-y-1">
+                                                <span className="font-bold text-neutral-900 uppercase text-[10px] block">1. Platform / Card Fees</span>
+                                                <p className="text-neutral-600 text-[10px]">
+                                                    Standard processing & booking gateway fees associated with the ticketing software used.
+                                                </p>
+                                            </div>
+                                            <div className="p-3 bg-neutral-50 border border-neutral-200 rounded-xs space-y-1">
+                                                <span className="font-bold text-neutral-900 uppercase text-[10px] block">2. Venue Consignment</span>
+                                                <p className="text-neutral-600 text-[10px]">
+                                                    A flat <strong>$2.50 (inc. GST)</strong> venue consignment fee applies per ticket for paid tickets priced over $25.00.
+                                                </p>
+                                            </div>
+                                            <div className="p-3 bg-neutral-50 border border-neutral-200 rounded-xs space-y-1">
+                                                <span className="font-bold text-neutral-900 uppercase text-[10px] block">3. Host Net Payout</span>
+                                                <p className="text-neutral-600 text-[10px]">
+                                                    All remaining net ticket revenue (less any unpaid venue hire or staffing balances) is paid out to the host.
+                                                </p>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
                             )}
                         </div>
 
-                        {/* 11. CANCELLATION & FEES */}
+                        {/* NEW FAQ: PROMOTION & LOGO USE */}
+                        <div>
+                            <button
+                                type="button"
+                                onClick={() => toggleAccordion('promotion-branding')}
+                                className="w-full p-4 flex justify-between items-center text-xs font-bold uppercase tracking-wide text-neutral-800 bg-neutral-50/60 hover:bg-neutral-50 border-t border-neutral-100 cursor-pointer"
+                            >
+                                <span>How can I promote my event / Can I use the MCIC or UNSW logo?</span>
+                                <span>{activeAccordion === 'promotion-branding' ? '−' : '+'}</span>
+                            </button>
+                            {activeAccordion === 'promotion-branding' && (
+                                <div className="p-6 bg-white text-xs space-y-4 animate-in slide-in-from-top-1 duration-150 text-neutral-600 font-normal leading-relaxed">
+                                    <p>
+                                        You are welcome to state the physical event location as <strong>"Michael Crouch Innovation Centre, UNSW"</strong> on your promotional materials, flyers, and event listings.
+                                    </p>
+                                    <p>
+                                        UNSW Founders reserves the right to review promotional materials bearing the MCIC or UNSW logo/branding. Materials deemed inaccurate, misleading, or implying official UNSW endorsement without prior written authorization may be requested to be modified or taken down immediately.
+                                    </p>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* 11. CANCELLATION & FEES (UPDATED TO MATCH T&Cs) */}
                         <div>
                             <button
                                 type="button"
                                 onClick={() => toggleAccordion('financial')}
-                                className="w-full p-4 flex justify-between items-center text-xs font-bold uppercase tracking-wide text-neutral-800 bg-neutral-50/60 hover:bg-neutral-50 border-t border-neutral-100"
+                                className="w-full p-4 flex justify-between items-center text-xs font-bold uppercase tracking-wide text-neutral-800 bg-neutral-50/60 hover:bg-neutral-50 border-t border-neutral-100 cursor-pointer"
                             >
-                                <span>Grace Periods, Overtime, Cleaning & Cancellation Charges</span>
+                                <span>Deposit, Overtime, Cleaning & Cancellation Charges</span>
                                 <span>{activeAccordion === 'financial' ? '−' : '+'}</span>
                             </button>
                             {activeAccordion === 'financial' && (
                                 <div className="p-6 bg-white text-xs space-y-6 animate-in slide-in-from-top-1 duration-150 text-gray-600 font-normal leading-relaxed">
+
+                                    {/* DEPOSIT & BALANCE SCHEDULE */}
+                                    <div className="space-y-2">
+                                        <div className="flex justify-between items-center border-b border-neutral-100 pb-2">
+                                            <span className="font-bold text-neutral-900 uppercase">Deposit & Balance Schedule</span>
+                                            <span className="font-mono font-bold bg-neutral-900 text-white px-2 py-0.5 rounded-xs">50% / 50%</span>
+                                        </div>
+                                        <p>
+                                            A <strong>50% deposit</strong> is required upon booking to confirm your reservation. The remaining <strong>50% balance</strong> must be paid no later than <strong>48 hours prior</strong> to the event commencement.
+                                        </p>
+                                    </div>
+
+                                    {/* OVERTIME RATES */}
                                     <div className="space-y-2">
                                         <div className="flex justify-between items-center border-b border-neutral-100 pb-2">
                                             <span className="font-bold text-neutral-900 uppercase">Overtime Rates</span>
                                             <span className="font-mono font-bold bg-neutral-900 text-white px-2 py-0.5 rounded-xs">$150 / HR</span>
                                         </div>
                                         <p>
-                                            A standard 15-minute grace window applies on both ends of your reservation. Extensions exceeding this generate pro-rata penalties.
+                                            A standard 15-minute grace window applies on both ends of your reservation. Extensions exceeding this generate pro-rata penalties based on hourly rate.
                                         </p>
                                     </div>
+
+                                    {/* CLEANING & RESET FEE */}
                                     <div className="space-y-2">
                                         <div className="flex justify-between items-center border-b border-neutral-100 pb-2">
                                             <span className="font-bold text-neutral-900 uppercase">Cleaning & Reset Fee</span>
-                                            <span className="font-mono font-bold bg-neutral-900 text-white px-2 py-0.5 rounded-xs">$100 FLAT FEE</span>
+                                            <span className="font-mono font-bold bg-neutral-900 text-white px-2 py-0.5 rounded-xs">$200 + GST MIN</span>
                                         </div>
                                         <p>
-                                            Leave the space as you found it. Leaving rubbish, promotional materials, or disorganised equipment initiates a cleaning surcharge.
+                                            Please leave the space as clean and orderly as you found it. Leaving rubbish, catering waste or promotional clutter will initiate a cleaning fee recovery charge ($200 + GST minimum).
                                         </p>
                                     </div>
+
+                                    {/* CANCELLATION CHARGES */}
                                     <div className="space-y-3">
                                         <div className="border-b border-neutral-100 pb-2">
                                             <span className="font-bold text-neutral-900 uppercase">Cancellation Charges</span>
                                         </div>
                                         <div className="space-y-2">
-                                            <p>Cancellations must be filed formally via this platform. Surcharges are dependant on notice timelines:</p>
+                                            <p>Cancellations must be filed formally in writing. Charges are dependent on notice timelines:</p>
                                             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 font-mono text-[10px]">
                                                 <div className="p-2.5 bg-neutral-50 border border-neutral-200 rounded-xs">
                                                     <span className="block font-sans font-bold text-neutral-900 uppercase text-[9px]">6+ Working Days</span>
@@ -2327,21 +2279,23 @@ This room does not have private bathrooms. The closest toilets are down the hall
                                                 </div>
                                                 <div className="p-2.5 bg-neutral-50 border border-neutral-200 rounded-xs">
                                                     <span className="block font-sans font-bold text-neutral-900 uppercase text-[9px]">3 - 5 Working Days</span>
-                                                    <span className="text-neutral-900 font-bold font-sans">50% of Booking Total</span>
+                                                    <span className="text-neutral-900 font-bold font-sans">50% Fee Forfeited</span>
                                                 </div>
                                                 <div className="p-2.5 bg-neutral-50 border border-neutral-200 rounded-xs">
                                                     <span className="block font-sans font-bold text-neutral-900 uppercase text-[9px]">Less than 2 Days</span>
-                                                    <span className="text-neutral-900 font-bold font-sans">100% of Booking Total</span>
+                                                    <span className="text-neutral-900 font-bold font-sans">100% Fee Forfeited</span>
                                                 </div>
                                             </div>
                                         </div>
                                     </div>
+
                                     <p className="text-[10px] text-neutral-400 uppercase tracking-wider pt-2 border-t border-neutral-100">
                                         ⚠️ All outstanding balances must be fully resolved before securing future bookings.
                                     </p>
                                 </div>
                             )}
                         </div>
+
                         {/* 12. BUMP-OUT & VACATING */}
                         <div>
                             <button
@@ -2361,7 +2315,7 @@ This room does not have private bathrooms. The closest toilets are down the hall
                                     <div>
                                         <h5 className="font-bold text-neutral-900 uppercase text-[10px] tracking-wide mb-2">Mandatory Checkout Checklist:</h5>
                                         <ul className="list-disc pl-4 space-y-2 text-neutral-600">
-                                            <li>Turn of AV displays.</li>
+                                            <li>Turn off AV displays.</li>
                                             <li>Put everything you took out back in its place. Flag items if you are unsure where they belong.</li>
                                             <li>Use the cleaning supplies provided to wipe tables, benches, and whiteboards.</li>
                                             <li>Load used glasses or mugs straight into the dishwasher (if full, stack neatly inside the sink).</li>
@@ -2383,66 +2337,179 @@ This room does not have private bathrooms. The closest toilets are down the hall
                                 onClick={() => toggleAccordion('other-spaces')}
                                 className="w-full p-4 flex justify-between items-center text-xs font-bold uppercase tracking-wide text-neutral-800 bg-neutral-50/60 hover:bg-neutral-50 border-t border-neutral-100 cursor-pointer"
                             >
-                                <span>What other spaces I can book on Kensington campus or in the CBD?</span>
+                                <span>What other spaces can I book on Kensington campus, Paddington, or in the CBD?</span>
                                 <span>{activeAccordion === 'other-spaces' ? '−' : '+'}</span>
                             </button>
                             {activeAccordion === 'other-spaces' && (
-                                <div className="p-6 bg-white text-xs space-y-5 animate-in slide-in-from-top-1 duration-150 text-gray-600 font-normal leading-relaxed">
+                                <div className="p-6 bg-white text-xs space-y-6 animate-in slide-in-from-top-1 duration-150 text-gray-600 font-normal leading-relaxed">
                                     <p className="text-gray-600 font-medium">
-                                        UNSW staff and student groups can book a variety of seminar, meeting, and event spaces across campus and in the CBD:
+                                        It can be a real challenge finding suitable spaces on campus! UNSW staff, student groups, and innovation ecosystem members can explore these recommended seminar, meeting, workshop, and event spaces:
                                     </p>
 
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
-                                        {/* SEMINAR ROOMS */}
+
+                                        {/* INNOVATION HUB STUDIO - PADDINGTON */}
                                         <div className="p-4 bg-neutral-50 border border-neutral-200 rounded-sm space-y-2">
                                             <div className="flex justify-between items-center">
-                                                <span className="font-extrabold text-black uppercase text-[10px] tracking-wider">Seminar Rooms</span>
-                                                <span className="bg-[#EAD64D] text-black font-extrabold text-[9px] uppercase px-2 py-0.5 rounded-xs">Free for Staff</span>
+                                                <span className="font-extrabold text-black uppercase text-[10px] tracking-wider">Innovation Hub Studio (A104)</span>
+                                                <span className="bg-[#EAD64D] text-black font-extrabold text-[9px] uppercase px-2 py-0.5 rounded-xs">Paddington</span>
                                             </div>
-                                            <ul className="space-y-1.5 text-neutral-700 text-[11px]">
-                                                <li><strong>Capacity:</strong> Cluster style layout for 36 pax.</li>
-                                                <li><strong>AV Setup:</strong> Built-in self-service AV system with on-call support.</li>
+                                            <ul className="space-y-1 text-neutral-700 text-[11px]">
+                                                <li><strong>Capacity:</strong> 16–20 people</li>
+                                                <li><strong>Details:</strong> Managed by UNSW Innovation Hub. Ideal for small to medium workshops.</li>
+                                                <li><strong>Contact:</strong> <a href="mailto:innovationhub@unsw.edu.au" className="underline font-bold text-black">innovationhub@unsw.edu.au ↗</a></li>
+                                            </ul>
+                                        </div>
+
+                                        {/* BOARDROOM - LEVEL 5 LOWY */}
+                                        <div className="p-4 bg-neutral-50 border border-neutral-200 rounded-sm space-y-2">
+                                            <div className="flex justify-between items-center">
+                                                <span className="font-extrabold text-black uppercase text-[10px] tracking-wider">Boardroom, Level 5 Lowy (501)</span>
+                                                <span className="bg-[#EAD64D] text-black font-extrabold text-[9px] uppercase px-2 py-0.5 rounded-xs">Kensington</span>
+                                            </div>
+                                            <ul className="space-y-1 text-neutral-700 text-[11px]">
+                                                <li><strong>Capacity:</strong> 18 people</li>
+                                                <li><strong>Details:</strong> Belongs to ADA (Arts, Design & Architecture). Nicole Pridham can book on behalf of the UNSW Innovation Ecosystem.</li>
+                                                <li><strong>Contact:</strong> <a href="mailto:innovationhub@unsw.edu.au" className="underline font-bold text-black">innovationhub@unsw.edu.au ↗</a></li>
+                                            </ul>
+                                        </div>
+
+                                        {/* MEETING ROOM - LEVEL 5 LOWY */}
+                                        <div className="p-4 bg-neutral-50 border border-neutral-200 rounded-sm space-y-2">
+                                            <div className="flex justify-between items-center">
+                                                <span className="font-extrabold text-black uppercase text-[10px] tracking-wider">Meeting Room, Level 5 Lowy (534)</span>
+                                                <span className="bg-[#EAD64D] text-black font-extrabold text-[9px] uppercase px-2 py-0.5 rounded-xs">Kensington</span>
+                                            </div>
+                                            <ul className="space-y-1 text-neutral-700 text-[11px]">
+                                                <li><strong>Capacity:</strong> 10 people</li>
+                                                <li><strong>Details:</strong> ADA room. Best suited for small workshops or team meetings.</li>
+                                                <li><strong>Contact:</strong> <a href="mailto:innovationhub@unsw.edu.au" className="underline font-bold text-black">innovationhub@unsw.edu.au ↗</a></li>
+                                            </ul>
+                                        </div>
+
+                                        {/* HEALTH TRANSLATION HUB */}
+                                        <div className="p-4 bg-neutral-50 border border-neutral-200 rounded-sm space-y-2">
+                                            <div className="flex justify-between items-center">
+                                                <span className="font-extrabold text-black uppercase text-[10px] tracking-wider">Health Translation Hub (HTH)</span>
+                                                <span className="bg-[#EAD64D] text-black font-extrabold text-[9px] uppercase px-2 py-0.5 rounded-xs">Kensington</span>
+                                            </div>
+                                            <ul className="space-y-1 text-neutral-700 text-[11px]">
+                                                <li><strong>Spaces:</strong> HTH Seminar Room & Level 5 Meeting Room</li>
                                                 <li>
-                                                    <strong>How to Book:</strong> Book directly via <a href="https://resourcebooker.unsw.edu.au/" target="_blank" rel="noopener noreferrer" className="underline font-bold text-black">UNSW Resource Booker ↗</a> (or find it on your <a href="https://my.unsw.edu.au" target="_blank" rel="noopener noreferrer" className="underline font-bold text-black">myUNSW ↗</a> homepage under <em>Services for Staff</em>).
+                                                    <strong>Details & Bookings:</strong> Explore options on the <a href="https://www.unsw.edu.au/precincts/rhip/hth/events/seminar-room" target="_blank" rel="noopener noreferrer" className="underline font-bold text-black">HTH Seminar Room Page ↗</a>.
                                                 </li>
                                             </ul>
                                         </div>
 
-                                        {/* MEETING ROOMS */}
+                                        {/* SEMINAR ROOMS */}
                                         <div className="p-4 bg-neutral-50 border border-neutral-200 rounded-sm space-y-2">
                                             <div className="flex justify-between items-center">
-                                                <span className="font-extrabold text-black uppercase text-[10px] tracking-wider">CBD Meeting Rooms</span>
-                                                <span className="bg-[#EAD64D] text-black font-extrabold text-[9px] uppercase px-2 py-0.5 rounded-xs">Free for Staff</span>
+                                                <span className="font-extrabold text-black uppercase text-[10px] tracking-wider">Campus Seminar Rooms</span>
+                                                <span className="bg-[#EAD64D] text-black font-extrabold text-[9px] uppercase px-2 py-0.5 rounded-xs">Kensington</span>
                                             </div>
-                                            <ul className="space-y-1.5 text-neutral-700 text-[11px]">
-                                                <li><strong>Capacity & Duration:</strong> Accommodates 6–8 guests for up to 4 hours.</li>
-                                                <li><strong>Operating Hours:</strong> Mon–Fri, 8:00 AM – 5:00 PM.</li>
-                                                <li><strong>AV Setup:</strong> In-built Teams-enabled audio-visual system with on-call support.</li>
-                                                <li><strong>How to Book:</strong> Email booking requests to <a href="mailto:cbdcampus@unsw.edu.au" className="underline font-bold text-black">cbdcampus@unsw.edu.au ↗</a>.</li>
+                                            <ul className="space-y-1 text-neutral-700 text-[11px]">
+                                                <li><strong>Capacity:</strong> Cluster style layout for 36 pax. Built-in self-service AV. Free for staff.</li>
+                                                <li>
+                                                    <strong>How to Book:</strong> Book via <a href="https://resourcebooker.unsw.edu.au/" target="_blank" rel="noopener noreferrer" className="underline font-bold text-black">UNSW Resource Booker ↗</a> (or via <a href="https://my.unsw.edu.au" target="_blank" rel="noopener noreferrer" className="underline font-bold text-black">myUNSW ↗</a> under <em>Services for Staff</em>).
+                                                </li>
                                             </ul>
                                         </div>
 
-                                        {/* MAIN CAMPUS VENUES & EVENT SERVICES */}
+                                        {/* CBD MEETING ROOMS */}
                                         <div className="p-4 bg-neutral-50 border border-neutral-200 rounded-sm space-y-2">
                                             <div className="flex justify-between items-center">
-                                                <span className="font-extrabold text-black uppercase text-[10px] tracking-wider">UNSW Venue & Event Services</span>
-                                                <span className="bg-[#EAD64D] text-black font-extrabold text-[9px] uppercase px-2 py-0.5 rounded-xs">For a Cost</span>
+                                                <span className="font-extrabold text-black uppercase text-[10px] tracking-wider">UNSW CBD Campus Rooms</span>
+                                                <span className="bg-[#EAD64D] text-black font-extrabold text-[9px] uppercase px-2 py-0.5 rounded-xs">Sydney CBD</span>
                                             </div>
-                                            <p className="text-neutral-700 text-[11px]">
-                                                For larger campus venues, lecture theatres, outdoor spaces, rooms in the Chancellery (Board Room, Meeting Rooms) etc. explore options through <a href="https://www.venueandeventservices.unsw.edu.au/venues" target="_blank" rel="noopener noreferrer" className="underline font-bold text-black">UNSW Venue & Event Services ↗</a>.
-                                            </p>
+                                            <ul className="space-y-1 text-neutral-700 text-[11px]">
+                                                <li><strong>Capacity:</strong> 6–8 guests for up to 4 hours (Mon–Fri 8am–5pm). Teams AV built-in. Free for staff.</li>
+                                                <li><strong>How to Book:</strong> Email <a href="mailto:cbdcampus@unsw.edu.au" className="underline font-bold text-black">cbdcampus@unsw.edu.au ↗</a> or visit the <a href="https://www.unsw.edu.au/estate/campus-development/projects/cbd-campus" target="_blank" rel="noopener noreferrer" className="underline font-bold text-black">CBD Campus Info Page ↗</a>.</li>
+                                            </ul>
+                                        </div>
+
+                                        {/* BUSINESS SCHOOL LOUNGE */}
+                                        <div className="p-4 bg-neutral-50 border border-neutral-200 rounded-sm space-y-2">
+                                            <div className="flex justify-between items-center">
+                                                <span className="font-extrabold text-black uppercase text-[10px] tracking-wider">Business School Dean's Lounge</span>
+                                                <span className="bg-[#EAD64D] text-black font-extrabold text-[9px] uppercase px-2 py-0.5 rounded-xs">Kensington</span>
+                                            </div>
+                                            <ul className="space-y-1 text-neutral-700 text-[11px]">
+                                                <li><strong>Details:</strong> Executive meeting space and lounge setup for Business School events.</li>
+                                                <li><strong>Link:</strong> <a href="https://www.unsw.edu.au/estate/campus-development/projects/business-school-deans-lounge" target="_blank" rel="noopener noreferrer" className="underline font-bold text-black">Business School Lounge Page ↗</a></li>
+                                            </ul>
+                                        </div>
+
+                                        {/* DESIGN NEXT STUDIO */}
+                                        <div className="p-4 bg-neutral-50 border border-neutral-200 rounded-sm space-y-2">
+                                            <div className="flex justify-between items-center">
+                                                <span className="font-extrabold text-black uppercase text-[10px] tracking-wider">Design Next Studio</span>
+                                                <span className="bg-[#EAD64D] text-black font-extrabold text-[9px] uppercase px-2 py-0.5 rounded-xs">Kensington</span>
+                                            </div>
+                                            <ul className="space-y-1 text-neutral-700 text-[11px]">
+                                                <li><strong>Details:</strong> Dedicated design sprint & interdisciplinary teaching space.</li>
+                                                <li><strong>Link:</strong> <a href="https://www.designnext.unsw.edu.au/" target="_blank" rel="noopener noreferrer" className="underline font-bold text-black">Design Next Studio ↗</a></li>
+                                            </ul>
+                                        </div>
+
+                                        {/* TEACHING COMMONS */}
+                                        <div className="p-4 bg-neutral-50 border border-neutral-200 rounded-sm space-y-2">
+                                            <div className="flex justify-between items-center">
+                                                <span className="font-extrabold text-black uppercase text-[10px] tracking-wider">Teaching Commons</span>
+                                                <span className="bg-[#EAD64D] text-black font-extrabold text-[9px] uppercase px-2 py-0.5 rounded-xs">Kensington</span>
+                                            </div>
+                                            <ul className="space-y-1 text-neutral-700 text-[11px]">
+                                                <li><strong>Details:</strong> Collaborative teaching and staff development environment.</li>
+                                                <li><strong>Link:</strong> <a href="https://www.education.unsw.edu.au/teaching/teaching-commons" target="_blank" rel="noopener noreferrer" className="underline font-bold text-black">Teaching Commons ↗</a></li>
+                                            </ul>
+                                        </div>
+
+                                        {/* THE BANK */}
+                                        <div className="p-4 bg-neutral-50 border border-neutral-200 rounded-sm space-y-2">
+                                            <div className="flex justify-between items-center">
+                                                <span className="font-extrabold text-black uppercase text-[10px] tracking-wider">The Bank</span>
+                                                <span className="bg-[#EAD64D] text-black font-extrabold text-[9px] uppercase px-2 py-0.5 rounded-xs">Kensington</span>
+                                            </div>
+                                            <ul className="space-y-1 text-neutral-700 text-[11px]">
+                                                <li><strong>Details:</strong> Specialised space managed by the Health Precincts team.</li>
+                                                <li><strong>Contact:</strong> Enquire directly through the UNSW Health Precincts team.</li>
+                                            </ul>
+                                        </div>
+
+                                        {/* CHANCELLERY MEETING ROOMS */}
+                                        <div className="p-4 bg-neutral-50 border border-neutral-200 rounded-sm space-y-2">
+                                            <div className="flex justify-between items-center">
+                                                <span className="font-extrabold text-black uppercase text-[10px] tracking-wider">Chancellery Meeting Rooms</span>
+                                                <span className="bg-[#EAD64D] text-black font-extrabold text-[9px] uppercase px-2 py-0.5 rounded-xs">Kensington</span>
+                                            </div>
+                                            <ul className="space-y-1 text-neutral-700 text-[11px]">
+                                                <li><strong>Details:</strong> High-level executive boardrooms and meeting spaces.</li>
+                                                <li><strong>How to Book:</strong> Enquire via Chancellery executive booking staff.</li>
+                                            </ul>
                                         </div>
 
                                         {/* ARC ROUNDHOUSE BOOKINGS */}
                                         <div className="p-4 bg-neutral-50 border border-neutral-200 rounded-sm space-y-2">
                                             <div className="flex justify-between items-center">
                                                 <span className="font-extrabold text-black uppercase text-[10px] tracking-wider">Arc Roundhouse</span>
-                                                <span className="bg-[#EAD64D] text-black font-extrabold text-[9px] uppercase px-2 py-0.5 rounded-xs">For a Cost</span>
+                                                <span className="bg-[#EAD64D] text-black font-extrabold text-[9px] uppercase px-2 py-0.5 rounded-xs">Kensington</span>
+                                            </div>
+                                            <ul className="space-y-1 text-neutral-700 text-[11px]">
+                                                <li><strong>Details:</strong> Large-scale event spaces and main hall bookings (for a cost).</li>
+                                                <li><strong>Link:</strong> <a href="https://www.arc.unsw.edu.au/roundhouse/bookings" target="_blank" rel="noopener noreferrer" className="underline font-bold text-black">Arc Roundhouse Bookings ↗</a></li>
+                                            </ul>
+                                        </div>
+
+                                        {/* MAIN CAMPUS VENUES & EVENT SERVICES */}
+                                        <div className="p-4 bg-neutral-50 border border-neutral-200 rounded-sm space-y-2 sm:col-span-2">
+                                            <div className="flex justify-between items-center border-b border-neutral-200 pb-1.5">
+                                                <span className="font-extrabold text-black uppercase text-[10px] tracking-wider">UNSW Venue & Event Services (Central Venues)</span>
+                                                <span className="bg-[#EAD64D] text-black font-extrabold text-[9px] uppercase px-2 py-0.5 rounded-xs">Campus Wide</span>
                                             </div>
                                             <p className="text-neutral-700 text-[11px]">
-                                                Looking to host a large-scale event. Book rooms and main hall spaces at the Roundhouse directly via <a href="https://www.arc.unsw.edu.au/roundhouse/bookings" target="_blank" rel="noopener noreferrer" className="underline font-bold text-black">Arc Roundhouse Bookings ↗</a>.
+                                                For major campus venues, large lecture theatres, outdoor lawns, and dedicated event management support, explore options directly through <a href="https://www.venueandeventservices.unsw.edu.au/venues" target="_blank" rel="noopener noreferrer" className="underline font-bold text-black">UNSW Venue & Event Services ↗</a>.
                                             </p>
                                         </div>
+
                                     </div>
                                 </div>
                             )}
@@ -2453,7 +2520,7 @@ This room does not have private bathrooms. The closest toilets are down the hall
                             <button
                                 type="button"
                                 onClick={() => toggleAccordion('riskAssessment')}
-                                className="w-full p-4 flex justify-between items-center text-xs font-bold uppercase tracking-wide text-neutral-800 bg-neutral-50/60 hover:bg-neutral-50 border-t border-neutral-100"
+                                className="w-full p-4 flex justify-between items-center text-xs font-bold uppercase tracking-wide text-neutral-800 bg-neutral-50/60 hover:bg-neutral-50 border-t border-neutral-100 cursor-pointer"
                             >
                                 <span>Do I need to write my own risk assessment for an event in one of your spaces?</span>
                                 <span>{activeAccordion === 'riskAssessment' ? '−' : '+'}</span>
@@ -2464,7 +2531,10 @@ This room does not have private bathrooms. The closest toilets are down the hall
                                         No, you do not need to create your own risk assessment for standard events hosted in our facilities.
                                     </p>
                                     <p>
-                                        We have an official UNSW risk assessment covering general events within the Michael Crouch Innovation Centre (MCIC) Event Spaces: <strong>Risk Assessment #1120290</strong>. If your event involves specialised equipment or high-risk activities beyond standard event operations, please notify our team prior to your booking.
+                                        We have an official UNSW risk assessment covering general events within the Michael Crouch Innovation Centre (MCIC) Event Spaces: <strong>Risk Assessment #1120290</strong>.
+                                    </p>
+                                    <p>
+                                        However, if your event involves high-power electrical gear, heavy staging, specialised machinery, or high-risk activities beyond standard event operations, please notify our team prior to your booking so safety compliance can be reviewed.
                                     </p>
                                 </div>
                             )}
@@ -2633,11 +2703,142 @@ This room does not have private bathrooms. The closest toilets are down the hall
                                     </div>
                                 </div>
                             )}
-                        </div>
+
+                            {/* VENUE HIRE TERMS & CONDITIONS */}
+                            <div>
+                                <button
+                                    type="button"
+                                    onClick={() => toggleAccordion('terms-conditions')}
+                                    className="w-full p-4 flex justify-between items-center text-xs font-bold uppercase tracking-wide text-neutral-800 bg-neutral-50/60 hover:bg-neutral-50 border-t border-neutral-100 cursor-pointer"
+                                >
+                                    <span>Venue Hire Terms & Conditions (T&Cs)</span>
+                                    <span>{activeAccordion === 'terms-conditions' ? '−' : '+'}</span>
+                                </button>
+                                {activeAccordion === 'terms-conditions' && (
+                                    <div className="p-6 bg-white text-xs space-y-6 animate-in slide-in-from-top-1 duration-150 text-neutral-700 font-normal leading-relaxed">
+
+                                        {/* TOP ACTION BAR */}
+                                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 bg-neutral-50 border border-neutral-200 rounded-xs">
+                                            <span className="text-[11px] text-neutral-600 font-medium">
+                                                By submitting a booking request, hirers agree to abide by all sections of the Venue Hire Agreement outlined below.
+                                            </span>
+                                            <a
+                                                href="/docs/MCIC_Venue_Hire_Terms_and_Conditions.pdf"
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="bg-neutral-900 text-white px-3 py-1.5 rounded-xs font-bold uppercase tracking-wider text-[10px] hover:bg-neutral-800 text-center whitespace-nowrap shrink-0"
+                                            >
+                                                Download PDF ↗
+                                            </a>
+                                        </div>
+
+                                        {/* FULL UNABBREVIATED AGREEMENT TEXT DISPLAY */}
+                                        <div className="space-y-6 border-t border-neutral-100 pt-4 text-neutral-600 text-[11px] font-sans">
+
+                                            <div className="space-y-1 font-mono text-[10px] text-neutral-500 uppercase tracking-wider">
+                                                <strong className="text-neutral-900 text-xs block font-sans font-bold">VENUE HIRE AGREEMENT: TERMS & CONDITIONS</strong>
+                                                <p><strong>PARTIES:</strong></p>
+                                                <p>1. UNSW Founders (ABN 57 195 873 179) of Michael Crouch Innovation Centre, UNSW Sydney, Sydney, NSW 2052</p>
+                                                <p>2. "The Hirer"</p>
+                                                <p>(together, the "Parties").</p>
+                                            </div>
+
+                                            {/* SECTION 1 */}
+                                            <div className="space-y-1.5 border-b border-neutral-100 pb-4">
+                                                <h5 className="font-bold text-neutral-900 uppercase text-[10px] tracking-wide">SECTION 1. PAYMENT & DEPOSIT SCHEDULE</h5>
+                                                <p><strong>1.1 Deposit:</strong> A deposit payment of 50% of the total hire charge is required upon booking to confirm and secure the space reservation.</p>
+                                                <p><strong>1.2 Balance Payment:</strong> The remaining 50% balance must be paid no later than 48 hours prior to the event commencement time upon receipt of a tax invoice.</p>
+                                                <p><strong>1.3 Failure to Pay:</strong> Failure to settle the deposit or final balance within the required timeframe grants UNSW Founders the right to cancel the booking.</p>
+                                                <p><strong>1.4 Cleaning & Reset Surcharges:</strong> If the Hired and Shared Areas are left disorderly, dirty, or requiring furniture resets after the booking window, UNSW Founders reserves the right to recover full cleaning costs at a minimum rate of $200 + GST.</p>
+                                                <p><strong>1.5 Casual Staffing Rates:</strong> Event support staff are billed at $50 per hour (minimum 3-hour shift for Mon–Sat; minimum 4-hour shift for Sundays and Public Holidays).</p>
+                                                <p><strong>1.6 Staff Overtime:</strong> Overtime beyond 8 hours is charged at 1.5x the base rate ($75/hr). Shifts exceeding 10 hours are charged at double time ($100/hr).</p>
+                                            </div>
+
+                                            {/* SECTION 2 */}
+                                            <div className="space-y-1.5 border-b border-neutral-100 pb-4">
+                                                <h5 className="font-bold text-neutral-900 uppercase text-[10px] tracking-wide">SECTION 2. CANCELLATION, REFUNDS & VENUE VARIATIONS</h5>
+                                                <p><strong>2.1 Cancellation Window & Charges (By Hirer):</strong></p>
+                                                <div className="pl-4 space-y-1">
+                                                    <p><strong>2.1.1 6+ Working Days Notice:</strong> Cancellations received in writing at least 6 working days prior to the event will receive a full refund of all monies paid.</p>
+                                                    <p><strong>2.1.2 3 to 5 Working Days Notice:</strong> Cancellations received between 3 and 5 working days prior will forfeit 50% of the total booking fee.</p>
+                                                    <p><strong>2.1.3 Less than 2 Working Days Notice:</strong> Cancellations received less than 2 working days prior will forfeit 100% of the total booking fee.</p>
+                                                </div>
+                                                <p><strong>2.2 Venue Scheduling Conflicts & Emergency Variations (By Venue):</strong></p>
+                                                <div className="pl-4 space-y-1">
+                                                    <p><strong>2.2.1</strong> UNSW Founders reserves the right to vary, reschedule, or cancel a booking due to emergency facility maintenance, safety concerns, unexpected double-booking, or urgent internal program priorities.</p>
+                                                    <p><strong>2.2.2</strong> In such instances, UNSW Founders will provide as much advance notice as reasonably practicable and issue a full (100%) refund of all hire fees paid for that booking.</p>
+                                                </div>
+                                            </div>
+
+                                            {/* SECTION 3 */}
+                                            <div className="space-y-1.5 border-b border-neutral-100 pb-4">
+                                                <h5 className="font-bold text-neutral-900 uppercase text-[10px] tracking-wide">SECTION 3. HIRER RESPONSIBILITIES</h5>
+                                                <p><strong>3.1 Authorised Purpose:</strong> The Hirer may use the venue only for the specific purpose outlined in the booking agreement and must abide by all venue directives.</p>
+                                                <p><strong>3.2 Supervision:</strong> The Hirer must maintain active physical supervision throughout the booking window. Guests and facilities must not be left unattended.</p>
+                                                <p><strong>3.3 Damages:</strong> Any damage to the venue, furniture, or AV equipment caused during the hire period is the sole financial responsibility of the Hirer (charged at full replacement cost).</p>
+                                                <p><strong>3.4 Entry & Emergency Compliance:</strong> UNSW Founders staff reserve the right to refuse entry to or remove any person from the premises on reasonable safety grounds. Hirers must comply with all emergency personnel instructions and emergency evacuation procedures.</p>
+                                            </div>
+
+                                            {/* SECTION 4 */}
+                                            <div className="space-y-1.5 border-b border-neutral-100 pb-4">
+                                                <h5 className="font-bold text-neutral-900 uppercase text-[10px] tracking-wide">SECTION 4. EQUIPMENT & VENUE USE</h5>
+                                                <p><strong>4.1 Equipment Care:</strong> The Hirer accepts full responsibility for the safe operation of all hired items and must restore equipment to its original condition upon conclusion (fair wear and tear excepted).</p>
+                                                <p><strong>4.2 Specialised Equipment Notification:</strong> The Hirer must notify UNSW Founders prior to bringing in high-power electrical gear, staging, or specialised heavy equipment so technical staff can review safety compliance. Standard laptops, handheld cameras, personal presentation devices, and small portable items do not require prior notice.</p>
+                                                <p><strong>4.3 Prohibited Materials:</strong> Open flames, explosive materials, hazardous chemicals, fuels, and pyrotechnics are strictly prohibited anywhere within or near the venue.</p>
+                                                <p><strong>4.4 Asset Egress:</strong> All external props, catering supplies, and personal items must be removed immediately at the conclusion of the booking period.</p>
+                                            </div>
+
+                                            {/* SECTION 5 */}
+                                            <div className="space-y-1.5 border-b border-neutral-100 pb-4">
+                                                <h5 className="font-bold text-neutral-900 uppercase text-[10px] tracking-wide">SECTION 5. CATERING & ALCOHOL</h5>
+                                                <p><strong>5.1 Self-Service Catering:</strong> Hirers have full responsibility for organising food and beverages. All food and waste must be cleared away before departure. UNSW Founders reserves the right to reject third-party catering services deemed unsafe or damaging.</p>
+                                                <p><strong>5.2 Responsible Service of Alcohol (RSA):</strong> If alcohol is being served, the Hirer or designated server must hold a valid NSW RSA competency card submitted prior to the event. Alcohol must be served responsibly in accordance with NSW legislation. Alternatively, the Hirer may request and hire an RSA-certified UNSW Founders casual staff member at standard casual staffing rates ($50/hr, minimum shift requirements apply). Alcohol service will be refused or suspended if RSA requirements are unfulfilled or if minors are present.</p>
+                                            </div>
+
+                                            {/* SECTION 6 */}
+                                            <div className="space-y-1.5 border-b border-neutral-100 pb-4">
+                                                <h5 className="font-bold text-neutral-900 uppercase text-[10px] tracking-wide">SECTION 6. TICKETING, REGISTRATION & EVENT REVENUE</h5>
+                                                <p><strong>6.1 Hirer Ticketing Responsibility:</strong> Unless otherwise agreed in writing, the Hirer manages their own event registration or ticketing via their preferred external platform (e.g., Humanitix, Luma, Eventbrite, or self-hosted forms) and holds sole legal and financial responsibility for guest management and attendee ticket refunds.</p>
+                                                <p><strong>6.2 Discretionary Venue & Platform Ticketing Option:</strong> UNSW Founders reserves the right, at its absolute discretion or by mutual written agreement, to manage, execute, or require event ticketing and attendee check-in through UNSW Founders’ nominated ticketing provider or official venue platform. Where UNSW Founders manages or hosts event ticketing:</p>
+                                                <div className="pl-4 space-y-1 text-neutral-600">
+                                                    <p><strong>6.2.1 Multi-Party Fee & Revenue Distribution:</strong> For paid or ticketed events managed by UNSW Founders, total ticket proceeds collected will be distributed to cover:</p>
+                                                    <p className="pl-3">(a) Applicable platform software or transaction processing fees;</p>
+                                                    <p className="pl-3">(b) A UNSW Founders venue consignment fee of $2.50 (inc. GST) per ticket sold or distributed for paid tickets priced over $25.00;</p>
+                                                    <p className="pl-3">(c) Any outstanding venue hire, staff, or operational fees owed to UNSW Founders under this Agreement;</p>
+                                                    <p className="pl-3">(d) Net remaining ticket revenue payable to the Hirer following event conclusion.</p>
+                                                    <p><strong>6.2.2 Event Cancellation Refunds:</strong> In the event of event postponement or cancellation, UNSW Founders reserves the right to deduct unrecoverable transaction processing fees and refund attendees directly from collected proceeds.</p>
+                                                </div>
+                                            </div>
+
+                                            {/* SECTION 7 */}
+                                            <div className="space-y-1.5 border-b border-neutral-100 pb-4">
+                                                <h5 className="font-bold text-neutral-900 uppercase text-[10px] tracking-wide">SECTION 7. PROMOTION & BRAND PROTECTION</h5>
+                                                <p><strong>7.1 Venue Attribution:</strong> The Hirer may use the venue name ("Michael Crouch Innovation Centre") to indicate the physical event location.</p>
+                                                <p><strong>7.2 Brand Review Right:</strong> UNSW Founders reserves the right to review any promotional material bearing its name, logo, or venue branding, and may request immediate edits, correction, or withdrawal of materials deemed inaccurate, misleading, or in conflict with university policies.</p>
+                                            </div>
+
+                                            {/* SECTION 8 */}
+                                            <div className="space-y-1.5 border-b border-neutral-100 pb-4">
+                                                <h5 className="font-bold text-neutral-900 uppercase text-[10px] tracking-wide">SECTION 8. SAFETY & INSURANCE</h5>
+                                                <p><strong>8.1 Workplace Health & Safety:</strong> Both parties must comply with applicable WHS legislation. Hirers must follow all safety instructions provided by UNSW staff.</p>
+                                                <p><strong>8.2 Liability & Indemnity:</strong> The Hirer agrees to hold UNSW Founders indemnified against third-party claims, personal injury, or property loss arising directly from the Hirer’s negligence or event activities.</p>
+                                                <p><strong>8.3 Property Insurance:</strong> UNSW Founders is not responsible for loss, theft, or damage to personal or external contractor property brought into the venue.</p>
+                                            </div>
+
+                                            {/* SECTION 9 */}
+                                            <div className="space-y-1.5">
+                                                <h5 className="font-bold text-neutral-900 uppercase text-[10px] tracking-wide">SECTION 9. TERMINATION</h5>
+                                                <p><strong>9.1 Termination for Breach:</strong> UNSW Founders may terminate this Agreement immediately if the Hirer breaches terms, fails to settle invoices, or experiences insolvency/administration.</p>
+                                                <p><strong>9.2 No Claim Clause:</strong> Upon termination, cancellation, or scheduling variation of this Agreement, the Hirer's sole remedy against UNSW Founders is limited to a refund of hire fees paid (where applicable). The Hirer holds no right or legal claim against UNSW Founders for indirect damages, lost commercial revenue, marketing expenses, or consequential losses.</p>
+                                            </div>
+
+                                        </div>
+                                    </div>
+                                )}
+                            </div>                        </div>
 
                     </div>
                 </div>
-
                 {/* THE MAIN FORM WRAPPER TRACK BOX */}
                 <form id="booking-form" onSubmit={handleFormSubmit} className="space-y-12">
                     {/* INTENT INTERFACE GATEKEEPER WITH INTEGRATED UNIFIED HEADER */}
@@ -2751,7 +2952,7 @@ This room does not have private bathrooms. The closest toilets are down the hall
 
                                             <div className="p-3.5 bg-neutral-900 text-white font-bold rounded-xs text-xs">
                                                 Select your time blocks below. Scroll up/down to see full 24-hour availability. Hold <kbd className="bg-neutral-800 px-1 rounded-sm border border-neutral-700 text-[10px] font-mono">Shift</kbd> to select ranges.
-                                                <br></br>Note: Single space constraints apply. Click continue below to lock in parameters.
+                                                <br />Note: You can only book one room at a time.
                                             </div>
 
                                             {(() => {
@@ -2824,9 +3025,10 @@ This room does not have private bathrooms. The closest toilets are down the hall
                                                                         if (b.name === "Ground - Design Space") return 1;
                                                                         return 0;
                                                                     })
-                                                                    .map((room) => (<th key={room.name} className="p-3 text-center border-l border-neutral-800">
-                                                                        {room.name}
-                                                                    </th>
+                                                                    .map((room) => (
+                                                                        <th key={room.name} className="p-3 text-center border-l border-neutral-800">
+                                                                            {room.name}
+                                                                        </th>
                                                                     ))
                                                                 }
                                                             </tr>
@@ -2854,13 +3056,13 @@ This room does not have private bathrooms. The closest toilets are down the hall
                                                                             })
                                                                             .map((room) => {
                                                                                 const dayKeyString = formatDayKey(selectedCalendarDate);
-                                                                                const status = room.schedule[dayKeyString]?.[timeIndex] || "Available";
+                                                                                const isBlocked = isSlotBlockedByCalendar(room.name, slot);
 
                                                                                 const compositeSlotKey = `${room.name}|${dayKeyString}|${slot}`;
                                                                                 const isCurrentlySelected = selectedSlots.includes(compositeSlotKey);
 
                                                                                 const handleSlotClick = (e) => {
-                                                                                    if (status !== "Available") return;
+                                                                                    if (isBlocked) return;
 
                                                                                     const hasSelectedOtherRoomSlots = selectedSlots.some(s => !s.startsWith(`${room.name}|${dayKeyString}|`));
                                                                                     let currentActiveSelected = [...selectedSlots];
@@ -2883,9 +3085,9 @@ This room does not have private bathrooms. The closest toilets are down the hall
                                                                                         const newBatch = [];
                                                                                         for (let i = startRange; i <= endRange; i++) {
                                                                                             const loopSlotName = mockCalendarData.timeSlots[i];
-                                                                                            const targetRoomStatus = room.schedule[dayKeyString]?.[i] || "Available";
+                                                                                            const isLoopBlocked = isSlotBlockedByCalendar(room.name, loopSlotName);
 
-                                                                                            if (targetRoomStatus === "Available") {
+                                                                                            if (!isLoopBlocked) {
                                                                                                 newBatch.push(`${room.name}|${dayKeyString}|${loopSlotName}`);
                                                                                             }
                                                                                         }
@@ -2905,7 +3107,7 @@ This room does not have private bathrooms. The closest toilets are down the hall
 
                                                                                 return (
                                                                                     <td key={room.name} className="p-1 text-center border-l border-gray-100 min-w-[120px]">
-                                                                                        {status === "Available" ? (
+                                                                                        {!isBlocked ? (
                                                                                             <button
                                                                                                 type="button"
                                                                                                 onClick={(e) => {
@@ -2923,12 +3125,8 @@ This room does not have private bathrooms. The closest toilets are down the hall
                                                                                                 {isCurrentlySelected ? "✓ Selected" : "Select"}
                                                                                             </button>
                                                                                         ) : (
-                                                                                            <div className={`py-2 text-[9px] font-black uppercase tracking-wider font-sans border rounded-sm ${status === "Unavailable"
-                                                                                                ? "bg-rose-50 border-rose-200 text-rose-800 opacity-60 cursor-not-allowed"
-                                                                                                : "bg-amber-50 border-amber-200 text-amber-800"
-                                                                                                }`}
-                                                                                            >
-                                                                                                {status === "Unavailable" ? "Booked" : "TBC"}
+                                                                                            <div className="py-2 text-[9px] font-black uppercase tracking-wider font-sans border rounded-sm bg-rose-50 border-rose-200 text-rose-800 opacity-60 cursor-not-allowed select-none">
+                                                                                                Booked
                                                                                             </div>
                                                                                         )}
                                                                                     </td>
@@ -3049,7 +3247,7 @@ This room does not have private bathrooms. The closest toilets are down the hall
 
                                                         triggerRevealAllQuestions();
                                                     }}
-                                                    className="w-full bg-[#EAD64D] text-black text-center font-black py-4 text-xs uppercase tracking-widest rounded-sm hover:bg-black hover:text-white transition-all duration-200 shadow-sm"
+                                                    className="w-full bg-[#EAD64D] text-black text-center font-black py-4 text-xs uppercase tracking-widest rounded-sm hover:bg-black hover:text-white transition-all duration-200 shadow-sm cursor-pointer"
                                                 >
                                                     Continue to Booking Form ↓
                                                 </button>
@@ -3071,8 +3269,338 @@ This room does not have private bathrooms. The closest toilets are down the hall
                     {showFullForm && (
                         <div id="rest-of-form-marker" className="space-y-12 animate-in fade-in duration-500 slide-in-from-top-4">
 
-                            {dynamicFormSegmentsOrdered}
+                            {/* DYNAMICALLY ORDERED FORM SECTIONS (isCalendarOption vs Flexible) */}
+                            {isCalendarOption(formData.bookingIntent) ? (
+                                <>
+                                    {renderAffiliationSection()}
+                                    {renderEventDetailsSection()}
+                                    {renderTimesAndRunsheetSection()}
+                                    {renderAvAndEquipmentSection()}
+                                    {renderCateringSection()}
+                                </>
+                            ) : (
+                                <>
+                                    {renderEventDetailsSection()}
+                                    {renderTimesAndRunsheetSection()}
+                                    {renderAffiliationSection()}
+                                    {renderAvAndEquipmentSection()}
+                                    {renderCateringSection()}
+                                </>
+                            )}
 
+                            {/* GENERAL HIRER EVENT SUPPORT & FOCUS */}
+                            <section className="bg-white p-8 border border-gray-200 rounded-sm shadow-sm space-y-6">
+                                <h3 className="text-lg font-extrabold tracking-tight uppercase text-black border-b border-neutral-100 pb-2">
+                                    Event Support & Focus
+                                </h3>
+
+                                <div className="space-y-6">
+                                    {/* INNOVATION / ENTREPRENEURSHIP DISCOUNT QUESTION */}
+                                    <div className="space-y-2">
+                                        <label className="text-xs font-bold uppercase tracking-wider text-gray-500 block">
+                                            Does this event have to do with Innovation / Entrepreneurship?
+                                        </label>
+                                        <p className="text-[11px] text-neutral-500">
+                                            Selecting "Yes" applies an automatic discount to your venue hire rate.
+                                        </p>
+                                        <div className="flex gap-4 max-w-xs pt-1">
+                                            {['Yes', 'No'].map((choice) => (
+                                                <button
+                                                    key={choice}
+                                                    type="button"
+                                                    onClick={() => setFormData({ ...formData, isInnovationOrEntrepreneurship: choice })}
+                                                    className={`flex-1 py-2 text-xs font-bold uppercase rounded-sm border transition-all duration-150 ${formData.isInnovationOrEntrepreneurship === choice
+                                                        ? 'bg-black text-white border-black shadow-sm'
+                                                        : 'bg-white border-gray-200 text-neutral-600 hover:bg-neutral-100'
+                                                        }`}
+                                                >
+                                                    {choice}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* CASUAL STAFF BOOKING REQUEST */}
+                                    <div className="space-y-2 pt-4 border-t border-gray-100">
+                                        <label className="text-xs font-bold uppercase tracking-wider text-gray-500 block">
+                                            Would you like to book a casual staff member for event support?
+                                        </label>
+                                        <p className="text-[11px] text-neutral-500">
+                                            Casual staff members are available at $50/hr (3-hour minimum block) to assist with room setup, AV, and guest check-in.
+                                        </p>
+                                        <div className="flex gap-4 max-w-xs pt-1">
+                                            {['Yes', 'No'].map((choice) => (
+                                                <button
+                                                    key={choice}
+                                                    type="button"
+                                                    onClick={() => setFormData({ ...formData, wantsCasualStaff: choice })}
+                                                    className={`flex-1 py-2 text-xs font-bold uppercase rounded-sm border transition-all duration-150 ${formData.wantsCasualStaff === choice
+                                                        ? 'bg-black text-white border-black shadow-sm'
+                                                        : 'bg-white border-gray-200 text-neutral-600 hover:bg-neutral-100'
+                                                        }`}
+                                                >
+                                                    {choice}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* JUDGE / MENTOR SOURCING HELP */}
+                                    <div className="space-y-2 pt-4 border-t border-gray-100">
+                                        <label className="text-xs font-bold uppercase tracking-wider text-gray-500 block">
+                                            Do you need help to source a judge / mentor for an entrepreneurship related event?
+                                        </label>
+                                        <div className="flex gap-4 max-w-xs pt-1">
+                                            {['Yes', 'No'].map((choice) => (
+                                                <button
+                                                    key={choice}
+                                                    type="button"
+                                                    onClick={() => setFormData({ ...formData, needsJudgeHelp: choice })}
+                                                    className={`flex-1 py-2 text-xs font-bold uppercase rounded-sm border transition-all duration-150 ${formData.needsJudgeHelp === choice
+                                                        ? 'bg-black text-white border-black shadow-sm'
+                                                        : 'bg-white border-gray-200 text-neutral-600 hover:bg-neutral-100'
+                                                        }`}
+                                                >
+                                                    {choice}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+                            </section>
+
+                            {/* SPECIALIZED UNSW FOUNDERS INTERNAL STAFF SECTION */}
+                            {departmentType === 'UNSW Founders' && (
+                                <section className="bg-neutral-900 text-white p-8 border border-neutral-800 rounded-sm shadow-sm space-y-6 animate-in fade-in duration-200">
+                                    <div className="border-b border-neutral-800 pb-2 flex justify-between items-center">
+                                        <h3 className="text-lg font-extrabold tracking-tight uppercase text-white">
+                                            Internal Founders Staff Coordination
+                                        </h3>
+                                        <span className="bg-[#EAD64D] text-black font-extrabold text-[9px] uppercase px-2 py-0.5 rounded-xs">
+                                            Founders Team Only
+                                        </span>
+                                    </div>
+
+                                    {/* TAMARA PRESENCE REQUIREMENT */}
+                                    <div className="space-y-3">
+                                        <label className="text-xs font-bold uppercase tracking-wider text-neutral-300 block">
+                                            Do you need Tamara present for this event?
+                                        </label>
+                                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                                            {[
+                                                { label: 'Whole Event', val: 'Whole event' },
+                                                { label: 'Setup Only', val: 'Setup' },
+                                                { label: 'Formalities', val: 'Formalities' },
+                                                { label: 'Not at all', val: 'Not at all' }
+                                            ].map((option) => (
+                                                <button
+                                                    key={option.val}
+                                                    type="button"
+                                                    onClick={() => setFormData({ ...formData, tamaraPresence: option.val })}
+                                                    className={`p-3 text-xs font-bold uppercase rounded-sm border text-center transition-all ${formData.tamaraPresence === option.val
+                                                        ? 'bg-[#EAD64D] text-black border-[#EAD64D]'
+                                                        : 'bg-neutral-800 text-neutral-300 border-neutral-700 hover:bg-neutral-700'
+                                                        }`}
+                                                >
+                                                    {option.label}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* FOUNDERS SERVICEWARE, FOOD & DRINKS REQUIREMENTS */}
+                                    <div className="space-y-4 pt-4 border-t border-neutral-800">
+                                        <label className="text-xs font-bold uppercase tracking-wider text-neutral-300 block">
+                                            What serviceware, food & drinks do you need?
+                                        </label>
+
+                                        {/* DISPOSABLE VS REUSABLE OPTION */}
+                                        <div className="grid grid-cols-2 gap-3 max-w-sm">
+                                            {[
+                                                { label: 'Throwaway / Disposable', val: 'Throwaway' },
+                                                { label: 'Re-usable', val: 'Re-usable' }
+                                            ].map((pref) => (
+                                                <button
+                                                    key={pref.val}
+                                                    type="button"
+                                                    onClick={() => setFormData({ ...formData, servicewarePreference: pref.val })}
+                                                    className={`p-2.5 text-xs font-bold uppercase rounded-sm border text-center transition-all ${formData.servicewarePreference === pref.val
+                                                        ? 'bg-[#EAD64D] text-black border-[#EAD64D]'
+                                                        : 'bg-neutral-800 text-neutral-300 border-neutral-700 hover:bg-neutral-700'
+                                                        }`}
+                                                >
+                                                    {pref.label}
+                                                </button>
+                                            ))}
+                                        </div>
+
+                                        {/* SUPPLIES & ORDERS CHECKLIST */}
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 pt-2">
+                                            {[
+                                                { key: 'needWoolworthsOrder', label: 'Woolworths Order (Food, Soft Drink)' },
+                                                { key: 'needDanMurphysOrder', label: 'Dan Murphy\'s Order (Wine, Beer, etc.)' },
+                                                { key: 'needPlates', label: 'Plates' },
+                                                { key: 'needNapkins', label: 'Napkins' },
+                                                { key: 'needTongs', label: 'Tongs' },
+                                                { key: 'needCutlery', label: 'Cutlery' },
+                                                { key: 'needIce', label: 'Ice' }
+                                            ].map((item) => (
+                                                <label key={item.key} className="flex items-center gap-2.5 p-3 bg-neutral-950 border border-neutral-800 rounded-sm cursor-pointer select-none hover:border-neutral-700">
+                                                    <input
+                                                        type="checkbox"
+                                                        className="w-4 h-4 accent-[#EAD64D] rounded-sm"
+                                                        checked={formData.foundersSupplies?.[item.key] || false}
+                                                        onChange={(e) => setFormData({
+                                                            ...formData,
+                                                            foundersSupplies: {
+                                                                ...formData.foundersSupplies,
+                                                                [item.key]: e.target.checked
+                                                            }
+                                                        })}
+                                                    />
+                                                    <span className="text-xs font-bold text-neutral-300">{item.label}</span>
+                                                </label>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* CASUAL STAFF SCHEDULING & PREFERENCES */}
+                                    <div className="space-y-4 pt-4 border-t border-neutral-800">
+                                        <label className="text-xs font-bold uppercase tracking-wider text-neutral-300 block">
+                                            Do you need casual staff assigned?
+                                        </label>
+                                        <div className="flex gap-4 max-w-xs">
+                                            {['Yes', 'No'].map((choice) => (
+                                                <button
+                                                    key={choice}
+                                                    type="button"
+                                                    onClick={() => setFormData({ ...formData, needsFoundersCasualStaff: choice })}
+                                                    className={`flex-1 py-2 text-xs font-bold uppercase rounded-sm border transition-all ${formData.needsFoundersCasualStaff === choice
+                                                        ? 'bg-[#EAD64D] text-black border-[#EAD64D]'
+                                                        : 'bg-neutral-800 text-neutral-300 border-neutral-700 hover:bg-neutral-700'
+                                                        }`}
+                                                >
+                                                    {choice}
+                                                </button>
+                                            ))}
+                                        </div>
+
+                                        {/* EXPANDABLE CASUAL STAFF ENTRIES */}
+                                        {formData.needsFoundersCasualStaff === 'Yes' && (
+                                            <div className="space-y-4 pt-3 animate-in slide-in-from-top-2 duration-200">
+                                                {formData.casualStaffDetails.map((staffRow, idx) => (
+                                                    <div key={idx} className="p-4 bg-neutral-950 border border-neutral-800 rounded-sm space-y-3 relative">
+                                                        <div className="flex justify-between items-center border-b border-neutral-800 pb-2">
+                                                            <span className="text-[10px] font-bold uppercase text-[#EAD64D]">
+                                                                Casual Staff Shift #{idx + 1}
+                                                            </span>
+                                                            {formData.casualStaffDetails.length > 1 && (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => {
+                                                                        const updated = formData.casualStaffDetails.filter((_, i) => i !== idx);
+                                                                        setFormData({ ...formData, casualStaffDetails: updated });
+                                                                    }}
+                                                                    className="text-red-400 hover:text-red-300 text-xs font-bold cursor-pointer"
+                                                                >
+                                                                    ✕ Remove
+                                                                </button>
+                                                            )}
+                                                        </div>
+
+                                                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                                            <div>
+                                                                <label className="text-[10px] font-bold text-neutral-400 uppercase block mb-1">
+                                                                    Preferred Casual Staff
+                                                                </label>
+                                                                <select
+                                                                    value={staffRow.preferredStaff}
+                                                                    onChange={(e) => {
+                                                                        const updated = [...formData.casualStaffDetails];
+                                                                        updated[idx].preferredStaff = e.target.value;
+                                                                        setFormData({ ...formData, casualStaffDetails: updated });
+                                                                    }}
+                                                                    className="w-full p-2 bg-neutral-900 border border-neutral-700 text-white text-xs font-medium rounded-sm outline-none focus:border-[#EAD64D]"
+                                                                >
+                                                                    <option value="">-- Select Preferred Staff --</option>
+                                                                    {CASUAL_STAFF_LIST.map((name) => (
+                                                                        <option key={name} value={name}>{name}</option>
+                                                                    ))}
+                                                                </select>
+                                                            </div>
+
+                                                            <div>
+                                                                <label className="text-[10px] font-bold text-neutral-400 uppercase block mb-1">
+                                                                    Shift Start Time
+                                                                </label>
+                                                                <input
+                                                                    type="time"
+                                                                    value={staffRow.shiftStart}
+                                                                    onChange={(e) => {
+                                                                        const updated = [...formData.casualStaffDetails];
+                                                                        updated[idx].shiftStart = e.target.value;
+                                                                        setFormData({ ...formData, casualStaffDetails: updated });
+                                                                    }}
+                                                                    className="w-full p-2 bg-neutral-900 border border-neutral-700 text-white text-xs font-medium rounded-sm outline-none focus:border-[#EAD64D]"
+                                                                />
+                                                            </div>
+
+                                                            <div>
+                                                                <label className="text-[10px] font-bold text-neutral-400 uppercase block mb-1">
+                                                                    Shift End Time
+                                                                </label>
+                                                                <input
+                                                                    type="time"
+                                                                    value={staffRow.shiftEnd}
+                                                                    onChange={(e) => {
+                                                                        const updated = [...formData.casualStaffDetails];
+                                                                        updated[idx].shiftEnd = e.target.value;
+                                                                        setFormData({ ...formData, casualStaffDetails: updated });
+                                                                    }}
+                                                                    className="w-full p-2 bg-neutral-900 border border-neutral-700 text-white text-xs font-medium rounded-sm outline-none focus:border-[#EAD64D]"
+                                                                />
+                                                            </div>
+                                                        </div>
+
+                                                        <div>
+                                                            <label className="text-[10px] font-bold text-neutral-400 uppercase block mb-1">
+                                                                Task Description / Shift Notes
+                                                            </label>
+                                                            <input
+                                                                type="text"
+                                                                placeholder="e.g. Help set up chairs, check-in attendees at door, manage AV"
+                                                                value={staffRow.tasks}
+                                                                onChange={(e) => {
+                                                                    const updated = [...formData.casualStaffDetails];
+                                                                    updated[idx].tasks = e.target.value;
+                                                                    setFormData({ ...formData, casualStaffDetails: updated });
+                                                                }}
+                                                                className="w-full p-2 bg-neutral-900 border border-neutral-700 text-white text-xs font-medium rounded-sm outline-none focus:border-[#EAD64D]"
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                ))}
+
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setFormData({
+                                                            ...formData,
+                                                            casualStaffDetails: [
+                                                                ...formData.casualStaffDetails,
+                                                                { preferredStaff: '', shiftStart: '', shiftEnd: '', tasks: '' }
+                                                            ]
+                                                        });
+                                                    }}
+                                                    className="w-full py-2 bg-neutral-800 text-[#EAD64D] border border-neutral-700 rounded-sm text-xs font-bold uppercase tracking-wider hover:bg-neutral-700 transition-colors cursor-pointer"
+                                                >
+                                                    + Add Another Casual Staff Shift
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
+                                </section>
+                            )}
                             {/* CONTACTS MANAGEMENT PROFILE */}
                             <section className="bg-white p-8 border border-gray-200 rounded-sm shadow-sm space-y-6">
                                 <h3 className="text-lg font-extrabold tracking-tight uppercase text-black border-b border-neutral-100 pb-2">
@@ -3134,7 +3662,7 @@ This room does not have private bathrooms. The closest toilets are down the hall
                                                     key={choice.label}
                                                     type="button"
                                                     onClick={() => setFormData({ ...formData, isHighRisk: choice.value })}
-                                                    className={`flex-1 py-2 text-xs font-bold uppercase rounded-sm border transition-all duration-150 hover:scale-[1.02] active:scale-[0.98] ${formData.isHighRisk === choice.value
+                                                    className={`flex-1 py-2 text-xs font-bold uppercase rounded-sm border transition-all duration-150 hover:scale-[1.02] active:scale-[0.99] ${formData.isHighRisk === choice.value
                                                         ? 'bg-black text-white border-black shadow-sm'
                                                         : 'bg-white border-gray-200 text-neutral-600 hover:bg-neutral-100'
                                                         }`}
@@ -3174,7 +3702,7 @@ This room does not have private bathrooms. The closest toilets are down the hall
                                     <p className="text-xs text-gray-600 leading-relaxed font-normal">
                                         All Hirers and Guests at the Michael Crouch Innovation Centre (MCIC) must abide by the Terms and Conditions of Use and the Campus Policy and Code of Conduct.
                                     </p>
-                                    <div className="pt-2">
+                                    <div className="pt-2 space-y-2">
                                         <label className="flex items-start gap-3 cursor-pointer select-none">
                                             <input
                                                 type="checkbox"
@@ -3187,24 +3715,7 @@ This room does not have private bathrooms. The closest toilets are down the hall
                                             />
                                             <div className="flex flex-col">
                                                 <span className={`text-xs font-bold uppercase tracking-tight ${conductError ? 'text-red-700' : 'text-black'}`}>
-                                                    I agree to abide by the Terms and Conditions of Use.
-                                                </span>
-                                            </div>
-                                        </label>
-                                    </div><div className="pt-2">
-                                        <label className="flex items-start gap-3 cursor-pointer select-none">
-                                            <input
-                                                type="checkbox"
-                                                checked={conductAcknowledged}
-                                                onChange={(e) => {
-                                                    setConductAcknowledged(e.target.checked);
-                                                    if (e.target.checked) setConductError(false);
-                                                }}
-                                                className="w-4 h-4 rounded-sm border-gray-300 accent-black mt-0.5"
-                                            />
-                                            <div className="flex flex-col">
-                                                <span className={`text-xs font-bold uppercase tracking-tight ${conductError ? 'text-red-700' : 'text-black'}`}>
-                                                    I agree to abide by the Campus Policy and Code of Conduct.
+                                                    I agree to abide by the Terms and Conditions of Use and Campus Policy Code of Conduct *
                                                 </span>
                                             </div>
                                         </label>
@@ -3228,7 +3739,6 @@ This room does not have private bathrooms. The closest toilets are down the hall
                                                 onChange={(e) => setFormData({
                                                     ...formData,
                                                     postToPublicDirectory: e.target.checked,
-                                                    // Optionally uncheck other options if mutually exclusive
                                                     ...(e.target.checked ? { useRegistrationPortal: false, hasOwnRegistrationPortal: false } : {})
                                                 })}
                                             />
@@ -3278,6 +3788,7 @@ This room does not have private bathrooms. The closest toilets are down the hall
                                     </div>
                                 </div>
                             </section>
+
                             {/* PIPELINE PRICING ENGINE ACTION CORNER */}
                             <div className="bg-neutral-900 text-white p-8 rounded-sm space-y-6">
                                 {hasSubmitted ? (

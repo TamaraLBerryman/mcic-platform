@@ -2,10 +2,12 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { db } from '../lib/firebase';
 import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
 
 export default function InventoryPage() {
+    const router = useRouter();
     const [searchQuery, setSearchQuery] = useState('');
     const [items, setItems] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -106,15 +108,21 @@ export default function InventoryPage() {
                     ) : filteredItems.length > 0 ? (
                         filteredItems.map(item => {
                             const isAvailable = item.status === 'Available';
+                            const targetUrl = `/borrow/${item.id.toLowerCase()}`;
+
                             return (
-                                <div key={item.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-5 hover:bg-neutral-50/50 transition-colors gap-4">
+                                <div
+                                    key={item.id}
+                                    onClick={() => router.push(targetUrl)}
+                                    className="flex flex-col sm:flex-row sm:items-center justify-between p-5 hover:bg-neutral-50 transition-colors gap-4 cursor-pointer group"
+                                >
                                     <div className="flex items-center gap-4">
                                         <div className="w-16 h-16 bg-neutral-100 border border-gray-200 rounded-sm shrink-0 overflow-hidden flex items-center justify-center">
                                             {item.image ? (
                                                 <img
                                                     src={item.image}
                                                     alt={item.name}
-                                                    className="w-full h-full object-cover"
+                                                    className="w-full h-full object-cover group-hover:scale-105 transition-transform"
                                                 />
                                             ) : (
                                                 <span className="text-xl">📦</span>
@@ -127,7 +135,9 @@ export default function InventoryPage() {
                                                     {isAvailable ? 'Available' : `Borrowed by ${item.user || '-'}`}
                                                 </span>
                                             </div>
-                                            <h3 className="font-bold text-lg text-black pt-1">{item.name}</h3>
+                                            <h3 className="font-bold text-lg text-black pt-1 group-hover:underline">
+                                                {item.name}
+                                            </h3>
                                             <p className="text-xs text-gray-500 font-medium">
                                                 📍 Storage: <span className="text-neutral-800 font-semibold">{item.storageLocation}</span>
                                             </p>
@@ -136,7 +146,8 @@ export default function InventoryPage() {
 
                                     <div className="sm:w-auto w-full shrink-0 pt-2 sm:pt-0">
                                         <a
-                                            href={`/borrow/${item.id.toLowerCase()}`}
+                                            href={targetUrl}
+                                            onClick={(e) => e.stopPropagation()}
                                             className={`inline-block text-center w-full sm:w-auto px-5 py-2.5 text-[10px] font-bold uppercase tracking-wider rounded-sm transition-colors ${isAvailable ? 'bg-black text-white hover:bg-[#EAD64D] hover:text-black' : 'bg-neutral-900 text-white hover:bg-red-600'}`}
                                         >
                                             {isAvailable ? 'Select Item ↗' : 'Return Item ↩'}

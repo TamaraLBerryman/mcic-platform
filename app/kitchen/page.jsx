@@ -8,7 +8,7 @@ const pending = "Contents to be added";
 const kitchens = [
   {
     id: "k1",
-    name: "Kitchen 1 · With fridge",
+    name: "Kitchen 1",
     image: "/kitchen-1.png",
     zones: [
       { id: "k1u1", name: "Upper cupboard 1", rect: [109, 160, 149, 191], items: "tea, sugar" },
@@ -26,7 +26,7 @@ const kitchens = [
   },
   {
     id: "k2",
-    name: "Kitchen 2 · No fridge",
+    name: "Kitchen 2",
     image: "/kitchen-2.png",
     zones: [
       { id: "k2u1", name: "Upper cupboard 1", rect: [102, 132, 184, 190], items: "mugs, glasses, cups" },

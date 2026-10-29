@@ -1168,14 +1168,46 @@ export default function LockerManagementPage() {
                                         {/* INVENTORY PHOTO UPLOAD */}
                                         <div className="space-y-2">
                                             <label className="text-black font-bold block">Inventory Photo</label>
-                                            <div className="flex items-center gap-4">
-                                                {editFormData.img && (
-                                                    <img src={editFormData.img} alt="Preview" className="w-16 h-16 object-cover rounded border border-neutral-300" />
+                                            <div className="flex items-center gap-3">
+                                                {editFormData.img ? (
+                                                    <div className="relative group w-16 h-16 shrink-0">
+                                                        <img
+                                                            src={editFormData.img}
+                                                            alt="Preview"
+                                                            className="w-16 h-16 object-cover rounded border border-neutral-300"
+                                                        />
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setEditFormData({ ...editFormData, img: '' })}
+                                                            className="absolute -top-2 -right-2 bg-red-600 hover:bg-red-700 text-white rounded-full p-1 shadow-md transition-colors cursor-pointer"
+                                                            title="Delete photo"
+                                                        >
+                                                            <X className="w-3 h-3" />
+                                                        </button>
+                                                    </div>
+                                                ) : (
+                                                    <div className="w-16 h-16 bg-neutral-100 border border-dashed border-neutral-300 rounded flex flex-col items-center justify-center text-neutral-400 text-[10px] shrink-0">
+                                                        <ImageIcon className="w-5 h-5 mb-0.5 opacity-40" />
+                                                        No Image
+                                                    </div>
                                                 )}
-                                                <label className="cursor-pointer bg-white hover:bg-neutral-100 border border-neutral-300 rounded-md px-3 py-2 text-black font-bold flex items-center gap-2 shadow-sm transition-all">
-                                                    <Upload className="w-4 h-4" /> Upload Image
-                                                    <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
-                                                </label>
+
+                                                <div className="flex flex-col gap-1.5">
+                                                    <label className="cursor-pointer bg-white hover:bg-neutral-100 border border-neutral-300 rounded-md px-3 py-1.5 text-black font-bold text-xs flex items-center gap-1.5 shadow-xs transition-all w-fit">
+                                                        <Upload className="w-3.5 h-3.5" /> {editFormData.img ? 'Change Image' : 'Upload Image'}
+                                                        <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
+                                                    </label>
+
+                                                    {editFormData.img && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setEditFormData({ ...editFormData, img: '' })}
+                                                            className="text-red-600 hover:text-red-800 text-[11px] font-bold text-left flex items-center gap-1 transition-colors cursor-pointer w-fit"
+                                                        >
+                                                            <X className="w-3 h-3" /> Remove / Delete Photo
+                                                        </button>
+                                                    )}
+                                                </div>
                                             </div>
                                         </div>
 
