@@ -1,7 +1,7 @@
 // app/api/calendar/availability/route.js
 import { NextResponse } from 'next/server';
 import { google } from 'googleapis';
-import { ROOM_CALENDAR_MAP } from '@/lib/googleCalendar';
+import { ROOM_CALENDAR_MAP } from '@/app/lib/googleCalendar';
 
 function getCalendarClient() {
     const auth = new google.auth.GoogleAuth({
