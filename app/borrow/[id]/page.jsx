@@ -14,16 +14,16 @@ export default function BorrowPage({ params }) {
     const [isProcessing, setIsProcessing] = useState(false);
     const [actionSuccess, setActionSuccess] = useState(false);
 
-    // Fullscreen Image Lightbox Modal State
+    // Fullscreen Lightbox Modal State
     const [activeLightboxImg, setActiveLightboxImg] = useState(null);
 
     // UNSW Team & Email Verification States
-    const [isUnswFoundersTeam, setIsUnswFoundersTeam] = useState('yes'); // 'yes' | 'no'
+    const [isUnswFoundersTeam, setIsUnswFoundersTeam] = useState('yes');
     const [borrowerEmail, setBorrowerEmail] = useState('');
 
     // Future Reservation Date States
-    const [checkoutIntent, setCheckoutIntent] = useState('now'); // 'now' | 'future'
-    const [dateSelectionType, setDateSelectionType] = useState('single'); // 'single' | 'range'
+    const [checkoutIntent, setCheckoutIntent] = useState('now');
+    const [dateSelectionType, setDateSelectionType] = useState('single');
     const [bookingDate, setBookingDate] = useState('');
     const [bookingStartDate, setBookingStartDate] = useState('');
     const [bookingEndDate, setBookingEndDate] = useState('');
@@ -32,7 +32,7 @@ export default function BorrowPage({ params }) {
 
     // Reporting States & Visibility Toggle
     const [showReportSection, setShowReportSection] = useState(false);
-    const [reportType, setReportType] = useState('broken'); // 'broken' | 'stock'
+    const [reportType, setReportType] = useState('broken');
     const [reportDescription, setReportDescription] = useState('');
     const [supplyAlert, setSupplyAlert] = useState(null);
 
@@ -45,9 +45,13 @@ export default function BorrowPage({ params }) {
     const [editDimensions, setEditDimensions] = useState('');
     const [editIncludedItems, setEditIncludedItems] = useState('');
     const [editQuantity, setEditQuantity] = useState('1');
+    const [editCostPerDay, setEditCostPerDay] = useState('');
     const [editItemType, setEditItemType] = useState('reusable');
+    const [editHireScope, setEditHireScope] = useState('mcic_only');
+    const [editIsFoundersStaffOnly, setEditIsFoundersStaffOnly] = useState(false);
+    const [editFreeInclusionSpaces, setEditFreeInclusionSpaces] = useState([]);
 
-    // Multi-photo Editing States (up to 4 photos)
+    // Multi-photo Editing States
     const [existingImages, setExistingImages] = useState([]);
     const [newImageFiles, setNewImageFiles] = useState([]);
     const [newImagePreviews, setNewImagePreviews] = useState([]);
@@ -64,6 +68,14 @@ export default function BorrowPage({ params }) {
         "Founders Level 1 Office",
         "Founders Level 1 Copy Room",
         "Founders Level 1 Kitchen"
+    ];
+
+    const venueHireSpaces = [
+        "MCIC Ground - Entire Space",
+        "MCIC Ground - Event Space",
+        "MCIC Ground - Design Space",
+        "MCIC Level 1 - Founders Place",
+        "MCIC Level 1 - Group Study"
     ];
 
     useEffect(() => {
@@ -84,7 +96,11 @@ export default function BorrowPage({ params }) {
                     setEditDimensions(data.dimensions || '');
                     setEditIncludedItems(data.includedItems || '');
                     setEditQuantity(data.quantity ? String(data.quantity) : '1');
+                    setEditCostPerDay(data.costPerDay !== undefined && data.costPerDay !== null ? String(data.costPerDay) : '');
                     setEditItemType(data.itemType || 'reusable');
+                    setEditHireScope(data.hireScope || 'mcic_only');
+                    setEditIsFoundersStaffOnly(!!data.isFoundersStaffOnly);
+                    setEditFreeInclusionSpaces(Array.isArray(data.freeInclusionSpaces) ? data.freeInclusionSpaces : []);
 
                     const imgs = data.images && data.images.length > 0
                         ? data.images
@@ -130,6 +146,14 @@ export default function BorrowPage({ params }) {
         const updatedPreviews = newImagePreviews.filter((_, i) => i !== index);
         setNewImageFiles(updatedFiles);
         setNewImagePreviews(updatedPreviews);
+    };
+
+    const toggleEditFreeInclusionSpace = (spaceName) => {
+        if (editFreeInclusionSpaces.includes(spaceName)) {
+            setEditFreeInclusionSpaces(editFreeInclusionSpaces.filter(s => s !== spaceName));
+        } else {
+            setEditFreeInclusionSpaces([...editFreeInclusionSpaces, spaceName]);
+        }
     };
 
     const handleCheckoutPipeline = async (e) => {
@@ -252,7 +276,11 @@ export default function BorrowPage({ params }) {
                 dimensions: editDimensions.trim(),
                 includedItems: editIncludedItems.trim(),
                 quantity: parseInt(editQuantity, 10) || 1,
+                costPerDay: parseFloat(editCostPerDay) || 0,
                 itemType: editItemType,
+                hireScope: editHireScope,
+                isFoundersStaffOnly: editIsFoundersStaffOnly,
+                freeInclusionSpaces: editFreeInclusionSpaces,
                 image: allFinalImages[0] || '',
                 images: allFinalImages
             };
@@ -299,15 +327,15 @@ export default function BorrowPage({ params }) {
         : (itemDetails.image ? [itemDetails.image] : []);
 
     const activePhotoUrl = displayPhotosList[activeDisplayPhotoIdx] || displayPhotosList[0] || null;
+    const numericCost = parseFloat(itemDetails.costPerDay);
+    const hasDailyCost = !isNaN(numericCost) && numericCost > 0;
 
     return (
         <main className="min-h-screen bg-[#F9F9F9] text-black font-sans antialiased selection:bg-[#EAD64D]">
             <div className="max-w-md mx-auto px-6 py-12 space-y-6">
 
-                {/* MAIN CARD CONTAINER */}
                 <div className="bg-white border border-gray-200 p-6 rounded-sm shadow-xs space-y-6">
 
-                    {/* EDIT LISTING BUTTON */}
                     <div className="flex justify-end items-center border-b border-gray-100 pb-3">
                         <button
                             type="button"
@@ -318,17 +346,14 @@ export default function BorrowPage({ params }) {
                         </button>
                     </div>
 
-                    {/* EDIT SPECIFICATIONS FORM */}
                     {isEditing ? (
                         <form onSubmit={handleSaveItemEdit} className="space-y-5">
-
                             <div className="border-b border-gray-200 pb-2">
                                 <h3 className="font-extrabold text-xs tracking-wider uppercase text-black">
                                     Update Asset Details
                                 </h3>
                             </div>
 
-                            {/* 1. ITEM NAME */}
                             <div className="space-y-1.5">
                                 <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-500">
                                     Item Name *
@@ -343,7 +368,6 @@ export default function BorrowPage({ params }) {
                                 />
                             </div>
 
-                            {/* 2. LOCATION SECTION */}
                             <div className="space-y-2">
                                 <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-500">
                                     Location
@@ -390,7 +414,112 @@ export default function BorrowPage({ params }) {
                                 </div>
                             </div>
 
-                            {/* 3. DIMENSIONS */}
+                            <div className="grid grid-cols-2 gap-3">
+                                <div className="space-y-1.5">
+                                    <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-500">
+                                        Cost ($ / day)
+                                    </label>
+                                    <div className="relative">
+                                        <span className="absolute left-3 top-2.5 text-xs text-gray-400 font-bold">$</span>
+                                        <input
+                                            type="number"
+                                            step="0.01"
+                                            min="0"
+                                            placeholder="0.00"
+                                            value={editCostPerDay}
+                                            onChange={(e) => setEditCostPerDay(e.target.value)}
+                                            className="w-full bg-neutral-50 border border-gray-200 text-xs p-2.5 pl-7 rounded-sm focus:outline-none focus:border-black font-medium text-black placeholder-gray-400"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="space-y-1.5">
+                                    <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-500">
+                                        Quantity
+                                    </label>
+                                    <input
+                                        type="number"
+                                        min="1"
+                                        value={editQuantity}
+                                        onChange={(e) => setEditQuantity(e.target.value)}
+                                        className="w-full bg-neutral-50 border border-gray-200 text-xs p-2.5 rounded-sm focus:outline-none focus:border-black font-medium text-black"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="space-y-3 p-3 bg-neutral-50 border border-neutral-200 rounded-sm">
+                                <div className="space-y-1.5">
+                                    <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-700">
+                                        Usage & Hire Restrictions *
+                                    </label>
+                                    <div className="grid grid-cols-1 gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => setEditHireScope('mcic_only')}
+                                            className={`p-2.5 text-[10px] font-bold uppercase tracking-wider rounded-sm border transition-all cursor-pointer flex items-center justify-between ${editHireScope === 'mcic_only'
+                                                ? 'bg-black text-[#EAD64D] border-black shadow-xs'
+                                                : 'bg-white text-neutral-700 border-gray-200 hover:border-black'
+                                                }`}
+                                        >
+                                            <span>🏛️ Only available with MCIC booking</span>
+                                            {editHireScope === 'mcic_only' && <span className="text-[10px]">✓</span>}
+                                        </button>
+
+                                        <button
+                                            type="button"
+                                            onClick={() => setEditHireScope('external_hire')}
+                                            className={`p-2.5 text-[10px] font-bold uppercase tracking-wider rounded-sm border transition-all cursor-pointer flex items-center justify-between ${editHireScope === 'external_hire'
+                                                ? 'bg-black text-[#EAD64D] border-black shadow-xs'
+                                                : 'bg-white text-neutral-700 border-gray-200 hover:border-black'
+                                                }`}
+                                        >
+                                            <span>🚚 External hire allowed</span>
+                                            {editHireScope === 'external_hire' && <span className="text-[10px]">✓</span>}
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div className="pt-2 border-t border-gray-200">
+                                    <label className="flex items-center gap-2 cursor-pointer select-none">
+                                        <input
+                                            type="checkbox"
+                                            checked={editIsFoundersStaffOnly}
+                                            onChange={(e) => setEditIsFoundersStaffOnly(e.target.checked)}
+                                            className="w-4 h-4 accent-black rounded-xs cursor-pointer"
+                                        />
+                                        <span className="text-xs font-bold uppercase tracking-wider text-purple-900">
+                                            🔒 Founders Staff Bookings Only
+                                        </span>
+                                    </label>
+                                </div>
+                            </div>
+
+                            {/* EDIT FREE ROOM INCLUSIONS */}
+                            <div className="space-y-2 p-3 bg-neutral-50 border border-neutral-200 rounded-sm">
+                                <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-700">
+                                    🎁 Free Room Inclusions ($0 Fee)
+                                </label>
+                                <div className="grid grid-cols-1 gap-1.5">
+                                    {venueHireSpaces.map((space) => {
+                                        const isIncluded = editFreeInclusionSpaces.includes(space);
+                                        return (
+                                            <button
+                                                key={space}
+                                                type="button"
+                                                onClick={() => toggleEditFreeInclusionSpace(space)}
+                                                className={`p-2 text-[10px] font-bold uppercase tracking-wider rounded-sm border transition-all text-left flex items-center justify-between cursor-pointer ${isIncluded
+                                                        ? 'bg-emerald-600 text-white border-emerald-600'
+                                                        : 'bg-white text-gray-700 border-gray-200 hover:border-black'
+                                                    }`}
+                                            >
+                                                <span>{space}</span>
+                                                <span>{isIncluded ? '✓ Included Free' : '+ Add'}</span>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+
                             <div className="space-y-1.5">
                                 <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-500">
                                     Dimensions (if relevant)
@@ -404,7 +533,6 @@ export default function BorrowPage({ params }) {
                                 />
                             </div>
 
-                            {/* 4. WHAT'S INCLUDED */}
                             <div className="space-y-1.5">
                                 <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-500">
                                     What's Included (if relevant)
@@ -418,21 +546,6 @@ export default function BorrowPage({ params }) {
                                 />
                             </div>
 
-                            {/* 5. QUANTITY */}
-                            <div className="space-y-1.5">
-                                <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-500">
-                                    Quantity
-                                </label>
-                                <input
-                                    type="number"
-                                    min="1"
-                                    value={editQuantity}
-                                    onChange={(e) => setEditQuantity(e.target.value)}
-                                    className="w-full bg-neutral-50 border border-gray-200 text-xs p-3 rounded-sm focus:outline-none focus:border-black font-medium text-black"
-                                />
-                            </div>
-
-                            {/* 6. SINGLE-USE VS RE-USABLE QUESTION */}
                             <div className="space-y-1.5">
                                 <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-500">
                                     Is this Single-Use or Re-usable? *
@@ -464,7 +577,6 @@ export default function BorrowPage({ params }) {
                                 </div>
                             </div>
 
-                            {/* 7. ASSET ID */}
                             <div className="space-y-1.5">
                                 <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-500">
                                     Asset ID
@@ -478,7 +590,6 @@ export default function BorrowPage({ params }) {
                                 />
                             </div>
 
-                            {/* 8. MULTI-PHOTO EDITING SECTION */}
                             <div className="space-y-2 pt-2 border-t border-gray-200/60">
                                 <div className="flex items-center justify-between text-[11px] text-gray-500 font-bold uppercase tracking-wider">
                                     <span>Asset Photos (4 max)</span>
@@ -528,7 +639,6 @@ export default function BorrowPage({ params }) {
                                 </div>
                             </div>
 
-                            {/* SAVE BUTTON */}
                             <button
                                 type="submit"
                                 disabled={isSavingEdit}
@@ -538,10 +648,7 @@ export default function BorrowPage({ params }) {
                             </button>
                         </form>
                     ) : (
-                        /* VIEW MODE: BALANCED HEADER & DETAILS */
                         <div className="space-y-4">
-
-                            {/* COMPACT IMAGE CONTAINER (FIT WITHIN CONTAINER) */}
                             {activePhotoUrl ? (
                                 <div
                                     onClick={() => setActiveLightboxImg(activePhotoUrl)}
@@ -562,7 +669,6 @@ export default function BorrowPage({ params }) {
                                 </div>
                             )}
 
-                            {/* GALLERY THUMBNAILS IF MULTIPLE */}
                             {displayPhotosList.length > 1 && (
                                 <div className="flex gap-2">
                                     {displayPhotosList.map((photoUrl, idx) => (
@@ -578,7 +684,24 @@ export default function BorrowPage({ params }) {
                                 </div>
                             )}
 
-                            {/* ITEM TITLE & LOCATION BELOW */}
+                            <div className="flex flex-wrap gap-2">
+                                {itemDetails.isFoundersStaffOnly && (
+                                    <span className="inline-flex items-center gap-1.5 bg-purple-100 text-purple-900 border border-purple-300 text-[10px] font-mono font-black uppercase px-2.5 py-1 rounded-xs">
+                                        🔒 Founders Staff Bookings Only
+                                    </span>
+                                )}
+
+                                {itemDetails.hireScope === 'external_hire' ? (
+                                    <span className="inline-flex items-center gap-1.5 bg-blue-50 text-blue-700 border border-blue-200 text-[10px] font-mono font-bold uppercase px-2.5 py-1 rounded-xs">
+                                        🚚 Can be hired for external events
+                                    </span>
+                                ) : (
+                                    <span className="inline-flex items-center gap-1.5 bg-neutral-100 text-neutral-700 border border-neutral-300 text-[10px] font-mono font-bold uppercase px-2.5 py-1 rounded-xs">
+                                        🏛️ Only available for use with MCIC booking
+                                    </span>
+                                )}
+                            </div>
+
                             <div className="space-y-1">
                                 <h1 className="text-2xl font-extrabold tracking-tight text-black">
                                     {itemDetails.name}
@@ -589,22 +712,38 @@ export default function BorrowPage({ params }) {
                                 </p>
                             </div>
 
-                            {/* SPECIFICATIONS */}
-                            {(itemDetails.dimensions || itemDetails.includedItems || itemDetails.itemType) && (
-                                <div className="p-3 bg-neutral-50 border border-neutral-200 rounded-sm text-xs space-y-1 font-medium text-neutral-700">
-                                    {itemDetails.dimensions && (
-                                        <div>📐 <strong>Dimensions:</strong> {itemDetails.dimensions}</div>
-                                    )}
-                                    {itemDetails.includedItems && (
-                                        <div>🔌 <strong>Included:</strong> {itemDetails.includedItems}</div>
-                                    )}
-                                    {itemDetails.itemType && (
-                                        <div>🏷️ <strong>Type:</strong> {itemDetails.itemType === 'single-use' ? 'Single-Use Consumable' : 'Re-usable Asset'}</div>
-                                    )}
+                            <div className="p-3 bg-neutral-50 border border-neutral-200 rounded-sm text-xs space-y-1.5 font-medium text-neutral-700">
+                                <div>
+                                    💰 <strong>Cost of Hire:</strong>{' '}
+                                    <span className="font-extrabold text-black font-mono">
+                                        {hasDailyCost ? `$${numericCost.toFixed(2)} / day` : 'No additional charge'}
+                                    </span>
                                 </div>
-                            )}
+                                {itemDetails.dimensions && (
+                                    <div>📐 <strong>Dimensions:</strong> {itemDetails.dimensions}</div>
+                                )}
+                                {itemDetails.includedItems && (
+                                    <div>🔌 <strong>Included:</strong> {itemDetails.includedItems}</div>
+                                )}
+                                {itemDetails.itemType && (
+                                    <div>🏷️ <strong>Type:</strong> {itemDetails.itemType === 'single-use' ? 'Single-Use Consumable' : 'Re-usable Asset'}</div>
+                                )}
 
-                            {/* STATUS BADGE */}
+                                {/* FREE INCLUSIONS DISPLAY BADGES */}
+                                {itemDetails.freeInclusionSpaces && itemDetails.freeInclusionSpaces.length > 0 && (
+                                    <div className="pt-1">
+                                        <span className="text-[10px] font-bold uppercase text-gray-500 block mb-1">🎁 Free Inclusion In:</span>
+                                        <div className="flex flex-wrap gap-1">
+                                            {itemDetails.freeInclusionSpaces.map((space, idx) => (
+                                                <span key={idx} className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-[9px] font-bold px-2 py-0.5 rounded-xs">
+                                                    ✓ {space}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
                             <div>
                                 {isAvailable ? (
                                     <span className="inline-flex items-center gap-1.5 bg-emerald-50 text-emerald-700 font-extrabold text-[10px] uppercase tracking-wider px-2.5 py-1 rounded-sm border border-emerald-200">
@@ -625,7 +764,6 @@ export default function BorrowPage({ params }) {
                         </div>
                     )}
 
-                    {/* SECTION 1: CHECKOUT / RESERVATION SECTION */}
                     {!isEditing && (
                         <div className="pt-2 border-t border-gray-100 space-y-4">
                             <div className="p-4 bg-neutral-50/60 border border-neutral-200/80 rounded-sm space-y-4">
@@ -643,7 +781,6 @@ export default function BorrowPage({ params }) {
                                     </div>
                                 ) : (
                                     <form onSubmit={handleCheckoutPipeline} className="space-y-3.5">
-
                                         {isAvailable && (
                                             <div className="space-y-1">
                                                 <label className="text-[10px] font-bold uppercase tracking-wider text-gray-500 block">
@@ -852,12 +989,10 @@ export default function BorrowPage({ params }) {
                                             <span>Asset ID</span>
                                             <span className="font-mono bg-white border px-2 py-0.5 rounded-sm text-neutral-800">{itemDetails.id}</span>
                                         </div>
-
                                     </form>
                                 )}
                             </div>
 
-                            {/* SECTION 2: REPORT LOW STOCK / DAMAGE BUTTONS */}
                             <div className="pt-1 border-t border-gray-100 space-y-3">
                                 <button
                                     type="button"
@@ -873,7 +1008,6 @@ export default function BorrowPage({ params }) {
 
                                 {showReportSection && (
                                     <div className="p-4 bg-neutral-50/60 border border-neutral-200/80 rounded-sm space-y-3 animate-in fade-in duration-200">
-
                                         {supplyAlert && (
                                             <div className="p-2.5 bg-[#EAD64D] text-black font-bold text-xs rounded-xs flex justify-between items-center border border-black animate-in fade-in duration-150">
                                                 <div className="flex items-center gap-2">
@@ -956,7 +1090,6 @@ export default function BorrowPage({ params }) {
 
             </div>
 
-            {/* FULLSCREEN LIGHTBOX MODAL */}
             {activeLightboxImg && (
                 <div
                     className="fixed inset-0 z-50 bg-black/95 backdrop-blur-sm flex items-center justify-center p-4 cursor-pointer"

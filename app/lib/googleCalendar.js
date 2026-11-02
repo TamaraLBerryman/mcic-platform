@@ -1,14 +1,7 @@
 // lib/googleCalendar.js
 import { google } from 'googleapis';
 
-// Map your venue spaces to their corresponding Google Calendar IDs
-export const ROOM_CALENDAR_MAP = {
-    'MCIC Ground - Entire Space': process.env.GOOGLE_CALENDAR_ENTIRE_SPACE_ID,
-    'MCIC Ground - Event Space': process.env.GOOGLE_CALENDAR_EVENT_SPACE_ID,
-    'MCIC Ground - Design Space': process.env.GOOGLE_CALENDAR_DESIGN_SPACE_ID,
-    'MCIC Level 1 - Founders Place': process.env.GOOGLE_CALENDAR_FOUNDERS_PLACE_ID,
-    'MCIC Level 1 - Group Study': process.env.GOOGLE_CALENDAR_GROUP_STUDY_ID,
-};
+const CALENDAR_ID = process.env.GOOGLE_CALENDAR_ID || 'mcic.unswfounders@gmail.com';
 
 function getCalendarClient() {
     const auth = new google.auth.GoogleAuth({
@@ -23,47 +16,55 @@ function getCalendarClient() {
 }
 
 /**
- * Checks if a room calendar is available during a specified ISO time window.
+ * Checks if a specific space is available on the single calendar during a time window.
  */
-export async function checkRoomAvailability(calendarId, startIso, endIso) {
-    if (!calendarId) return true; // Fallback if calendar ID not supplied
-
+export async function checkRoomAvailability(spaceName, startIso, endIso) {
     const calendar = getCalendarClient();
-    const response = await calendar.freebusy.query({
-        requestBody: {
-            timeMin: startIso,
-            timeMax: endIso,
-            items: [{ id: calendarId }],
-        },
+
+    const response = await calendar.events.list({
+        calendarId: CALENDAR_ID,
+        timeMin: startIso,
+        timeMax: endIso,
+        singleEvents: true,
+        orderBy: 'startTime',
     });
 
-    const busySlots = response.data.calendars[calendarId]?.busy || [];
-    return busySlots.length === 0;
+    const events = response.data.items || [];
+
+    const conflictingEvent = events.find(event => {
+        const summary = event.summary || '';
+        const desc = event.description || '';
+
+        if (spaceName === 'MCIC Ground - Entire Space') {
+            return summary.includes('MCIC Ground') || desc.includes('MCIC Ground');
+        } else if (spaceName === 'MCIC Ground - Event Space' || spaceName === 'MCIC Ground - Design Space') {
+            return summary.includes('Entire Space') ||
+                desc.includes('Entire Space') ||
+                summary.includes(spaceName) ||
+                desc.includes(spaceName);
+        } else {
+            return summary.includes(spaceName) || desc.includes(spaceName);
+        }
+    });
+
+    return !conflictingEvent;
 }
 
 /**
- * Creates a calendar hold and sends calendar invitations to the requester & venue coordinator.
+ * Creates a calendar hold on the single Google Calendar.
  */
 export async function createBookingCalendarEvent(bookingData) {
-    const calendarId = ROOM_CALENDAR_MAP[bookingData.space];
-    if (!calendarId) {
-        console.warn(`No Google Calendar ID mapped for venue: ${bookingData.space}`);
-        return null;
-    }
-
     const calendar = getCalendarClient();
 
-    // Construct ISO datetime strings
-    const startIso = `${bookingData.bumpInDate}T${bookingData.bumpIn}:00+11:00`; // Sydney AEDT timezone
+    const startIso = `${bookingData.bumpInDate}T${bookingData.bumpIn}:00+11:00`;
     const endIso = `${bookingData.bumpInDate}T${bookingData.bumpOut}:00+11:00`;
 
-    // Detailed description for the calendar event
     const eventDescription = `
 🏛️ MCIC VENUE BOOKING HOLD
 ----------------------------------------
 Event Name: ${bookingData.eventName}
 Venue Space: ${bookingData.space}
-Department / Org: ${bookingData.department || 'N/A'}
+${bookingData.includeColonnadeAddon ? 'Add-on: MCIC Ground - Colonnade\n' : ''}Department / Org: ${bookingData.department || 'N/A'}
 Expected Attendees: ${bookingData.attendees}
 
 ⏱️ TIMINGS:
@@ -79,15 +80,19 @@ ${bookingData.runsheetObjectives || 'No runsheet supplied.'}
 - Requester: ${bookingData.mainContact?.name} (${bookingData.mainContact?.email})
 `;
 
+    const spaceTag = bookingData.includeColonnadeAddon
+        ? `[${bookingData.space} + Colonnade]`
+        : `[${bookingData.space}]`;
+
     const eventPayload = {
-        summary: `[MCIC HOLD] ${bookingData.eventName} - ${bookingData.mainContact?.name}`,
+        summary: `${spaceTag} ${bookingData.eventName} - ${bookingData.mainContact?.name || 'Applicant'}`,
         description: eventDescription,
         start: { dateTime: startIso, timeZone: 'Australia/Sydney' },
         end: { dateTime: endIso, timeZone: 'Australia/Sydney' },
-        attendees: [
-            { email: bookingData.mainContact?.email },
+        attendees: bookingData.mainContact?.email ? [
+            { email: bookingData.mainContact.email },
             { email: process.env.MCIC_COORDINATOR_EMAIL || 'mcic@unsw.edu.au' }
-        ],
+        ] : [],
         reminders: {
             useDefault: false,
             overrides: [
@@ -98,9 +103,9 @@ ${bookingData.runsheetObjectives || 'No runsheet supplied.'}
     };
 
     const result = await calendar.events.insert({
-        calendarId: calendarId,
+        calendarId: CALENDAR_ID,
         requestBody: eventPayload,
-        sendUpdates: 'all', // Automatically sends calendar invites to attendees
+        sendUpdates: 'all',
     });
 
     return result.data;

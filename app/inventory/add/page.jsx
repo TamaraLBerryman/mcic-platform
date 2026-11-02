@@ -20,6 +20,12 @@ export default function AddInventoryItemPage() {
     const [dimensions, setDimensions] = useState('');
     const [includedItems, setIncludedItems] = useState('');
     const [quantity, setQuantity] = useState('1');
+    const [costPerDay, setCostPerDay] = useState('');
+
+    // Restrictions & Badges
+    const [hireScope, setHireScope] = useState('mcic_only'); // 'mcic_only' | 'external_hire'
+    const [isFoundersStaffOnly, setIsFoundersStaffOnly] = useState(false);
+    const [freeInclusionSpaces, setFreeInclusionSpaces] = useState([]);
 
     // Multi-photo State (up to 4 photos)
     const [imageFiles, setImageFiles] = useState([]);
@@ -28,7 +34,6 @@ export default function AddInventoryItemPage() {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [successMessage, setSuccessMessage] = useState(false);
 
-    // Standardized Room Selection Options
     const roomOptions = [
         "MCIC Event Space",
         "MCIC Design Space",
@@ -41,7 +46,22 @@ export default function AddInventoryItemPage() {
         "Founders Level 1 Kitchen"
     ];
 
-    // Handle Multi-Photo Selection (Up to 4)
+    const venueHireSpaces = [
+        "MCIC Ground - Entire Space",
+        "MCIC Ground - Event Space",
+        "MCIC Ground - Design Space",
+        "MCIC Level 1 - Founders Place",
+        "MCIC Level 1 - Group Study"
+    ];
+
+    const toggleFreeInclusionSpace = (spaceName) => {
+        if (freeInclusionSpaces.includes(spaceName)) {
+            setFreeInclusionSpaces(freeInclusionSpaces.filter(s => s !== spaceName));
+        } else {
+            setFreeInclusionSpaces([...freeInclusionSpaces, spaceName]);
+        }
+    };
+
     const handleImageChange = (e) => {
         const files = Array.from(e.target.files);
         if (!files.length) return;
@@ -71,7 +91,6 @@ export default function AddInventoryItemPage() {
 
             const uploadedUrls = [];
 
-            // 1. Upload photos (up to 4) to Firebase Storage
             if (imageFiles.length > 0) {
                 for (let i = 0; i < imageFiles.length; i++) {
                     const storageRef = ref(storage, `inventory/${formattedId}_${Date.now()}_${i + 1}`);
@@ -81,12 +100,10 @@ export default function AddInventoryItemPage() {
                 }
             }
 
-            // Combine Primary Room and Sub-Location into full storage string
             const fullStorageLocation = specificLocation.trim()
-                ? `${selectedRoom} - ${specificLocation.trim()}`
+                ? `${selectedRoom}\n${specificLocation.trim()}`
                 : selectedRoom;
 
-            // 2. Save document record into Firebase Firestore
             await setDoc(doc(db, "items", formattedId), {
                 name: name.trim(),
                 room: selectedRoom,
@@ -95,17 +112,20 @@ export default function AddInventoryItemPage() {
                 dimensions: dimensions.trim(),
                 includedItems: includedItems.trim(),
                 quantity: parseInt(quantity, 10) || 1,
+                costPerDay: parseFloat(costPerDay) || 0,
+                hireScope: hireScope,
+                isFoundersStaffOnly: isFoundersStaffOnly,
+                freeInclusionSpaces: freeInclusionSpaces,
                 status: 'Available',
                 user: '-',
-                image: uploadedUrls[0] || '', // Primary thumbnail photo
-                images: uploadedUrls,          // Array of up to 4 photo URLs
+                image: uploadedUrls[0] || '',
+                images: uploadedUrls,
                 createdAt: new Date().toISOString()
             });
 
             setIsSubmitting(false);
             setSuccessMessage(true);
 
-            // Reset Form fields
             setItemId('');
             setName('');
             setSelectedRoom('MCIC Event Space');
@@ -113,10 +133,13 @@ export default function AddInventoryItemPage() {
             setDimensions('');
             setIncludedItems('');
             setQuantity('1');
+            setCostPerDay('');
+            setHireScope('mcic_only');
+            setIsFoundersStaffOnly(false);
+            setFreeInclusionSpaces([]);
             setImageFiles([]);
             setImagePreviews([]);
 
-            // Redirect back to inventory after 2 seconds
             setTimeout(() => {
                 router.push('/inventory');
             }, 1800);
@@ -169,8 +192,6 @@ export default function AddInventoryItemPage() {
                                 </label>
 
                                 <div className="border border-gray-200 p-5 bg-neutral-50/50 rounded-sm space-y-5">
-
-                                    {/* ROOM PILLS */}
                                     <div className="space-y-2">
                                         <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-400">
                                             Room *
@@ -196,7 +217,6 @@ export default function AddInventoryItemPage() {
                                         </div>
                                     </div>
 
-                                    {/* STORAGE POINT INPUT */}
                                     <div className="space-y-1.5 pt-2 border-t border-gray-200/60">
                                         <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-400">
                                             Storage Point
@@ -212,7 +232,118 @@ export default function AddInventoryItemPage() {
                                 </div>
                             </div>
 
-                            {/* 3. DIMENSIONS */}
+                            {/* 3. COST & QUANTITY */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div className="space-y-1.5">
+                                    <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-500">
+                                        Cost of Hire ($ / day)
+                                    </label>
+                                    <div className="relative">
+                                        <span className="absolute left-3.5 top-3.5 text-sm text-gray-400 font-bold">$</span>
+                                        <input
+                                            type="number"
+                                            step="0.01"
+                                            min="0"
+                                            placeholder="0.00"
+                                            value={costPerDay}
+                                            onChange={(e) => setCostPerDay(e.target.value)}
+                                            className="w-full bg-neutral-50 border border-gray-200 text-sm p-3.5 pl-8 rounded-sm focus:outline-none focus:border-black font-medium text-black placeholder-gray-400"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="space-y-1.5">
+                                    <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-500">
+                                        Quantity
+                                    </label>
+                                    <input
+                                        type="number"
+                                        min="1"
+                                        value={quantity}
+                                        onChange={(e) => setQuantity(e.target.value)}
+                                        className="w-full bg-neutral-50 border border-gray-200 text-sm p-3.5 rounded-sm focus:outline-none focus:border-black font-medium text-black"
+                                    />
+                                </div>
+                            </div>
+
+                            {/* 4. HIRE SCOPE & FOUNDERS STAFF ONLY CHECKBOX */}
+                            <div className="space-y-3 p-4 bg-neutral-50 border border-neutral-200 rounded-sm">
+                                <div className="space-y-1.5">
+                                    <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-700">
+                                        Usage & Hire Restrictions *
+                                    </label>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => setHireScope('mcic_only')}
+                                            className={`p-3 text-[10px] font-bold uppercase tracking-wider rounded-sm border transition-all cursor-pointer flex items-center justify-between ${hireScope === 'mcic_only'
+                                                ? 'bg-black text-[#EAD64D] border-black shadow-xs'
+                                                : 'bg-white text-neutral-700 border-gray-200 hover:border-black'
+                                                }`}
+                                        >
+                                            <span>🏛️ Only available with MCIC booking</span>
+                                            {hireScope === 'mcic_only' && <span className="text-[10px]">✓</span>}
+                                        </button>
+
+                                        <button
+                                            type="button"
+                                            onClick={() => setHireScope('external_hire')}
+                                            className={`p-3 text-[10px] font-bold uppercase tracking-wider rounded-sm border transition-all cursor-pointer flex items-center justify-between ${hireScope === 'external_hire'
+                                                ? 'bg-black text-[#EAD64D] border-black shadow-xs'
+                                                : 'bg-white text-neutral-700 border-gray-200 hover:border-black'
+                                                }`}
+                                        >
+                                            <span>🚚 External hire allowed</span>
+                                            {hireScope === 'external_hire' && <span className="text-[10px]">✓</span>}
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div className="pt-2 border-t border-gray-200">
+                                    <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                                        <input
+                                            type="checkbox"
+                                            checked={isFoundersStaffOnly}
+                                            onChange={(e) => setIsFoundersStaffOnly(e.target.checked)}
+                                            className="w-4 h-4 accent-black rounded-xs cursor-pointer"
+                                        />
+                                        <span className="text-xs font-bold uppercase tracking-wider text-purple-900">
+                                            🔒 Founders Staff Bookings Only
+                                        </span>
+                                    </label>
+                                </div>
+                            </div>
+
+                            {/* 5. FREE ROOM INCLUSIONS MULTI-SELECT */}
+                            <div className="space-y-2 p-4 bg-neutral-50 border border-neutral-200 rounded-sm">
+                                <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-700">
+                                    🎁 Free Inclusion Rooms ($0 Hire Fee)
+                                </label>
+                                <p className="text-[10px] text-gray-500 mb-2">
+                                    Select rooms where this equipment is included free ($0). Hirers of other rooms will be charged the standard daily rate.
+                                </p>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                    {venueHireSpaces.map((space) => {
+                                        const isIncluded = freeInclusionSpaces.includes(space);
+                                        return (
+                                            <button
+                                                key={space}
+                                                type="button"
+                                                onClick={() => toggleFreeInclusionSpace(space)}
+                                                className={`p-2.5 text-[10px] font-bold uppercase tracking-wider rounded-sm border transition-all text-left flex items-center justify-between cursor-pointer ${isIncluded
+                                                        ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                                                        : 'bg-white text-gray-700 border-gray-200 hover:border-black'
+                                                    }`}
+                                            >
+                                                <span>{space}</span>
+                                                <span>{isIncluded ? '✓ Included Free' : '+ Add'}</span>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+
+                            {/* 6. DIMENSIONS */}
                             <div className="space-y-1.5">
                                 <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-500">
                                     Dimensions (if relevant)
@@ -226,7 +357,7 @@ export default function AddInventoryItemPage() {
                                 />
                             </div>
 
-                            {/* 4. WHAT'S INCLUDED */}
+                            {/* 7. WHAT'S INCLUDED */}
                             <div className="space-y-1.5">
                                 <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-500">
                                     What's Included (if relevant)
@@ -240,21 +371,7 @@ export default function AddInventoryItemPage() {
                                 />
                             </div>
 
-                            {/* 5. QUANTITY */}
-                            <div className="space-y-1.5">
-                                <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-500">
-                                    Quantity
-                                </label>
-                                <input
-                                    type="number"
-                                    min="1"
-                                    value={quantity}
-                                    onChange={(e) => setQuantity(e.target.value)}
-                                    className="w-full bg-neutral-50 border border-gray-200 text-sm p-3.5 rounded-sm focus:outline-none focus:border-black font-medium text-black"
-                                />
-                            </div>
-
-                            {/* 6. ASSET ID */}
+                            {/* 8. ASSET ID */}
                             <div className="space-y-1.5">
                                 <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-500">
                                     Asset ID (if relevant)
@@ -268,7 +385,7 @@ export default function AddInventoryItemPage() {
                                 />
                             </div>
 
-                            {/* 7. MULTI-PHOTO UPLOAD SECTION (4 MAX) */}
+                            {/* 9. MULTI-PHOTO UPLOAD */}
                             <div className="space-y-3 pt-2 border-t border-gray-100">
                                 <div className="flex items-center justify-between text-[11px] text-gray-500 font-bold uppercase tracking-wider">
                                     <span>Upload Photos (4 max)</span>
@@ -306,7 +423,6 @@ export default function AddInventoryItemPage() {
                                 <p className="text-[10px] text-gray-400">PNG, JPG, or WEBP formats allowed.</p>
                             </div>
 
-                            {/* SUBMIT BUTTON */}
                             <button
                                 type="submit"
                                 disabled={isSubmitting}
@@ -322,7 +438,7 @@ export default function AddInventoryItemPage() {
 
                 <div className="text-center">
                     <a href="/inventory" className="text-xs text-gray-400 hover:text-black font-bold tracking-wider uppercase transition-colors">
-                        ← Return to Inventory List.
+                        ← Return to Inventory List
                     </a>
                 </div>
 

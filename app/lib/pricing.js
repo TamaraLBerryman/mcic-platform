@@ -1,78 +1,74 @@
 // ==========================================
-// MCIC VENUE PRICING & QUOTING ENGINE
+// MCIC VENUE PRICING & QUOTING ENGINE (FULLY DYNAMIC & TAX INCLUSIVE)
 // ==========================================
 
-// Base Space Hire Rates (Half Day <= 4 hrs | Full Day > 4 hrs)
-export const VENUE_RATES = {
-    'MCIC Ground - Entire Space': { halfDay: 1000, fullDay: 2000 },
-    'MCIC Ground - Event Space': { halfDay: 500, fullDay: 1100 },
-    'MCIC Ground - Design Space': { halfDay: 400, fullDay: 1000 },
-    'MCIC Level 1 - Founders Place': { halfDay: 500, fullDay: 1100 },
-    'MCIC Level 1 - Group Study': { halfDay: 200, fullDay: 400 }
+// SINGLE SOURCE OF TRUTH FOR VENUE INCLUSIONS ($0 / INCLUDED NATIVELY)
+export const ROOM_INCLUSIONS = {
+    'MCIC Ground - Entire Space': [
+        '1x Lectern with Built-in Microphone',
+        '4x Wireless Handheld Microphones',
+        '4x Wireless Lapel Microphones',
+        '2x Front Overhead Projector Screens',
+        '2x Mid-Room TV Screens',
+        'Full Modular Stage Setup',
+        'Surround Sound Audio & Basic Stage Lighting',
+        'Kitchen Access (ZipTaps & Microwaves)'
+    ],
+    'MCIC Ground - Event Space': [
+        '1x Lectern with Built-in Microphone',
+        '2x Wireless Handheld Microphones',
+        '2x Wireless Lapel Microphones',
+        '2x Front Overhead Projector Screens',
+        'Full Modular Stage Setup',
+        'Surround Sound Audio & Basic Stage Lighting',
+        'Kitchen Access (ZipTaps & Microwaves)'
+    ],
+    'MCIC Ground - Design Space': [
+        '2x Wireless Handheld Microphones',
+        '2x Wireless Lapel Microphones',
+        '1x Front Overhead Projector Screen',
+        '2x Front of Room Ceiling hanging TV Screens',
+        'Surround Sound Audio System'
+    ],
+    'MCIC Level 1 - Founders Place': [
+        '1x Wireless Handheld Microphone',
+        '1x Front Overhead Projector Screen',
+        'Surround Sound Audio System',
+        'Shared Kitchenette Access'
+    ],
+    'MCIC Level 1 - Group Study': [
+        'Open Co-working Setup',
+        'Shared Kitchenette Access'
+    ],
+    'MCIC Ground - Colonnade': [
+        'Covered Outdoor Walkway outside MCIC Event & Design Spaces',
+        '1x Portable PA Speaker & Wireless Handheld Microphone',
+        'High networking tables & outdoor registration area'
+    ],
+    'MCIC Ground - AI Makerspace': [
+        'Our AI Makerspace is a space to test and refine AI technologies. It includes workstations and a supercomputer for AI research and development.'
+    ]
 };
 
-// EQUIPMENT & ADD-ON PRICE MATRIX (AUD)
-export const EQUIPMENT_PRICES = {
-    // DISPLAYS & TECH
-    portableStandingTv: 60,     // $60 each
-    ipad: 50,                   // $50 per iPad
-    spareLaptop: 50,            // $50 per laptop
-    micWithPortableSpeaker: 80, // $80 flat fee
-    videoRecordingPerHour: 500, // $500/hr (1x 4K Camcorder, Tech Staff, HD Rec, Hybrid)
-    livestreamPerHour: 800,     // $800/hr (2x 4K Camcorder, Direct YouTube Stream)
-
-    // FURNITURE & WHITEBOARDS
-    standingWhiteboards: 100,   // $100 for all (flat fee when selected)
-    lecternPortable: 50,        // $50 flat fee
-    registrationTable: 0,       // $0
-
-    // CATERING SETUP & SERVICEWARE
-    cateringStandingTables: 0,  // $0
-    urnHotWater: 50,            // $50
-    waterDispenser: 20,         // $20
-    servingTongs: 20,           // $20 (includes platter boards)
-    iceBuckets: 20,             // $20
-    glasses: 60,                // $60 flat set fee
-    plates: 50,                 // $50 flat set fee
-    mugs: 50,                   // $50 flat set fee
-
-    // ROOM-DEPENDENT ITEMS ($0 in Entire Space & Event Space; $100 in other rooms)
-    networkingHighTables: 100,
-    couchesCoffeeTables: 100,
-    loungesCoffeeTable: 100,
-    stage: 100
-};
-
-/**
- * Converts "HH:MM" string to decimal hours (e.g. "09:30" -> 9.5)
- */
 function parseTimeToHours(timeStr) {
     if (!timeStr) return 0;
     const [hours, minutes] = timeStr.split(':').map(Number);
     return hours + (minutes || 0) / 60;
 }
 
-/**
- * Calculates total billable booking hours including Bump-In and Bump-Out
- */
 export function calculateTotalBookingHours(bumpIn, bumpOut, eventStart, eventEnd) {
     const start = parseTimeToHours(bumpIn || eventStart);
     const end = parseTimeToHours(bumpOut || eventEnd);
-
     if (end <= start) return 0;
     return end - start;
 }
 
-/**
- * Calculates required after-hours / weekend staffing hours ($50/hr, 3-hr min block)
- */
-export function calculateStaffingHours(bumpIn, bumpOut, eventStart, eventEnd, isWeekend = false, userRequestedCasualStaff = false) {
+export function calculateStaffingHours(bumpIn, bumpOut, eventStart, eventEnd, isWeekend = false, userRequestedCasualStaff = false, minHours = 3) {
     const start = parseTimeToHours(bumpIn || eventStart);
     const end = parseTimeToHours(bumpOut || eventEnd);
 
     if (end <= start) return 0;
 
-    // Standard office hours: 9:00 AM to 4:00 PM on weekdays
     const afterHoursMorning = Math.max(0, Math.min(16, 9) - start);
     const afterHoursEvening = Math.max(0, end - Math.max(9, 16));
     const afterHoursDuration = afterHoursMorning + afterHoursEvening;
@@ -82,142 +78,116 @@ export function calculateStaffingHours(bumpIn, bumpOut, eventStart, eventEnd, is
     if (requiresAfterHoursStaff || userRequestedCasualStaff) {
         const totalDuration = end - start;
         const requiredHours = requiresAfterHoursStaff ? Math.max(afterHoursDuration, totalDuration) : totalDuration;
-        return Math.max(3, Math.ceil(requiredHours));
+        return Math.max(minHours, Math.ceil(requiredHours));
     }
 
     return 0;
 }
 
-/**
- * Calculates equipment fees including venue-dependent free inclusions
- */
-export function calculateEquipmentFee(avData = {}, selectedSpace = '') {
-    let fee = 0;
+export function calculateQuote(formData, dynamicVenues = [], dynamicItems = [], dynamicSettings = {}) {
+    if (!formData) return null;
 
-    // Rooms where High Tables, Lounge Area, and Stage are $0 inclusions
-    const isGroundMainSpace =
-        selectedSpace === 'MCIC Ground - Entire Space' ||
-        selectedSpace === 'MCIC Ground - Event Space';
+    const staffRate = dynamicSettings.staffHourlyRate || 50;
+    const staffMinHours = dynamicSettings.staffMinHours || 3;
+    const taxRate = dynamicSettings.taxRate || 0.10;
 
-    Object.keys(avData).forEach((key) => {
-        const val = avData[key];
-        if (!val) return;
+    const selectedSpaceName = formData.space || 'MCIC Ground - Event Space';
+    const venueDoc = dynamicVenues.find(v => v.name === selectedSpaceName) || {};
 
-        // Room-dependent $0 inclusions
-        if (['networkingHighTables', 'couchesCoffeeTables', 'loungesCoffeeTable', 'stage'].includes(key)) {
-            if (!isGroundMainSpace) {
-                fee += 100;
-            }
-            return;
-        }
-
-        // Flat fee for whiteboards bundle ($100 flat regardless of count > 0)
-        if (key === 'standingWhiteboards') {
-            if (val > 0 || val === true) fee += 100;
-            return;
-        }
-
-        // Recording & Livestream hourly pricing
-        if (key === 'videoRecording' && val) {
-            const hours = avData.recordingHours || 1;
-            fee += EQUIPMENT_PRICES.videoRecordingPerHour * hours;
-            return;
-        }
-
-        if (key === 'livestream' && val) {
-            const hours = avData.livestreamHours || 1;
-            fee += EQUIPMENT_PRICES.livestreamPerHour * hours;
-            return;
-        }
-
-        // Per-unit or flat items
-        const itemPrice = EQUIPMENT_PRICES[key] || 0;
-        if (typeof val === 'boolean' && val) {
-            fee += itemPrice;
-        } else if (typeof val === 'number' && val > 0) {
-            // Per-unit multiplier (e.g., 2 TVs * $60 = $120)
-            fee += itemPrice * val;
-        }
-    });
-
-    return fee;
-}
-
-/**
- * Master Quote Calculator Function
- */
-export function calculateQuote(formData) {
-    if (!formData) {
-        return {
-            totalHours: 0,
-            rateTier: 'Half Day',
-            baseVenueFee: 0,
-            discountPercentage: 0,
-            discountedVenueFee: 0,
-            staffingHours: 0,
-            staffFee: 0,
-            equipmentFee: 0,
-            total: 0
-        };
-    }
-
-    const space = formData.space || 'MCIC Ground - Event Space';
-    const spaceRates = VENUE_RATES[space] || VENUE_RATES['MCIC Ground - Event Space'];
-
-    // 1. Calculate Booking Duration & Tier
     const totalHours = calculateTotalBookingHours(
-        formData.bumpIn,
-        formData.bumpOut,
-        formData.eventStart,
-        formData.eventEnd
+        formData.bumpIn, formData.bumpOut, formData.eventStart, formData.eventEnd
     );
-
     const isFullDay = totalHours > 4;
-    let baseVenueFee = isFullDay ? spaceRates.fullDay : spaceRates.halfDay;
-    if (totalHours === 0) baseVenueFee = 0;
 
-    // 2. Affiliation & Collaboration Discounts
-    let discountPercentage = 0; // External = 0%
+    const baseVenueFee = isFullDay
+        ? (venueDoc.fullDayRate || 0)
+        : (venueDoc.halfDayRate || 0);
 
-    if (formData.department === 'UNSW Founders' || formData.userType === 'UNSW Founders') {
-        discountPercentage = 1.0; // 100% FREE
+    // UNSW Founders Internal & Founders Collaboration are 100% Free (1.0 discount)
+    let discountPercentage = 0;
+    const isFoundersInternal =
+        formData.department === 'UNSW Founders' ||
+        formData.userType === 'UNSW Founders' ||
+        (formData.userType === 'Internal to UNSW' && formData.department === 'UNSW Founders');
+
+    if (isFoundersInternal || formData.requestFoundersCollaboration) {
+        discountPercentage = 1.0;
     } else if (
         formData.department === 'Research and Enterprise Division' ||
         formData.unswDivision === 'Research and Enterprise Division'
     ) {
-        discountPercentage = 0.5; // 50% discount
-    } else if (formData.requestFoundersCollaboration) {
-        discountPercentage = 0.5; // 50% provisional discount
+        discountPercentage = 0.5;
     }
 
-    const discountedVenueFee = baseVenueFee * (1 - discountPercentage);
+    const lineItems = [];
 
-    // 3. Staffing Charges ($50/hr, 3-hr min block)
+    // Line Item 1: Venue Hire
+    if (baseVenueFee > 0) {
+        const venueDiscount = baseVenueFee * discountPercentage;
+        lineItems.push({
+            description: `${selectedSpaceName} (${isFullDay ? 'Full Day >4hrs' : 'Half Day <=4hrs'})`,
+            quantity: 1,
+            unitPrice: baseVenueFee,
+            total: baseVenueFee - venueDiscount,
+            discount: venueDiscount
+        });
+    }
+
+    // Line Item 2: Staffing
     const staffingHours = calculateStaffingHours(
-        formData.bumpIn,
-        formData.bumpOut,
-        formData.eventStart,
-        formData.eventEnd,
-        formData.isWeekend,
-        formData.requestCasualStaff
+        formData.bumpIn, formData.bumpOut, formData.eventStart, formData.eventEnd,
+        formData.isWeekend, formData.requestCasualStaff, staffMinHours
     );
-    const staffFee = staffingHours * 50;
 
-    // 4. Calculate Equipment Add-ons Fee
-    const equipmentFee = calculateEquipmentFee(formData.av || {}, space);
+    if (staffingHours > 0) {
+        const staffDiscount = isFoundersInternal ? staffingHours * staffRate : 0;
+        lineItems.push({
+            description: `Event Staffing (${staffingHours} hrs @ $${staffRate}/hr)`,
+            quantity: staffingHours,
+            unitPrice: staffRate,
+            total: (staffingHours * staffRate) - staffDiscount,
+            discount: staffDiscount
+        });
+    }
 
-    // 5. Total
-    const total = discountedVenueFee + staffFee + equipmentFee;
+    // Line Item 3: Equipment Add-ons (Driven directly from item freeInclusionSpaces)
+    const avData = formData.av || {};
+
+    Object.keys(avData).forEach(itemKey => {
+        const val = avData[itemKey];
+        if (!val || isFoundersInternal) return;
+
+        const dbItem = dynamicItems.find(i => (i.id === itemKey || i.name === itemKey || i.key === itemKey)) || {};
+        let unitPrice = dbItem.costPerDay || 0;
+        let qty = typeof val === 'number' ? val : 1;
+
+        // Check if item's freeInclusionSpaces array includes selectedSpaceName
+        const freeSpaces = dbItem.freeInclusionSpaces || [];
+        if (Array.isArray(freeSpaces) && freeSpaces.includes(selectedSpaceName)) {
+            unitPrice = 0;
+        }
+
+        if (unitPrice > 0) {
+            lineItems.push({
+                description: dbItem.name || itemKey,
+                quantity: qty,
+                unitPrice,
+                total: unitPrice * qty,
+                discount: 0
+            });
+        }
+    });
+
+    // Total Calculation (GST INCLUDED IN PRICE)
+    const totalDue = lineItems.reduce((acc, item) => acc + item.total, 0);
+    const taxIncluded = totalDue - (totalDue / (1 + taxRate));
+    const subtotalExcludingTax = totalDue - taxIncluded;
 
     return {
-        totalHours,
-        rateTier: isFullDay ? 'Full Day (> 4 hrs)' : 'Half Day (<= 4 hrs)',
-        baseVenueFee,
-        discountPercentage: discountPercentage * 100,
-        discountedVenueFee,
-        staffingHours,
-        staffFee,
-        equipmentFee,
-        total
+        lineItems,
+        subtotalExcludingTax,
+        taxIncluded,
+        totalDue,
+        discountPercentage: discountPercentage * 100
     };
 }
