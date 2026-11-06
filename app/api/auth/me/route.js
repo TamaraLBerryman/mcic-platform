@@ -1,7 +1,7 @@
-import { accessFromMember } from '../../lib/access';
-import { memberGroup } from '../../lib/accessStore';
-import { recordLogin } from '../../lib/userStore';
-import { emailFromRequest, isAdminEmail } from '../../lib/verifyUser';
+import { accessFromMember } from '../../../lib/access';
+import { memberGroup } from '../../../lib/accessStore';
+import { recordLogin } from '../../../lib/userStore';
+import { emailFromRequest, isAdminEmail } from '../../../lib/verifyUser';
 
 export async function GET(request) {
     try {
