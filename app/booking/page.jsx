@@ -1,8 +1,11 @@
 "use client";
 
-
 import React from 'react';
-import BookingForm from '@/components/BookingForm';
+import dynamic from 'next/dynamic';
+
+const BookingForm = dynamic(() => import('@/components/BookingForm'), {
+    loading: () => <p className="text-sm text-neutral-500">Loading the booking form…</p>
+});
 
 
 export default function BookingPage() {

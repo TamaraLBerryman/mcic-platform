@@ -9,7 +9,7 @@ import {
     signInWithEmailLink,
     signOut
 } from 'firebase/auth';
-import { app } from './firebase';
+import { app } from './firebaseApp';
 
 const EMAIL_KEY = 'mcicEmailForSignIn';
 

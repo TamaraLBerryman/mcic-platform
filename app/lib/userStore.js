@@ -1,4 +1,4 @@
-import { collection, doc, getDoc, getDocs, setDoc } from 'firebase/firestore';
+import { collection, doc, getDocs, setDoc, updateDoc } from 'firebase/firestore';
 import { db } from './firebase';
 
 function userId(email) {
@@ -10,15 +10,13 @@ export async function recordLogin(email, group) {
     const id = userId(cleaned);
     if (!id) return null;
     const ref = doc(db, 'users', id);
-    const existing = await getDoc(ref);
     const now = new Date().toISOString();
-    const record = {
-        email: cleaned,
-        group: group || 'other',
-        firstSeenAt: existing.data()?.firstSeenAt || now,
-        lastSeenAt: now
-    };
-    await setDoc(ref, record, { merge: true });
+    const record = { email: cleaned, group: group || 'other', lastSeenAt: now };
+    try {
+        await updateDoc(ref, record);
+    } catch {
+        await setDoc(ref, { ...record, firstSeenAt: now });
+    }
     return record;
 }
 
