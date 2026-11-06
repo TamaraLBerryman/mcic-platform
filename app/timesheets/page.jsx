@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from 'react';
+import Gate from '../../components/Gate';
 
-export default function TimesheetsPage() {
+function TimesheetsPage() {
     const [submittingStaff, setSubmittingStaff] = useState('');
     const [shiftDate, setShiftDate] = useState('2026-10-18');
     const [startTime, setStartTime] = useState('09:00');
@@ -185,4 +186,8 @@ export default function TimesheetsPage() {
 
         </div>
     );
+}
+
+export default function Page() {
+    return <Gate level="staff"><TimesheetsPage /></Gate>;
 }

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
+import Gate from '../../components/Gate';
 import { db, storage } from '../lib/firebase';
 import { collection, onSnapshot, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { ref, uploadString, getDownloadURL } from 'firebase/storage';
@@ -73,7 +74,7 @@ const formatDateForInput = (dateStr) => {
     return '';
 };
 
-export default function LockerManagementPage() {
+function LockerManagementPage() {
     const [lockers, setLockers] = useState([]);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -1464,4 +1465,8 @@ export default function LockerManagementPage() {
             }
         </div >
     );
+}
+
+export default function Page() {
+    return <Gate level="staff"><LockerManagementPage /></Gate>;
 }

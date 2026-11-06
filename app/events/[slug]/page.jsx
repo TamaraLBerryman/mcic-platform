@@ -1,28 +1,49 @@
 "use client";
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { catalogEvent, isFoundersStaffEvent } from '../../lib/eventCatalog';
+
+const fallbackEvent = {
+    title: 'Event',
+    eventDate: '',
+    eventStart: '',
+    eventEnd: '',
+    space: 'Michael Crouch Innovation Centre',
+    locationAddress: 'Michael Crouch Innovation Centre, Building E10, Gate 2, UNSW Sydney, Kensington NSW 2052',
+    description: '',
+    slug: '',
+    isPublicListing: true,
+    registrationType: 'MCIC_PLATFORM',
+    status: 'APPROVED',
+    eventType: '',
+    image: 'https://images.unsplash.com/photo-1485827404703-89b55fcc595e?auto=format&fit=crop&w=1200&q=80',
+    ticketPrice: 'Free',
+};
 
 export default function EventDetailPage({ params }) {
-    const event = {
-        title: 'AI & Robotics Founders Workshop',
-        eventDate: '2026-11-15',
-        eventStart: '10:00',
-        eventEnd: '12:30',
-        space: 'MCIC Ground - Event Space',
-        locationAddress: 'Michael Crouch Innovation Centre, Building E10, Gate 2, UNSW Sydney, Kensington NSW 2052',
-        description: `Join us for a hands-on prototyping session exploring rapid AI integration into hardware products. Designed for founders, researchers, and students looking to take their ideas from concept to reality.`,
-        slug: 'ai-robotics-founders-workshop',
-        isPublicListing: true,
-        registrationType: 'MCIC_PLATFORM',
-        status: 'APPROVED',
-        eventType: 'UNSW_FOUNDERS',
-        organizerName: 'UNSW Founders Program',
-        organizerRole: 'Official Accelerator & Entrepreneurship Hub',
-        organizerBio: 'UNSW Founders supports students, staff, and alumni to build impactful startups from concept to global scale.',
-        image: 'https://images.unsplash.com/photo-1485827404703-89b55fcc595e?auto=format&fit=crop&w=1200&q=80',
-        ticketPrice: 'Free',
-    };
+    const [event, setEvent] = useState(() => catalogEvent(params?.slug) || fallbackEvent);
+
+    useEffect(() => {
+        const slug = params?.slug;
+        if (!slug) return;
+        const known = catalogEvent(slug);
+        if (known) setEvent(known);
+        fetch(`/api/events?slug=${encodeURIComponent(slug)}`)
+            .then(response => response.json())
+            .then(data => {
+                if (!data.event) return;
+                setEvent({
+                    ...(known || fallbackEvent),
+                    ...data.event,
+                    title: data.event.title,
+                    ticketPrice: data.event.ticketPrice || 'See registration',
+                    image: data.event.image || known?.image || fallbackEvent.image,
+                    locationAddress: data.event.space || known?.space || fallbackEvent.locationAddress
+                });
+            })
+            .catch(() => {});
+    }, [params]);
 
     // MOCK AUDIENCE GOALS / QUESTIONS (Shows what other registered guests have submitted)
     const [communityQuestions, setCommunityQuestions] = useState([
@@ -54,6 +75,9 @@ export default function EventDetailPage({ params }) {
     const [selectedDietary, setSelectedDietary] = useState([]);
     const [accessibilityNeeds, setAccessibilityNeeds] = useState('');
     const [userQuestionGoal, setUserQuestionGoal] = useState('');
+    const [submitting, setSubmitting] = useState(false);
+    const [registrationError, setRegistrationError] = useState('');
+    const [registration, setRegistration] = useState(null);
 
     const isUNSWAffiliated = selectedAffiliations.some((aff) =>
         ['UNSW Student', 'UNSW Staff / Researcher', 'UNSW Alumni'].includes(aff)
@@ -81,6 +105,61 @@ export default function EventDetailPage({ params }) {
         setCommunityQuestions(prev =>
             prev.map(q => q.id === id ? { ...q, upvotes: q.upvotes + 1 } : q)
         );
+    };
+
+    const eventSlug = params?.slug || event.slug;
+
+    const handleRegister = async (submitEvent) => {
+        submitEvent.preventDefault();
+        setRegistrationError('');
+        if (selectedAffiliations.length === 0) {
+            setRegistrationError('Choose at least one affiliation.');
+            return;
+        }
+        const unsw = selectedAffiliations.some(item => ['UNSW Student', 'UNSW Staff / Researcher', 'UNSW Alumni'].includes(item));
+        if (unsw && selectedFaculties.length === 0) {
+            setRegistrationError('Choose a UNSW faculty or school.');
+            return;
+        }
+
+        const form = new FormData(submitEvent.currentTarget);
+        setSubmitting(true);
+        try {
+            const response = await fetch('/api/registrations', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    eventSlug,
+                    eventTitle: event.title,
+                    eventDate: event.eventDate,
+                    eventStart: event.eventStart,
+                    eventEnd: event.eventEnd,
+                    maxTicketCapacity: event.maxTicketCapacity || 0,
+                    firstName: form.get('firstName'),
+                    lastName: form.get('lastName'),
+                    email: form.get('email'),
+                    phone: form.get('phone'),
+                    zid: form.get('zid'),
+                    questionGoal: userQuestionGoal,
+                    affiliations: selectedAffiliations,
+                    faculties: selectedFaculties,
+                    genderIdentity,
+                    genderSelfDescribe,
+                    dietary: selectedDietary,
+                    accessibilityNeeds
+                })
+            });
+            const data = await response.json();
+            if (!data.success) {
+                setRegistrationError(data.error || 'Registration could not be saved.');
+                return;
+            }
+            setRegistration(data);
+        } catch (err) {
+            setRegistrationError('Registration could not be saved.');
+        } finally {
+            setSubmitting(false);
+        }
     };
 
     const formattedDate = new Date(event.eventDate).toLocaleDateString('en-AU', {
@@ -134,6 +213,39 @@ export default function EventDetailPage({ params }) {
                                 {event.description}
                             </p>
                         </div>
+
+                        {isFoundersStaffEvent(event) && (
+                            <div className="space-y-4 border-t border-neutral-200 pt-8">
+                                <h2 className="text-xl font-extrabold text-black uppercase tracking-tight">
+                                    About UNSW Founders
+                                </h2>
+                                <p className="text-sm text-neutral-700 leading-relaxed font-medium">
+                                    As Australia's leading university-based entrepreneurial program, UNSW Founders has a proven track record of success. Since its inception in 2018, the program has supported 200+ startups every year, provided entrepreneurial skills training to 25,000+ individuals, provided over 10,000 coaching and mentoring sessions, and incubated (co-located) 70+ startups on campus to foster collaboration with the UNSW business, industry, academic, and research networks.
+                                </p>
+                                <p className="text-sm text-neutral-700 leading-relaxed font-medium">
+                                    Find out more at -{' '}
+                                    <a
+                                        href="https://unswfounders.com/"
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="font-bold underline hover:text-[#B39300]"
+                                    >
+                                        UNSW Founders
+                                    </a>
+                                </p>
+                                <p className="text-sm text-neutral-700 leading-relaxed font-medium">
+                                    <a
+                                        href="https://unswfounders.com/newsletter"
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="font-bold underline hover:text-[#B39300]"
+                                    >
+                                        Subscribe to the UNSW Founders Newsletter
+                                    </a>
+                                    {' '}to stay up to date with all our programs and events
+                                </p>
+                            </div>
+                        )}
 
                         {/* AUDIENCE INTEREST & GOALS (COMMUNITY Q&A BOARD) */}
                         <div className="space-y-4 border-t border-neutral-200 pt-8">
@@ -189,7 +301,7 @@ export default function EventDetailPage({ params }) {
                                         Registration
                                     </span>
                                     <span className="text-xs font-mono font-bold bg-neutral-800 px-2 py-1 rounded-xs text-emerald-400">
-                                        {event.ticketPrice}
+                                        {event.ticketPrice || 'Free'}
                                     </span>
                                 </div>
                                 <h2 className="text-xl font-extrabold text-white">
@@ -197,12 +309,48 @@ export default function EventDetailPage({ params }) {
                                 </h2>
                             </div>
 
-                            <form className="space-y-5">
+                            {registration?.pendingReview || registration?.notConfirmed ? (
+                                <div className="space-y-3 text-center">
+                                    <p className="text-sm font-bold text-[#EAD64D]">
+                                        {registration.notConfirmed ? 'This registration was not confirmed.' : 'Your registration is being reviewed.'}
+                                    </p>
+                                    <p className="text-xs text-neutral-300">
+                                        {registration.notConfirmed
+                                            ? 'A ticket has not been issued for this email.'
+                                            : 'You will be emailed a ticket if the registration is confirmed.'}
+                                    </p>
+                                </div>
+                            ) : registration ? (
+                                <div className="space-y-4 text-center">
+                                    <p className="text-sm font-bold text-[#EAD64D]">You're registered.</p>
+                                    <p className="text-xs text-neutral-300">
+                                        {registration.emailSent
+                                            ? `A QR code was emailed to ${registration.registration.answers.email}.`
+                                            : `The ticket is saved. Email could not be sent: ${registration.emailError}`}
+                                    </p>
+                                    {registration.registration.qrDataUrl && (
+                                        <img
+                                            src={registration.registration.qrDataUrl}
+                                            alt="Your ticket QR code"
+                                            className="mx-auto w-48 h-48 bg-white p-2"
+                                        />
+                                    )}
+                                    <p className="font-mono font-bold tracking-wider">{registration.registration.ticketCode}</p>
+                                    <Link href={`/ticket/${registration.registration.ticketCode}`} className="block text-xs font-bold uppercase tracking-wider text-[#EAD64D]">
+                                        Open ticket
+                                    </Link>
+                                    <Link href={`/events/${eventSlug}/door`} className="block text-[10px] font-bold uppercase tracking-wider text-neutral-400">
+                                        Door check-in
+                                    </Link>
+                                </div>
+                            ) : (
+                            <form className="space-y-5" onSubmit={handleRegister}>
                                 {/* NAME FIELDS */}
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                     <div className="space-y-1">
                                         <label className="text-[11px] font-bold uppercase tracking-wider text-neutral-300 block">First Name *</label>
                                         <input
+                                            name="firstName"
                                             type="text"
                                             required
                                             placeholder="Jane"
@@ -212,6 +360,7 @@ export default function EventDetailPage({ params }) {
                                     <div className="space-y-1">
                                         <label className="text-[11px] font-bold uppercase tracking-wider text-neutral-300 block">Last Name *</label>
                                         <input
+                                            name="lastName"
                                             type="text"
                                             required
                                             placeholder="Doe"
@@ -224,6 +373,7 @@ export default function EventDetailPage({ params }) {
                                 <div className="space-y-1">
                                     <label className="text-[11px] font-bold uppercase tracking-wider text-neutral-300 block">Email Address *</label>
                                     <input
+                                        name="email"
                                         type="email"
                                         required
                                         placeholder="jane.doe@unsw.edu.au"
@@ -235,6 +385,7 @@ export default function EventDetailPage({ params }) {
                                     <div className="space-y-1">
                                         <label className="text-[11px] font-bold uppercase tracking-wider text-neutral-300 block">Mobile Number *</label>
                                         <input
+                                            name="phone"
                                             type="tel"
                                             required
                                             placeholder="0400 000 000"
@@ -244,6 +395,7 @@ export default function EventDetailPage({ params }) {
                                     <div className="space-y-1">
                                         <label className="text-[11px] font-bold uppercase tracking-wider text-neutral-300 block">zID (Optional)</label>
                                         <input
+                                            name="zid"
                                             type="text"
                                             placeholder="z1234567"
                                             className="w-full p-3 bg-neutral-950 border border-neutral-800 text-white text-xs rounded-xs outline-none focus:border-[#EAD64D]"
@@ -395,13 +547,22 @@ export default function EventDetailPage({ params }) {
                                     />
                                 </div>
 
+                                {registrationError && (
+                                    <p className="text-xs font-bold text-red-300">{registrationError}</p>
+                                )}
+
                                 <button
                                     type="submit"
-                                    className="w-full bg-[#EAD64D] hover:bg-white text-black font-black py-4 text-xs uppercase tracking-wider rounded-xs transition-all duration-150 cursor-pointer shadow-md mt-2"
+                                    disabled={submitting}
+                                    className="w-full bg-[#EAD64D] hover:bg-white text-black font-black py-4 text-xs uppercase tracking-wider rounded-xs transition-all duration-150 cursor-pointer shadow-md mt-2 disabled:opacity-60"
                                 >
-                                    Get Tickets →
+                                    {submitting ? 'Saving registration…' : 'Get Tickets →'}
                                 </button>
+                                <Link href={`/events/${eventSlug}/door`} className="block text-center text-[10px] font-bold uppercase tracking-wider text-neutral-400 hover:text-[#EAD64D]">
+                                    Door check-in
+                                </Link>
                             </form>
+                            )}
 
                         </div>
                     </div>

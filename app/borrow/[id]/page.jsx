@@ -4,9 +4,12 @@ import { useState, useEffect } from 'react';
 import { db, storage } from '../../lib/firebase';
 import { doc, getDoc, updateDoc, collection, addDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { allows } from '../../lib/access';
+import { useAccess } from '../../../components/useAccess';
 
 export default function BorrowPage({ params }) {
     const itemId = params?.id ? params.id.toUpperCase() : "UNKNOWN-ASSET";
+    const { ready: accessReady, access } = useAccess();
 
     const [itemDetails, setItemDetails] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -49,6 +52,7 @@ export default function BorrowPage({ params }) {
     const [editItemType, setEditItemType] = useState('reusable');
     const [editHireScope, setEditHireScope] = useState('mcic_only');
     const [editIsFoundersStaffOnly, setEditIsFoundersStaffOnly] = useState(false);
+    const [editViewAccess, setEditViewAccess] = useState('public');
     const [editFreeInclusionSpaces, setEditFreeInclusionSpaces] = useState([]);
 
     // Multi-photo Editing States
@@ -100,6 +104,7 @@ export default function BorrowPage({ params }) {
                     setEditItemType(data.itemType || 'reusable');
                     setEditHireScope(data.hireScope || 'mcic_only');
                     setEditIsFoundersStaffOnly(!!data.isFoundersStaffOnly);
+                    setEditViewAccess(data.viewAccess || 'public');
                     setEditFreeInclusionSpaces(Array.isArray(data.freeInclusionSpaces) ? data.freeInclusionSpaces : []);
 
                     const imgs = data.images && data.images.length > 0
@@ -280,6 +285,7 @@ export default function BorrowPage({ params }) {
                 itemType: editItemType,
                 hireScope: editHireScope,
                 isFoundersStaffOnly: editIsFoundersStaffOnly,
+                viewAccess: editViewAccess,
                 freeInclusionSpaces: editFreeInclusionSpaces,
                 image: allFinalImages[0] || '',
                 images: allFinalImages
@@ -321,6 +327,25 @@ export default function BorrowPage({ params }) {
         );
     }
 
+    const viewLevel = itemDetails.viewAccess || 'public';
+    if ((viewLevel !== 'public' && !accessReady) || (accessReady && !allows(access, viewLevel))) {
+        return (
+            <main className="min-h-screen bg-[#F9F9F9] flex flex-col items-center justify-center p-6 space-y-4">
+                <p className="text-sm font-bold">{accessReady ? 'You do not have access to this item.' : 'Checking access…'}</p>
+                <a href="/inventory" className="text-xs font-bold uppercase tracking-wider text-black underline">Return to Inventory</a>
+            </main>
+        );
+    }
+
+    if (accessReady && !allows(access, itemDetails.viewAccess || 'public')) {
+        return (
+            <main className="min-h-screen bg-[#F9F9F9] flex flex-col items-center justify-center p-6 space-y-4">
+                <p className="text-sm font-bold">You do not have access to this item.</p>
+                <a href="/inventory" className="text-xs font-bold uppercase tracking-wider text-black underline">Return to Inventory</a>
+            </main>
+        );
+    }
+
     const isAvailable = itemDetails.status === 'Available';
     const displayPhotosList = itemDetails.images && itemDetails.images.length > 0
         ? itemDetails.images
@@ -337,13 +362,13 @@ export default function BorrowPage({ params }) {
                 <div className="bg-white border border-gray-200 p-6 rounded-sm shadow-xs space-y-6">
 
                     <div className="flex justify-end items-center border-b border-gray-100 pb-3">
-                        <button
+                        {access.staff && <button
                             type="button"
                             onClick={() => setIsEditing(!isEditing)}
                             className="text-neutral-700 hover:text-black font-extrabold text-[10px] uppercase tracking-wider flex items-center gap-1 cursor-pointer bg-neutral-100 border border-neutral-200 px-3 py-1 rounded-xs transition-colors"
                         >
                             <span>{isEditing ? '✕ Cancel Edit' : '✏️ Edit Listing'}</span>
-                        </button>
+                        </button>}
                     </div>
 
                     {isEditing ? (
@@ -479,6 +504,16 @@ export default function BorrowPage({ params }) {
                                     </div>
                                 </div>
 
+                                <label className="block text-xs font-bold uppercase tracking-wider">Who can see this item
+                                    <select value={editViewAccess} onChange={(event) => setEditViewAccess(event.target.value)} className="mt-1 w-full p-2 border border-gray-200 rounded-sm font-medium normal-case">
+                                        <option value="public">Anyone</option>
+                                        <option value="account">Any signed-in account</option>
+                                        <option value="founders">Founders general staff and Admin</option>
+                                        <option value="casual">Casual staff and Admin</option>
+                                        <option value="staff">Founders staff, casuals, and Admin</option>
+                                        <option value="admin">Admin only</option>
+                                    </select>
+                                </label>
                                 <div className="pt-2 border-t border-gray-200">
                                     <label className="flex items-center gap-2 cursor-pointer select-none">
                                         <input

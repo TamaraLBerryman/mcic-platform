@@ -1,12 +1,13 @@
 "use client";
 
 import { useState } from 'react';
+import Gate from '../../../components/Gate';
 import { useRouter } from 'next/navigation';
 import { db, storage } from '../../lib/firebase';
 import { doc, setDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
-export default function AddInventoryItemPage() {
+function AddInventoryItemPage() {
     const router = useRouter();
 
     const [itemId, setItemId] = useState('');
@@ -25,6 +26,7 @@ export default function AddInventoryItemPage() {
     // Restrictions & Badges
     const [hireScope, setHireScope] = useState('mcic_only'); // 'mcic_only' | 'external_hire'
     const [isFoundersStaffOnly, setIsFoundersStaffOnly] = useState(false);
+    const [viewAccess, setViewAccess] = useState('public');
     const [freeInclusionSpaces, setFreeInclusionSpaces] = useState([]);
 
     // Multi-photo State (up to 4 photos)
@@ -115,6 +117,7 @@ export default function AddInventoryItemPage() {
                 costPerDay: parseFloat(costPerDay) || 0,
                 hireScope: hireScope,
                 isFoundersStaffOnly: isFoundersStaffOnly,
+                viewAccess,
                 freeInclusionSpaces: freeInclusionSpaces,
                 status: 'Available',
                 user: '-',
@@ -299,6 +302,16 @@ export default function AddInventoryItemPage() {
                                     </div>
                                 </div>
 
+                                <label className="block text-xs font-bold uppercase tracking-wider">Who can see this item
+                                    <select value={viewAccess} onChange={(event) => setViewAccess(event.target.value)} className="mt-1 w-full p-2 border border-gray-200 rounded-sm font-medium normal-case">
+                                        <option value="public">Anyone</option>
+                                        <option value="account">Any signed-in account</option>
+                                        <option value="founders">Founders general staff and Admin</option>
+                                        <option value="casual">Casual staff and Admin</option>
+                                        <option value="staff">Founders staff, casuals, and Admin</option>
+                                        <option value="admin">Admin only</option>
+                                    </select>
+                                </label>
                                 <div className="pt-2 border-t border-gray-200">
                                     <label className="flex items-center gap-2.5 cursor-pointer select-none">
                                         <input
@@ -445,4 +458,8 @@ export default function AddInventoryItemPage() {
             </div>
         </main>
     );
+}
+
+export default function Page() {
+    return <Gate level="staff"><AddInventoryItemPage /></Gate>;
 }

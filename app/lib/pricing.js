@@ -1,3 +1,6 @@
+import { casualShiftQuantity } from './casualStaff';
+import { WORK_END, WORK_START } from './workingHours';
+
 // ==========================================
 // MCIC VENUE PRICING & QUOTING ENGINE (FULLY DYNAMIC & TAX INCLUSIVE)
 // ==========================================
@@ -50,6 +53,27 @@ export const ROOM_INCLUSIONS = {
     ]
 };
 
+// GST-inclusive hire rates. Firestore venue documents override these when they include halfDayRate / fullDayRate.
+export const VENUE_RATES = {
+    'MCIC Ground - Entire Space': { halfDayRate: 1600, fullDayRate: 2800 },
+    'MCIC Ground - Event Space': { halfDayRate: 900, fullDayRate: 1600 },
+    'MCIC Ground - Design Space': { halfDayRate: 700, fullDayRate: 1200 },
+    'MCIC Level 1 - Founders Place': { halfDayRate: 700, fullDayRate: 1200 },
+    'MCIC Level 1 - Group Study': { halfDayRate: 250, fullDayRate: 400 },
+    'MCIC Ground - Colonnade': { halfDayRate: 300, fullDayRate: 500 },
+    'MCIC Ground - AI Makerspace': { halfDayRate: 0, fullDayRate: 0 },
+    'MCIC Ground - AI Makerspace - COMING SOON': { halfDayRate: 0, fullDayRate: 0 }
+};
+
+function ratesForSpace(spaceName, dynamicVenues) {
+    const venueDoc = (dynamicVenues || []).find(v => v.name === spaceName) || {};
+    const fallback = VENUE_RATES[spaceName] || { halfDayRate: 0, fullDayRate: 0 };
+    return {
+        halfDayRate: Number(venueDoc.halfDayRate ?? fallback.halfDayRate) || 0,
+        fullDayRate: Number(venueDoc.fullDayRate ?? fallback.fullDayRate) || 0
+    };
+}
+
 function parseTimeToHours(timeStr) {
     if (!timeStr) return 0;
     const [hours, minutes] = timeStr.split(':').map(Number);
@@ -69,8 +93,10 @@ export function calculateStaffingHours(bumpIn, bumpOut, eventStart, eventEnd, is
 
     if (end <= start) return 0;
 
-    const afterHoursMorning = Math.max(0, Math.min(16, 9) - start);
-    const afterHoursEvening = Math.max(0, end - Math.max(9, 16));
+    const workStart = parseTimeToHours(WORK_START);
+    const workEnd = parseTimeToHours(WORK_END);
+    const afterHoursMorning = Math.max(0, Math.min(end, workStart) - start);
+    const afterHoursEvening = Math.max(0, end - Math.max(start, workEnd));
     const afterHoursDuration = afterHoursMorning + afterHoursEvening;
 
     const requiresAfterHoursStaff = isWeekend || afterHoursDuration > 0;
@@ -84,6 +110,12 @@ export function calculateStaffingHours(bumpIn, bumpOut, eventStart, eventEnd, is
     return 0;
 }
 
+function casualStaffHeadcount(formData) {
+    const rows = formData?.casualStaffDetails;
+    if (formData?.wantsCasualStaff !== 'Yes' || !Array.isArray(rows) || rows.length === 0) return 1;
+    return rows.reduce((total, row) => total + (casualShiftQuantity(row) || 1), 0);
+}
+
 export function calculateQuote(formData, dynamicVenues = [], dynamicItems = [], dynamicSettings = {}) {
     if (!formData) return null;
 
@@ -92,30 +124,26 @@ export function calculateQuote(formData, dynamicVenues = [], dynamicItems = [], 
     const taxRate = dynamicSettings.taxRate || 0.10;
 
     const selectedSpaceName = formData.space || 'MCIC Ground - Event Space';
-    const venueDoc = dynamicVenues.find(v => v.name === selectedSpaceName) || {};
+    const selectedRates = ratesForSpace(selectedSpaceName, dynamicVenues);
 
     const totalHours = calculateTotalBookingHours(
         formData.bumpIn, formData.bumpOut, formData.eventStart, formData.eventEnd
     );
     const isFullDay = totalHours > 4;
 
-    const baseVenueFee = isFullDay
-        ? (venueDoc.fullDayRate || 0)
-        : (venueDoc.halfDayRate || 0);
+    const baseVenueFee = isFullDay ? selectedRates.fullDayRate : selectedRates.halfDayRate;
 
-    // UNSW Founders Internal & Founders Collaboration are 100% Free (1.0 discount)
-    let discountPercentage = 0;
     const isFoundersInternal =
         formData.department === 'UNSW Founders' ||
         formData.userType === 'UNSW Founders' ||
         (formData.userType === 'Internal to UNSW' && formData.department === 'UNSW Founders');
+    const isInternal = isFoundersInternal || formData.userType === 'Internal to UNSW';
+    const innovationAligned = formData.isInnovationOrEntrepreneurship === 'Yes' || formData.requestFoundersCollaboration;
 
-    if (isFoundersInternal || formData.requestFoundersCollaboration) {
+    let discountPercentage = 0;
+    if (isFoundersInternal || (isInternal && innovationAligned)) {
         discountPercentage = 1.0;
-    } else if (
-        formData.department === 'Research and Enterprise Division' ||
-        formData.unswDivision === 'Research and Enterprise Division'
-    ) {
+    } else if (isInternal || innovationAligned) {
         discountPercentage = 0.5;
     }
 
@@ -133,19 +161,40 @@ export function calculateQuote(formData, dynamicVenues = [], dynamicItems = [], 
         });
     }
 
+    if (formData.includeColonnadeAddon && selectedSpaceName !== 'MCIC Ground - Colonnade') {
+        const colonnadeRates = ratesForSpace('MCIC Ground - Colonnade', dynamicVenues);
+        const colonnadeFee = isFullDay ? colonnadeRates.fullDayRate : colonnadeRates.halfDayRate;
+        if (colonnadeFee > 0) {
+            const colonnadeDiscount = colonnadeFee * discountPercentage;
+            lineItems.push({
+                description: `Colonnade add-on (${isFullDay ? 'Full Day >4hrs' : 'Half Day <=4hrs'})`,
+                quantity: 1,
+                unitPrice: colonnadeFee,
+                total: colonnadeFee - colonnadeDiscount,
+                discount: colonnadeDiscount
+            });
+        }
+    }
+
     // Line Item 2: Staffing
+    const wantsStaff = formData.requestCasualStaff || formData.wantsCasualStaff === 'Yes' || formData.needsFoundersCasualStaff === 'Yes';
+    const appliedMinHours = formData.isWeekend ? Math.max(staffMinHours, 4) : staffMinHours;
     const staffingHours = calculateStaffingHours(
         formData.bumpIn, formData.bumpOut, formData.eventStart, formData.eventEnd,
-        formData.isWeekend, formData.requestCasualStaff, staffMinHours
+        formData.isWeekend, wantsStaff, appliedMinHours
     );
 
     if (staffingHours > 0) {
-        const staffDiscount = isFoundersInternal ? staffingHours * staffRate : 0;
+        const staffCount = casualStaffHeadcount(formData);
+        const billedHours = staffingHours * staffCount;
+        const staffDiscount = isFoundersInternal ? billedHours * staffRate : 0;
         lineItems.push({
-            description: `Event Staffing (${staffingHours} hrs @ $${staffRate}/hr)`,
-            quantity: staffingHours,
+            description: staffCount > 1
+                ? `Event Staffing (${staffingHours} hrs × ${staffCount} people @ $${staffRate}/hr)`
+                : `Event Staffing (${staffingHours} hrs @ $${staffRate}/hr)`,
+            quantity: billedHours,
             unitPrice: staffRate,
-            total: (staffingHours * staffRate) - staffDiscount,
+            total: (billedHours * staffRate) - staffDiscount,
             discount: staffDiscount
         });
     }

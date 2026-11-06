@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from 'react';
+import { OUTSIDE_WORK_HOURS_LABEL, WORK_HOURS_LABEL } from '../app/lib/workingHours';
 
 export default function EventFAQs() {
     const [activeAccordion, setActiveAccordion] = useState(null);
@@ -72,11 +73,11 @@ export default function EventFAQs() {
                                     </p>
                                     <div className="space-y-3">
                                         <p>
-                                            <strong className="text-neutral-900 block uppercase text-[10px] tracking-wide mb-0.5">Standard Office Hours (9:00am – 4:00pm)</strong>
+                                            <strong className="text-neutral-900 block uppercase text-[10px] tracking-wide mb-0.5">Standard Office Hours ({WORK_HOURS_LABEL})</strong>
                                             No additional expenses automatically apply during these hours.
                                         </p>
                                         <p>
-                                            <strong className="text-neutral-900 block uppercase text-[10px] tracking-wide mb-0.5">Outside Office Hours (Before 9:00am or After 4:00pm)</strong>
+                                            <strong className="text-neutral-900 block uppercase text-[10px] tracking-wide mb-0.5">Outside Office Hours ({OUTSIDE_WORK_HOURS_LABEL})</strong>
                                             Hiring a dedicated casual staff support member is required. This costs $50 per hour (3-hour minimum block). Sunday or Public Holiday shifts require a 4-hour minimum.
                                         </p>
                                     </div>
@@ -494,9 +495,10 @@ export default function EventFAQs() {
                                     <div className="p-3 bg-neutral-50 border border-neutral-200 rounded-xs space-y-1 text-neutral-800">
                                         <strong className="block uppercase text-[10px] tracking-wide">Lockout dates are as follows:</strong>
                                         <ul className="list-disc pl-4 space-y-1 text-[11px] text-neutral-700">
-                                            <li><strong>Term 1 2027</strong> (8 Feb - 28 May): Bookings open from 20 November 2026</li>
-                                            <li><strong>Term 2 2027</strong> (24 April - 10 Sept): Bookings open from 23 April 2027</li>
-                                            <li><strong>Term 3 2027</strong> (6 Sept - 9 December): Bookings open from 6 August 2027</li>
+                                            <li><strong>1 January – 28 May</strong>: non-staff bookings open from 20 November of the previous year</li>
+                                            <li><strong>29 May – 10 September</strong>: non-staff bookings open from 23 April of the same year</li>
+                                            <li><strong>11 September – 9 December</strong>: non-staff bookings open from 6 August of the same year</li>
+                                            <li><strong>10 December – 31 December</strong>: outside these periods and stays closed to anyone who is not UNSW staff</li>
                                         </ul>
                                     </div>
                                     <p>
@@ -765,6 +767,35 @@ export default function EventFAQs() {
                                     <p>
                                         UNSW Founders reserves the right to review promotional materials bearing the MCIC or UNSW logo/branding. Materials deemed inaccurate, misleading, or implying official UNSW endorsement without prior written authorization may be requested to be modified or taken down immediately.
                                     </p>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* PAYMENT AND HIRE RATES */}
+                        <div>
+                            <button
+                                type="button"
+                                onClick={() => toggleAccordion('payment-rates')}
+                                className="w-full p-4 flex justify-between items-center text-xs font-bold uppercase tracking-wide text-neutral-800 bg-neutral-50/60 hover:bg-neutral-50 border-t border-neutral-100 cursor-pointer"
+                            >
+                                <span>How does payment work, and what are the standard space hire costs?</span>
+                                <span>{activeAccordion === 'payment-rates' ? '−' : '+'}</span>
+                            </button>
+                            {activeAccordion === 'payment-rates' && (
+                                <div className="p-6 bg-white text-xs space-y-4 animate-in slide-in-from-top-1 duration-150 text-neutral-700 font-normal leading-relaxed">
+                                    <p>The booking form calculates your quote before you submit. The rates below are GST inclusive. A half day is 4 hours or less. A longer booking is a full day.</p>
+                                    <ul className="space-y-1">
+                                        <li>Entire Space: $1,600 half day, $2,800 full day</li>
+                                        <li>Event Space: $900 half day, $1,600 full day</li>
+                                        <li>Design Space: $700 half day, $1,200 full day</li>
+                                        <li>Founders Place: $700 half day, $1,200 full day</li>
+                                        <li>Group Study: $250 half day, $400 full day</li>
+                                        <li>Colonnade: $300 half day, $500 full day</li>
+                                    </ul>
+                                    <p>UNSW Founders bookings are fully discounted. Other internal UNSW bookings, and events about innovation or entrepreneurship, receive 50%. An internal booking that is also about innovation or entrepreneurship is fully discounted. External hirers pay the rate above.</p>
+                                    <p>Event staffing, when it applies, is $50 per hour. The minimum is 3 hours, or 4 hours on a weekend.</p>
+                                    <p>You can pay by journal transfer, invoice, or credit card. A 50% deposit confirms the booking. The remaining 50% is due no later than 48 hours before the event.</p>
+                                    <p>Not sure how to organise a Journal Transfer? The related Finance Analyst in your faculty or division can process the internal journal transfer.</p>
                                 </div>
                             )}
                         </div>
@@ -1385,8 +1416,80 @@ export default function EventFAQs() {
                                         </div>
                                     </div>
                                 )}
-                            </div>                        </div>
+                            </div>
 
+                            {/* SUPPLIERS */}
+                            <div>
+                                <button
+                                    type="button"
+                                    onClick={() => toggleAccordion('suppliers')}
+                                    className="w-full p-4 flex justify-between items-center text-xs font-bold uppercase tracking-wide text-neutral-800 bg-neutral-50/60 hover:bg-neutral-50 border-t border-neutral-100 cursor-pointer"
+                                >
+                                    <span className="text-xs font-black uppercase tracking-widest text-neutral-900">Suppliers we have seen in the space</span>
+                                    <span>{activeAccordion === 'suppliers' ? '−' : '+'}</span>
+                                </button>
+                                {activeAccordion === 'suppliers' && (
+                                    <div className="px-6 pb-6 text-sm text-neutral-700 space-y-4">
+                                        <p>These are suppliers other events at the centre have used. They are not endorsed, and you book them directly.</p>
+                                        <div>
+                                            <p className="font-bold text-neutral-900">Photographer / videographer</p>
+                                            <p>Cassandra Hannagan — <a className="underline" href="mailto:cass@cassandrahannagan.com">cass@cassandrahannagan.com</a></p>
+                                            <p>Ken Leanfore — <a className="underline" href="mailto:ken@kenleanfore.com">ken@kenleanfore.com</a></p>
+                                            <p>Nolan Verhij — <a className="underline" href="mailto:nolanverheij@gmail.com">nolanverheij@gmail.com</a></p>
+                                        </div>
+                                        <div>
+                                            <p className="font-bold text-neutral-900">Florist</p>
+                                            <p>Flowers by Zoe – Maria — <a className="underline" href="mailto:maria@flowersbyzoe.com.au">maria@flowersbyzoe.com.au</a></p>
+                                        </div>
+                                        <div>
+                                            <p className="font-bold text-neutral-900">Furniture supplier</p>
+                                            <p>Simply seated – Nicole — <a className="underline" href="mailto:nicolem@simplyseated.com.au">nicolem@simplyseated.com.au</a></p>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* PREMIERE PRO TRANSCRIPT */}
+                            <div>
+                                <button
+                                    type="button"
+                                    onClick={() => toggleAccordion('premiere-transcript')}
+                                    className="w-full p-4 flex justify-between items-center text-xs font-bold uppercase tracking-wide text-neutral-800 bg-neutral-50/60 hover:bg-neutral-50 border-t border-neutral-100 cursor-pointer"
+                                >
+                                    <span>How to transcribe my event video recording</span>
+                                    <span>{activeAccordion === 'premiere-transcript' ? '−' : '+'}</span>
+                                </button>
+                                {activeAccordion === 'premiere-transcript' && (
+                                    <div className="p-6 bg-white text-xs space-y-4 animate-in slide-in-from-top-1 duration-150 text-neutral-700 font-normal leading-relaxed">
+                                        <p>
+                                            To generate a transcript in Adobe Premiere Pro, follow these steps using the built-in Speech-to-Text feature:
+                                        </p>
+                                        <ol className="list-decimal pl-4 space-y-3">
+                                            <li>
+                                                <strong className="text-neutral-900">Open the Text Panel:</strong> Go to the top menu and select <strong>Window &gt; Text</strong>.
+                                            </li>
+                                            <li>
+                                                <strong className="text-neutral-900">Access the Transcript Tab:</strong> In the newly opened Text panel, make sure you are on the <strong>Transcript</strong> tab.
+                                            </li>
+                                            <li>
+                                                <strong className="text-neutral-900">Initiate Transcription:</strong>
+                                                <ul className="list-disc pl-4 mt-2 space-y-2">
+                                                    <li>Click the blue <strong>Transcribe</strong> button (or <strong>Transcribe Sequence</strong> if working with a full timeline).</li>
+                                                    <li>If a dialogue box appears, choose your preferred settings, such as language, speaker labeling (to separate multiple speakers), and audio range.</li>
+                                                </ul>
+                                            </li>
+                                            <li>
+                                                <strong className="text-neutral-900">Generate:</strong> Click <strong>Transcribe</strong> to let Premiere Pro process the audio.
+                                            </li>
+                                        </ol>
+                                        <p>
+                                            Once finished, you can edit text directly by double-clicking words, use text-based editing to cut your video, turn the transcript into captions by clicking the <strong>CC</strong> button, or export the transcript as a text file by clicking the three-dot menu (<strong>… &gt; Export &gt; Export a text file</strong>).
+                                        </p>
+                                    </div>
+                                )}
+                            </div>
+
+                        </div>
                     </div>
                 </div>
 

@@ -1,17 +1,14 @@
 // app/api/calendar/availability/route.js
 import { NextResponse } from 'next/server';
-import { google } from 'googleapis';
+import { fetchBusySlotsForDates, normaliseAvailabilityDates } from '../../../lib/calendarAvailability';
 
-function getCalendarClient() {
-    const auth = new google.auth.GoogleAuth({
-        credentials: {
-            client_email: process.env.GOOGLE_CLIENT_EMAIL,
-            private_key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-        },
-        scopes: ['https://www.googleapis.com/auth/calendar.readonly'],
-    });
-
-    return google.calendar({ version: 'v3', auth });
+function availabilityError(error) {
+    const status = error?.status === 400 ? 400 : 500;
+    if (status === 500) console.error('Error fetching calendar availability');
+    return NextResponse.json(
+        { error: status === 400 ? 'Date parameter required' : 'Failed to fetch availability' },
+        { status }
+    );
 }
 
 export async function GET(request) {
@@ -23,55 +20,30 @@ export async function GET(request) {
     }
 
     try {
-        const calendar = getCalendarClient();
-        const calendarId = process.env.GOOGLE_CALENDAR_ID || 'mcic.unswfounders@gmail.com';
-
-        const startIso = `${dateStr}T00:00:00+11:00`;
-        const endIso = `${dateStr}T23:59:59+11:00`;
-
-        const response = await calendar.events.list({
-            calendarId,
-            timeMin: startIso,
-            timeMax: endIso,
-            singleEvents: true,
-            orderBy: 'startTime',
-        });
-
-        const events = response.data.items || [];
-        const rooms = [
-            'MCIC Ground - Entire Space',
-            'MCIC Ground - Event Space',
-            'MCIC Ground - Design Space',
-            'MCIC Level 1 - Founders Place',
-            'MCIC Level 1 - Group Study',
-            'MCIC Ground - Colonnade'
-        ];
-
-        const busySlots = {};
-        rooms.forEach(room => { busySlots[room] = []; });
-
-        events.forEach(event => {
-            const summary = event.summary || '';
-            const desc = event.description || '';
-
-            const startTime = new Date(event.start.dateTime || event.start.date).toLocaleTimeString('en-AU', { hour12: false, hour: '2-digit', minute: '2-digit' });
-            const endTime = new Date(event.end.dateTime || event.end.date).toLocaleTimeString('en-AU', { hour12: false, hour: '2-digit', minute: '2-digit' });
-            const slot = { start: startTime, end: endTime };
-
-            rooms.forEach(room => {
-                if (summary.includes(room) || desc.includes(room)) {
-                    busySlots[room].push(slot);
-                }
-                if ((summary.includes('Entire Space') || desc.includes('Entire Space')) &&
-                    (room === 'MCIC Ground - Event Space' || room === 'MCIC Ground - Design Space')) {
-                    busySlots[room].push(slot);
-                }
-            });
-        });
-
-        return NextResponse.json({ busySlots });
+        const byDate = await fetchBusySlotsForDates([dateStr]);
+        return NextResponse.json({ busySlots: byDate[dateStr] || {} });
     } catch (error) {
-        console.error('Error fetching calendar availability:', error);
-        return NextResponse.json({ error: 'Failed to fetch availability' }, { status: 500 });
+        return availabilityError(error);
+    }
+}
+
+export async function POST(request) {
+    let body = {};
+    try {
+        body = await request.json();
+    } catch {
+        return NextResponse.json({ error: 'Date list required' }, { status: 400 });
+    }
+
+    const dates = normaliseAvailabilityDates(body.dates);
+    if (!dates.length) {
+        return NextResponse.json({ error: 'Date list required' }, { status: 400 });
+    }
+
+    try {
+        const byDate = await fetchBusySlotsForDates(dates);
+        return NextResponse.json({ byDate, capped: dates.length >= 52 && (body.dates || []).length > dates.length });
+    } catch (error) {
+        return availabilityError(error);
     }
 }

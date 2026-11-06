@@ -1,34 +1,9 @@
 "use client";
 
-import React, { useState } from 'react';
-
-// Updated UNSW Founders & MCIC Staff Directory (Sorted Alphabetically by First Name)
-const RAW_STAFF_DIRECTORY = [
-    { name: "Celine Olarte", role: "Program Coordinator", email: "c.olarte@unsw.edu.au" },
-    { name: "David Burt", role: "Director - Entrepreneurship", email: "d.burt@unsw.edu.au" },
-    { name: "Dina Titkova", role: "Senior Manager, Entrepreneurship", email: "d.titkova@unsw.edu.au" },
-    { name: "Eleni Assargiotis", role: "Program Manager, Foundry 10x", email: "e.assargiotis@unsw.edu.au" },
-    { name: "Georgia Lyons", role: "Program Manager", email: "georgia.lyons@unsw.edu.au" },
-    { name: "Hamish McFarlane", role: "MCIC Makerspace Coordinator", email: "h.mcfarlane@unsw.edu.au" },
-    { name: "Joseph Po", role: "Health Accelerator Program Manager", email: "j.po@unsw.edu.au" },
-    { name: "Maddison McCoy", role: "Community Manager, Engineering", email: "m.mccoy@unsw.edu.au" },
-    { name: "Mariana Luis Castillo Patron", role: "Community Manager", email: "m.castillopatron@unsw.edu.au" },
-    { name: "Nina Juhl", role: "Senior Manager, Entrepreneurship", email: "n.juhl@unsw.edu.au" },
-    { name: "Priscilla Tan", role: "Program Manager, Edu Entre", email: "priscilla.tan@unsw.edu.au" },
-    { name: "Ria Kapoor", role: "Comms Intern", email: "ria.kapoor@unsw.edu.au" },
-    { name: "Sasha Whittle", role: "Program Manager", email: "sasha.whittle@unsw.edu.au" },
-    { name: "Steven Hiotis", role: "Project Officer - Splice", email: "s.hiotis@unsw.edu.au" },
-    { name: "Tamara Berryman", role: "Event Coordinator", email: "t.berryman@unsw.edu.au" },
-    { name: "Vern Chan", role: "Global Program Manager", email: "vern.chan@unsw.edu.au" },
-    { name: "Wisiani Wijaya", role: "Investment Portfolio Coordinator", email: "w.wijaya@unsw.edu.au" }
-];
-
-// Ensure strict alphabetical sorting by first name
-const STAFF_DIRECTORY = [...RAW_STAFF_DIRECTORY].sort((a, b) =>
-    a.name.localeCompare(b.name)
-);
+import React, { useEffect, useState } from 'react';
 
 export default function iPadDoorbellPage() {
+    const [staffDirectory, setStaffDirectory] = useState([]);
     const [selectedStaff, setSelectedStaff] = useState(null);
     const [visitorName, setVisitorName] = useState('');
     const [visitorCompany, setVisitorCompany] = useState('');
@@ -39,7 +14,16 @@ export default function iPadDoorbellPage() {
     const [notifiedSuccess, setNotifiedSuccess] = useState(false);
 
     // Filter staff list based on search query
-    const filteredStaff = STAFF_DIRECTORY.filter(staff =>
+    useEffect(() => {
+        fetch('/api/staff')
+            .then((response) => response.json())
+            .then((data) => {
+                if (data.success) setStaffDirectory(data.staff || []);
+            })
+            .catch(() => setStaffDirectory([]));
+    }, []);
+
+    const filteredStaff = staffDirectory.filter(staff =>
         staff.name.toLowerCase().includes(searchDirectoryQuery.toLowerCase()) ||
         staff.role.toLowerCase().includes(searchDirectoryQuery.toLowerCase())
     );

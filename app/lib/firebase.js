@@ -14,7 +14,7 @@ const firebaseConfig = {
 };
 
 // Prevent re-initialization during Next.js fast-refreshes (singleton pattern)
-const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+export const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 
 // Export Firestore Database & Storage instances for your application
 export const db = getFirestore(app);

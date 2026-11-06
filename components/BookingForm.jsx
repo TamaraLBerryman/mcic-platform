@@ -2,12 +2,28 @@
 
 // components/BookingForm.jsx
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import EventFAQs from '@/components/EventFAQs'; // <--- Import FAQ component
 import { db } from '../app/lib/firebase'; // <--- Use relative path to app/lib/firebase
 import { collection, getDocs } from 'firebase/firestore';
 import { calculateQuote, ROOM_INCLUSIONS } from '../app/lib/pricing'; // <--- Use relative path to app/lib/pricing
+import { OUTSIDE_WORK_HOURS_LABEL, WORK_HOURS_LABEL } from '../app/lib/workingHours';
+import { blankExtraReminder, buildDefaultReminders, mergeReminderDrafts, normalizeEmailReminders } from '../app/lib/eventReminders';
+import { CASUAL_STAFF_LIST, MAX_CASUAL_QUANTITY, casualQuantityFromInput, casualShiftQuantity, emptyCasualShift } from '../app/lib/casualStaff';
+import { useAccess } from './useAccess';
+import {
+    MAX_SERIES_OCCURRENCES,
+    bookingWindowForDate,
+    buildSeriesDates,
+    formatBookingDate,
+    isFoundersBooker,
+    isUnswStaff,
+    localDateString,
+    lockoutMessage,
+    lockoutSummary,
+    partitionSeriesDates
+} from '../app/lib/bookingRules';
 
 const generate24HoursTimeSlots = () => {
     const slots = [];
@@ -17,15 +33,6 @@ const generate24HoursTimeSlots = () => {
     }
     return slots;
 };
-
-// ==========================================
-// MASTER CASUAL STAFF LIST & MOCK RESERVATIONS
-// ==========================================
-const CASUAL_STAFF_LIST = [
-    "Ivara", "Henry", "Wonyoung", "Hanisha", "Hudson", "Harry", "Luka",
-    "Julian", "Reuben", "William", "Sarah", "Julie", "Aryan", "Shetal",
-    "Thomas", "Alex", "Sam", "Victoria", "Rita", "Chiragm", "Lucas", "Armin", "Nicole"
-];
 
 const SHARED_EQUIPMENT_MASTER_FALLBACK = [
     { key: 'handheldMics', label: 'Handheld Microphones', category: 'Shared AV', totalHubStock: 4 },
@@ -49,16 +56,22 @@ const SHARED_EQUIPMENT_MASTER_FALLBACK = [
     { key: 'servingTongs', label: 'Serving Tongs & Platter Boards', category: 'Catering Ware', totalHubStock: 1, isToggle: true }
 ];
 
-const MOCK_TIME_SLOT_RESERVATIONS = {
-    handheldMics: 1,
-    standingWhiteboards: 4,
-    ipad: 2,
-    ipad003: 1,
-    dell009: 1,
-    glasses: 20
+const CALENDAR_ROOMS = [
+    { name: 'Ground - Event Space', space: 'MCIC Ground - Event Space' },
+    { name: 'Ground - Design Space', space: 'MCIC Ground - Design Space' },
+    { name: 'Ground - Entire Space', space: 'MCIC Ground - Entire Space' },
+    { name: 'Level 1 - Founders Place', space: 'MCIC Level 1 - Founders Place' },
+    { name: 'Level 1 - Group Study', space: 'MCIC Level 1 - Group Study' }
+];
+
+const addMinutesToTime = (time, minutes) => {
+    const [hours, mins] = time.split(':').map(Number);
+    const total = (hours * 60) + mins + minutes;
+    return `${String(Math.floor(total / 60) % 24).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
 };
 
 export default function BookingForm() {
+    const { access } = useAccess();
     const router = useRouter();
     const [showFullForm, setShowFullForm] = useState(false);
     const [showroomSpace, setShowroomSpace] = useState('MCIC Ground - Entire Space');
@@ -68,7 +81,22 @@ export default function BookingForm() {
     const [cateringError, setCateringError] = useState(false);
     const [conductAcknowledged, setConductAcknowledged] = useState(false);
     const [conductError, setConductError] = useState(false);
+    const signatureCanvasRef = useRef(null);
+    const signatureDrawing = useRef(false);
     const [selectedSlots, setSelectedSlots] = useState([]);
+    const [wantsMultipleHolds, setWantsMultipleHolds] = useState(false);
+    const [extraHolds, setExtraHolds] = useState([]);
+    const [recurrence, setRecurrence] = useState({
+        pattern: 'none',
+        interval: 1,
+        endType: 'after',
+        endDate: '',
+        occurrences: 8
+    });
+    const [seriesAvailability, setSeriesAvailability] = useState({ status: 'idle', byDate: null });
+    const [lockoutNotice, setLockoutNotice] = useState('');
+    const [slotWarning, setSlotWarning] = useState('');
+    const selectionAnchorRef = useRef(null);
     const [activeAccordion, setActiveAccordion] = useState(null);
     const [layoutMode, setLayoutMode] = useState('workshop');
 
@@ -102,6 +130,7 @@ export default function BookingForm() {
     ]);
 
     const [liveBusySlots, setLiveBusySlots] = useState({});
+    const [calendarNotice, setCalendarNotice] = useState('');
 
     const isSlotBlockedByCalendar = (roomName, timeSlot) => {
         const roomBusyRanges = liveBusySlots[roomName] || [];
@@ -117,6 +146,8 @@ export default function BookingForm() {
         isDelegation: false,
         isHighRisk: false,
         riskDetails: '',
+        involvesControversialTopics: false,
+        securityDetails: '',
         eventName: '',
         attendees: 0,
         eventDescription: '',
@@ -132,6 +163,7 @@ export default function BookingForm() {
             { name: 'UNSW Affiliated (Students & Staff)', cap: '' },
             { name: 'General Public / External Guest', cap: '' }
         ],
+        emailRemindersEnabled: true,
 
         useRegistrationPortal: false,
         hasOwnRegistrationPortal: false,
@@ -149,13 +181,22 @@ export default function BookingForm() {
         isInnovationOrEntrepreneurship: null,
         wantsCasualStaff: null,
         needsJudgeHelp: null,
+        isWeekend: false,
+        servicewarePreference: '',
+        foundersSupplies: {
+            needWoolworthsOrder: false,
+            needDanMurphysOrder: false,
+            needPlates: false,
+            needNapkins: false,
+            needTongs: false,
+            needCutlery: false,
+            needIce: false
+        },
 
         // FOUNDERS INTERNAL COORDINATION QUESTIONS
         tamaraPresence: 'Not at all',
         needsFoundersCasualStaff: 'No',
-        casualStaffDetails: [
-            { preferredStaff: '', shiftStart: '', shiftEnd: '', tasks: '' }
-        ],
+        casualStaffDetails: [emptyCasualShift()],
 
         av: {
             textMics: 0,
@@ -245,9 +286,45 @@ export default function BookingForm() {
                 '/images/venues/full-space-1.JPG',
                 '/images/venues/full-space-2.JPG',
                 '/images/venues/full-space-3.JPG',
-                '/images/venues/full-space-4.JPG'
+                '/images/venues/full-space-4.JPG',
+                '/images/venues/full-space-5.JPG',
+                '/images/venues/full-space-6.JPG',
+                '/images/venues/full-space-7.JPG',
+                '/images/venues/full-space-8.JPG',
+                '/images/venues/full-space-9.JPG',
+                '/images/venues/full-space-10.JPG',
+                '/images/venues/full-space-11.JPG',
+                '/images/venues/full-space-12.JPG',
+                '/images/venues/full-space-13.JPG',
+                '/images/venues/full-space-14.JPG',
+                '/images/venues/full-space-15.JPG'
             ],
-            description: `The Full Ground Floor Event Space. The concertina doors will be opened to combine the Event Space and Design Space to make the Entire Space.<br /><br /><strong>Capacity:</strong><br />- <strong>Lecture Style:</strong> 120 people maximum<br />- <strong>Workshop Style:</strong> 100 people maximum<br /><br /><strong>Included Equipment & AV:</strong><br />- 1 Lectern with Microphone, 4 Wireless Handheld Mics, 4 Lapel Mics, 2 Projector Screens, 2 Mid-Room TV Screens, Modular Stage, Sound System & Stage Lighting.`
+            description: `The Full Ground Floor Event Space. The concertina doors will be opened to combine the Event Space and Design Space to make the Entire Space.
+<br /><br />
+<strong>Capacity:</strong><br />
+• <strong>Lecture Style:</strong> 120 people maximum (There is more space but this is as many chairs as we have)<br />
+• <strong>Workshop Style:</strong> 100 people maximum<br /><br />
+<strong>Included Equipment & AV:</strong><br />
+• <strong>Microphones & Audio:</strong> 1 lectern with a built-in microphone, 4 wireless handheld microphones, 4 lapel microphones, and a surround sound system.<br />
+• <strong>Screens & Displays:</strong> 2 projector screens at the front of the room, 2 TV screens in the middle.<br />
+• <strong>Stage:</strong> A modular stage made of multiple pieces that can be arranged as a single stage, split into smaller stages, or used as stepped seating.<br />
+• <strong>Catering Setup:</strong> Kitchen (has 2 ZipTaps and 2 Microwaves. Fridge is not to be used).<br />
+• <strong>Lighting:</strong> Basic stage lighting.
+<br /><br />
+<strong>Other Equipment & AV (items are shared between all bookable rooms, availability is dependent on requirements of other bookings):</strong><br />
+• <strong>Screens & Displays:</strong> 2 Portable TVs on wheels.<br />
+• <strong>Furniture:</strong> 1 lectern, 1 registration table, 8 high networking tables, a casual lounge area with couches and coffee tables, 10 mobile double-sided whiteboards.<br />
+• <strong>Catering Setup:</strong> 3 standing catering tables, 1 hot water urn, 1 chilled water dispenser, serving tongs, platter boards and 3 Ice/Drinks Buckets.<br />
+• <strong>Tech:</strong> 6 iPads (for guest check-in or Slido Q&A) and 2 spare laptops (1 Mac, 1 PC), 1 handheld microphone connected only to a portable speaker.<br />
+• <strong>Recording:</strong> Fixed-camera video recording direct to SD Card or live to YouTube (you must have your own YouTube account).<br /><br />
+<strong>Bathrooms:</strong><br />
+This room does not have private bathrooms. The closest toilets are down the hallway in the main foyer and are shared publicly with students, staff, and the rest of the building.
+<br /><br />
+<strong>Emergency & Safety:</strong><br />
+• <strong>First Aid Kit:</strong> Hanging on the wall in the AV Cabinet.<br />
+• <strong>Defibrillator:</strong> Located in the Foyer on the Ground Floor of the building.<br />
+• <strong>Evacuation Routes:</strong> In the event of an emergency, exit through the glass doors and assemble on Alumni Lawn directly beside the room.<br />
+• <strong>Fire Extinguishers:</strong> Please report any incidents or safety hazards immediately to the Venue Staff Member.`
         },
         'MCIC Ground - Event Space': {
             roomNumber: 'Room G26',
@@ -255,7 +332,33 @@ export default function BookingForm() {
                 '/images/venues/event-space-1.JPG',
                 '/images/venues/event-space-2.JPG'
             ],
-            description: `The front half of the Entire Space. The concertina doors divide the Entire Space into Event Space and Design Space.<br /><br /><strong>Capacity:</strong><br />- <strong>Lecture Style:</strong> 70 people maximum<br />- <strong>Workshop Style:</strong> 35 people maximum<br /><br /><strong>Included Equipment & AV:</strong><br />- 1 Lectern with Microphone, 2 Handheld Mics, 2 Lapel Mics, 2 Front Projector Screens, Modular Stage.`
+            description: `The front half of the Entire Space. The concertina doors will divide the Entire Space into two rooms (Event Space and Design Space). Booking the Event Space only gives you access to the front room / half the Entire Space.<br /><br />
+If you wish to book the Entire Space, you must select that option or book both the Event and Design Spaces simultaneously.
+<br /><br />
+<strong>Capacity:</strong><br />
+• <strong>Lecture Style:</strong> 70 people maximum<br />
+• <strong>Workshop Style:</strong> 35 people maximum<br /><br />
+<strong>Included Equipment & AV:</strong><br />
+• <strong>Microphones & Audio:</strong> 1 lectern with a built-in microphone, 2 wireless handheld microphones, 2 lapel microphones, with a surround sound system.<br />
+• <strong>Screens & Displays:</strong> 2 projector screens at the front of the room.<br />
+• <strong>Stage:</strong> A modular stage made of multiple pieces that can be arranged as a single stage, split into smaller stages, or used as stepped seating.<br />
+• <strong>Catering Setup:</strong> Kitchen (has 2 ZipTaps and 2 Microwaves. Fridge is not to be used).<br />
+• <strong>Lighting:</strong> Basic stage lighting.
+<br /><br />
+<strong>Other Equipment & AV (items are shared between all bookable rooms, availability is dependent on requirements of other bookings):</strong><br />
+• <strong>Screens & Displays:</strong> 2 Portable TVs on wheels.<br />
+• <strong>Furniture:</strong> 1 lectern, 1 registration table, 8 high networking tables, a casual lounge area with couches and coffee tables, 10 mobile double-sided whiteboards.<br />
+• <strong>Catering Setup:</strong> 3 standing catering tables, 1 hot water urn, 1 chilled water dispenser, serving tongs, platter boards, 60 glasses, 40 plates, 30 mugs and 3 Ice/Drinks Buckets.<br />
+• <strong>Tech:</strong> 6 iPads (for guest check-in or Slido Q&A) and 2 spare laptops (1 Mac, 1 PC), 1 handheld microphone connected only to a portable speaker.<br />
+• <strong>Recording:</strong> Fixed-camera video recording direct to SD Card or live to YouTube (you must have your own YouTube account).<br /><br />
+<strong>Bathrooms:</strong><br />
+This room does not have private bathrooms. The closest toilets are down the hallway in the main foyer and are shared publicly with students, staff, and the rest of the building.
+<br /><br />
+<strong>Emergency & Safety:</strong><br />
+• <strong>First Aid Kit:</strong> Hanging on the wall in the AV Cabinet in the nextdoor room (Design Space).<br />
+• <strong>Defibrillator:</strong> Located in the Foyer on the Ground Floor of the building.<br />
+• <strong>Evacuation Routes:</strong> In the event of an emergency, exit through the glass doors and assemble on Alumni Lawn directly beside the room.<br />
+• <strong>Fire Extinguishers:</strong> Please report any incidents or safety hazards immediately to the Venue Staff Member.`
         },
         'MCIC Ground - Design Space': {
             roomNumber: 'Room G22',
@@ -263,15 +366,61 @@ export default function BookingForm() {
                 '/images/venues/event-space-3.JPG',
                 '/images/venues/event-space-4.JPG'
             ],
-            description: `The back half of the Entire Space.<br /><br /><strong>Capacity:</strong><br />- <strong>Lecture Style:</strong> 50 people maximum<br />- <strong>Workshop Style:</strong> 35 people maximum<br /><br /><strong>Included Equipment & AV:</strong><br />- 2 Wireless Handheld Mics, 2 Lapel Mics, 1 Projector Screen, 2 Ceiling TV Screens.`
+            description: `The back half of the Entire Space. The concertina doors will divide the Entire Space into two rooms (Event Space and Design Space). Booking the Design Space only gives you access to the back room / half the Entire Space.<br /><br />
+If you wish to book the Entire Space, you must select that option or book both the Event and Design Spaces simultaneously.<br /><br />
+<strong>Capacity:</strong><br />
+• <strong>Lecture Style:</strong> 50 people maximum<br />
+• <strong>Workshop Style:</strong> 35 people maximum<br /><br />
+<strong>Included Equipment & AV:</strong><br />
+• <strong>Microphones & Audio:</strong> 2 wireless handheld microphones, 2 lapel microphones, and a surround sound system.<br />
+• <strong>Screens & Displays:</strong> 1 projector screen at the front of the room and 2 ceiling-hanging TV screens at the front of the room.<br /><br />
+<strong>Other Equipment & AV (items are shared between all bookable rooms, availability is dependent on requirements of other bookings):</strong><br />
+• <strong>Screens & Displays:</strong> 2 Portable TVs on wheels.<br />
+• <strong>Furniture:</strong> 1 registration table, 8 high networking tables, a casual lounge area with couches and coffee tables, 10 mobile double-sided whiteboards.<br />
+• <strong>Catering Setup:</strong> 3 standing catering tables, 1 hot water urn, 1 chilled water dispenser, serving tongs, platter boards, 60 glasses, 40 plates, 30 mugs and 3 Ice/Drinks Buckets.<br />
+• <strong>Stage:</strong> Pieces of the modular stage can be used to create a small stage or used as stepped seating.<br />
+• <strong>Tech:</strong> 6 iPads (for guest check-in or Slido Q&A) and 2 spare laptops (1 Mac, 1 PC), 1 handheld microphone connected only to a portable speaker.<br />
+• <strong>Recording:</strong> Fixed-camera video recording direct to SD Card or live to YouTube (you must have your own YouTube account).<br /><br />
+<strong>Bathrooms:</strong><br />
+This room does not have private bathrooms. The closest toilets are down the hallway in the main foyer and are shared publicly with students, staff, and the rest of the building.
+<br /><br />
+<strong>Emergency & Safety:</strong><br />
+• <strong>First Aid Kit:</strong> Hanging on the wall in the AV Cabinet.<br />
+• <strong>Defibrillator:</strong> Located in the Foyer on the Ground Floor of the building.<br />
+• <strong>Evacuation Routes:</strong> In the event of an emergency, exit through the glass doors and assemble on Alumni Lawn directly beside the room.<br />
+• <strong>Fire Extinguishers:</strong> Please report any incidents or safety hazards immediately to the Venue Staff Member.`
         },
         'MCIC Level 1 - Founders Place': {
             roomNumber: 'Room 124',
             imgs: [
                 '/images/venues/founders-place-1.JPG',
-                '/images/venues/founders-place-2.JPG'
+                '/images/venues/founders-place-2.JPG',
+                '/images/venues/founders-place-3.JPG',
+                '/images/venues/founders-place-4.JPG'
             ],
-            description: `An open room on Level 1. Ideal for workshops or lecture-style presentations.<br /><br /><strong>Capacity:</strong><br />- <strong>Lecture Style:</strong> 70 people maximum<br />- <strong>Workshop Style:</strong> 35 people maximum`
+            description: `An open room on Level 1. The space is most suited to workshop style events but also able to accommodate lecture/theatre style events.<br /><br />
+<strong>Capacity:</strong><br />
+• <strong>Lecture Style:</strong> 70 people maximum<br />
+• <strong>Workshop Style:</strong> 35 people maximum<br /><br />
+<strong>Included Equipment & AV:</strong><br />
+• <strong>Microphones & Audio:</strong> 1 wireless handheld microphone and a surround sound system.<br />
+• <strong>Screens & Displays:</strong> 1 projector screen at the front of the room.<br />
+• <strong>Catering Setup:</strong> Shared kitchen located just next door (has ZipTap, microwave, and fridge).<br /><br />
+<strong>Other Equipment & AV (items are shared between all bookable rooms, availability is dependent on requirements of other bookings):</strong><br />
+• <strong>Screens & Displays:</strong> 2 Portable TVs on wheels.<br />
+• <strong>Furniture:</strong> 1 lectern, 1 registration table, 8 high networking tables, a casual lounge area with couches and coffee tables, 10 mobile double-sided whiteboards.<br />
+• <strong>Catering Setup:</strong> 3 standing catering tables, 1 hot water urn, 1 chilled water dispenser, serving tongs, platter boards, 60 glasses, 40 plates, 30 mugs and 3 Ice/Drinks Buckets.<br />
+• <strong>Stage:</strong> Pieces of the modular stage can be used to create a small stage or used as stepped seating.<br />
+• <strong>Tech:</strong> 6 iPads (for guest check-in or Slido Q&A), 2 spare laptops (1 Mac, 1 PC), 1 handheld microphone connected only to a portable speaker.<br />
+• <strong>Recording:</strong> Fixed-camera video recording direct to SD Card or live to YouTube (you must have your own YouTube account).<br /><br />
+<strong>Bathrooms:</strong><br />
+This room does not have private bathrooms. The closest toilets are down the hallway in the main foyer and are shared publicly with students, staff, and the rest of the building.<br /><br />
+<strong>Emergency & Safety:</strong><br />
+• <strong>First Aid Kit:</strong> Sitting on the red AV Cabinet.<br />
+• <strong>Defibrillator:</strong> Located in the Foyer on the Ground Floor of the building.<br />
+• <strong>Evacuation Routes:</strong> In the event of an emergency, proceed down the stairs to the Ground Floor, exit through the glass doors, and assemble on Alumni Lawn directly beside the building.<br />
+• <strong>Fire Extinguishers:</strong> Please report any incidents or safety hazards immediately to the Venue Staff Member.<br /><br />
+<strong>Please note:</strong> This room is an open design (no doors). While the hallway it backs onto is very quiet as it only leads to a few labs that do not run large classes and only students with certain access on their swipe card can access, it may not be appropriate for highly confidential or sensitive team meetings.`
         },
         'MCIC Level 1 - Group Study': {
             roomNumber: 'Level 1 Open Area',
@@ -279,7 +428,28 @@ export default function BookingForm() {
                 '/images/venues/group-study-2.JPG',
                 '/images/venues/group-study-1.JPG'
             ],
-            description: `Located directly in front of Founders Place. An open co-working space used for breakout groups or event catering setups.`
+            description: `Located directly in front of Founders Place, this is a completely open co-working space for Founders. From time to time it can be booked out, usually to house catering or breakout groups for events held in Founders Place, which is located directly next door.<br /><br />
+Not the most suitable for workshops and events.<br /><br />
+<strong>Capacity:</strong><br />
+• <strong>Lecture Style:</strong> 70 people maximum<br />
+• <strong>Workshop Style:</strong> 35 people maximum<br /><br />
+<strong>Included Equipment & AV:</strong><br />
+• <strong>Catering Setup:</strong> Shared kitchen located within the space (has ZipTap, microwave, and fridge).<br /><br />
+<strong>Other Equipment & AV (items are shared between all bookable rooms, availability is dependent on requirements of other bookings):</strong><br />
+• <strong>Screens & Displays:</strong> 2 Portable TVs on wheels.<br />
+• <strong>Furniture:</strong> 1 lectern, 1 registration table, 8 high networking tables, a casual lounge area with couches and coffee tables, 10 mobile double-sided whiteboards.<br />
+• <strong>Catering Setup:</strong> 3 standing catering tables, 1 hot water urn, 1 chilled water dispenser, serving tongs, platter boards, 60 glasses, 40 plates, 30 mugs and 3 Ice/Drinks Buckets.<br />
+• <strong>Stage:</strong> Pieces of the modular stage can be used to create a small stage or used as stepped seating.<br />
+• <strong>Tech:</strong> 6 iPads (for guest check-in or Slido Q&A), 2 spare laptops (1 Mac, 1 PC), 1 handheld microphone connected only to a portable speaker.<br />
+• <strong>Recording:</strong> Fixed-camera video recording direct to SD Card or live to YouTube (you must have your own YouTube account).<br /><br />
+<strong>Bathrooms:</strong><br />
+This room does not have private bathrooms. The closest toilets are down the hallway in the main foyer and are shared publicly with students, staff, and the rest of the building.<br /><br />
+<strong>Emergency & Safety:</strong><br />
+• <strong>First Aid Kit:</strong> Sitting on the red AV Cabinet nextdoor (in Founders Place).<br />
+• <strong>Defibrillator:</strong> Located in the Foyer on the Ground Floor of the building.<br />
+• <strong>Evacuation Routes:</strong> In the event of an emergency, proceed down the stairs to the Ground Floor, exit through the glass doors, and assemble on Alumni Lawn directly beside the building.<br />
+• <strong>Fire Extinguishers:</strong> Please report any incidents or safety hazards immediately to the Venue Staff Member.<br /><br />
+<strong>Please note:</strong> This room has no walls or doors. When not booked, it is used as a co-working space for Founders and a study space for Materials Science students.`
         },
         'MCIC Ground - Colonnade': {
             roomNumber: 'Ground Floor Outdoor Colonnade',
@@ -287,7 +457,7 @@ export default function BookingForm() {
                 '/images/venues/colonnade-1.JPG',
                 '/images/venues/colonnade-2.JPG'
             ],
-            description: `Covered outdoor walkway running along the Ground Floor. Ideal for outdoor registration, pop-up exhibitions, or stand-alone open air networking.<br /><br /><strong>Capacity:</strong><br />- <strong>Standing / Networking:</strong> 100 people maximum<br />- <strong>Seated / Workshop:</strong> 40 people maximum`
+            description: `The covered outdoor Colonnade running along the Ground Floor of the Hilmer Building. Ideal for outdoor registration, pop-up exhibitions, catering setups, or stand-alone open air networking. It can be booked on its own or alongside an Event Space or Design Space booking.`
         },
         'MCIC Ground - AI Makerspace - COMING SOON': {
             roomNumber: 'Room G17',
@@ -295,11 +465,81 @@ export default function BookingForm() {
                 '/images/venues/AI-1.JPG',
                 '/images/venues/AI-2.JPG'
             ],
-            description: `Our AI Makerspace is a place to test and refine AI technologies.`
+            description: `Our AI Makerspace is a place to test and refine AI technologies. It includes workstations and a supercomputer for AI research and development.`
         }
     };
 
     const [selectedCalendarDate, setSelectedCalendarDate] = useState(new Date());
+    const [emailReminders, setEmailReminders] = useState(() => buildDefaultReminders({
+        founders: true,
+        eventDate: localDateString(new Date()),
+        space: 'MCIC Ground - Event Space'
+    }));
+    const reminderLocksRef = useRef({});
+
+    const generatedReminders = useMemo(() => buildDefaultReminders({
+        founders: departmentType === 'UNSW Founders' || formData.department === 'UNSW Founders',
+        eventName: formData.eventName,
+        eventDate: localDateString(selectedCalendarDate),
+        eventStart: formData.eventStart || formData.bumpIn,
+        eventEnd: formData.eventEnd || formData.bumpOut,
+        space: formData.space,
+        eventDescription: formData.eventDescription
+    }), [
+        departmentType,
+        formData.eventName,
+        formData.eventStart,
+        formData.bumpIn,
+        formData.eventEnd,
+        formData.bumpOut,
+        formData.space,
+        formData.eventDescription,
+        formData.department,
+        selectedCalendarDate
+    ]);
+
+    useEffect(() => {
+        if (formData.ticketingMethod !== 'internal') return;
+        setEmailReminders(previous => {
+            const next = mergeReminderDrafts(previous, generatedReminders, reminderLocksRef.current);
+            return JSON.stringify(previous) === JSON.stringify(next) ? previous : next;
+        });
+    }, [formData.ticketingMethod, generatedReminders]);
+
+    useEffect(() => {
+        const dateStr = localDateString(selectedCalendarDate);
+        const weekend = selectedCalendarDate.getDay() === 0 || selectedCalendarDate.getDay() === 6;
+        let cancelled = false;
+
+        setFormData(prev => (prev.isWeekend === weekend ? prev : { ...prev, isWeekend: weekend }));
+
+        if (!isUnswStaff(formData.userType) && bookingWindowForDate(dateStr).locked) {
+            setLiveBusySlots({});
+            return;
+        }
+
+        fetch(`/api/calendar/availability?date=${dateStr}`)
+            .then(response => response.json())
+            .then(data => {
+                if (cancelled) return;
+                if (data.busySlots) {
+                    setLiveBusySlots(data.busySlots);
+                    setCalendarNotice('');
+                } else {
+                    setLiveBusySlots({});
+                    setCalendarNotice('Live availability could not be loaded, so booked times may not appear.');
+                }
+            })
+            .catch(() => {
+                if (cancelled) return;
+                setLiveBusySlots({});
+                setCalendarNotice('Live availability could not be loaded, so booked times may not appear.');
+            });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [selectedCalendarDate, formData.userType]);
     const [currentWeekStart, setCurrentWeekStart] = useState(() => {
         const today = new Date();
         const dayOffset = today.getDay() === 0 ? 6 : today.getDay() - 1;
@@ -308,15 +548,117 @@ export default function BookingForm() {
         return monday;
     });
 
+    const effectiveDepartment = departmentType === 'UNSW Founders' ? 'UNSW Founders' : formData.department;
+    const foundersBooking = isFoundersBooker(formData.userType, effectiveDepartment);
+    const lockoutApplies = !isUnswStaff(formData.userType);
+    const selectedDateStr = localDateString(selectedCalendarDate);
+    const selectedLock = lockoutApplies ? bookingWindowForDate(selectedDateStr) : { locked: false };
+    const timeRangeLabel = formData.bumpIn && formData.bumpOut ? `${formData.bumpIn}–${formData.bumpOut}` : '';
+
+    const seriesPlan = useMemo(() => {
+        if (!foundersBooking || recurrence.pattern !== 'weekly' || selectedSlots.length === 0) return null;
+        const dates = buildSeriesDates(selectedDateStr, recurrence);
+        const end = recurrence.endType === 'on'
+            ? { type: 'on', date: recurrence.endDate }
+            : { type: 'after', occurrences: Math.min(MAX_SERIES_OCCURRENCES, Math.max(1, Number(recurrence.occurrences) || 1)) };
+        const base = {
+            pattern: 'weekly',
+            interval: Math.min(MAX_SERIES_OCCURRENCES, Math.max(1, Number(recurrence.interval) || 1)),
+            end,
+            dates
+        };
+        if (recurrence.endType === 'on' && recurrence.endDate && recurrence.endDate < selectedDateStr) {
+            return { ...base, dates: [], bookedDates: [], skippedDates: [], known: true, invalidEnd: true };
+        }
+        if (seriesAvailability.status !== 'ready' || !seriesAvailability.byDate) {
+            return { ...base, bookedDates: [], skippedDates: [], known: false };
+        }
+        const split = partitionSeriesDates(
+            dates,
+            seriesAvailability.byDate,
+            formData.space,
+            selectedSlots.map(key => key.split('|').pop()),
+            timeRangeLabel
+        );
+        return { ...base, ...split, known: true };
+    }, [
+        foundersBooking,
+        recurrence,
+        selectedDateStr,
+        selectedSlots,
+        seriesAvailability,
+        formData.space,
+        timeRangeLabel
+    ]);
+
+    useEffect(() => {
+        if (!foundersBooking || recurrence.pattern !== 'weekly' || selectedSlots.length === 0) {
+            setSeriesAvailability(previous => (
+                previous.status === 'idle' && previous.byDate === null ? previous : { status: 'idle', byDate: null }
+            ));
+            return;
+        }
+
+        const dates = buildSeriesDates(selectedDateStr, recurrence);
+        if (!dates.length) {
+            setSeriesAvailability({ status: 'ready', byDate: {} });
+            return;
+        }
+
+        let cancelled = false;
+        setSeriesAvailability({ status: 'loading', byDate: null });
+        fetch('/api/calendar/availability', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ dates })
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (cancelled) return;
+                if (!data.byDate) {
+                    setSeriesAvailability({ status: 'error', byDate: null });
+                    return;
+                }
+                setSeriesAvailability({ status: 'ready', byDate: data.byDate });
+            })
+            .catch(() => {
+                if (cancelled) return;
+                setSeriesAvailability({ status: 'error', byDate: null });
+            });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [
+        foundersBooking,
+        recurrence.pattern,
+        recurrence.interval,
+        recurrence.endType,
+        recurrence.endDate,
+        recurrence.occurrences,
+        selectedDateStr,
+        selectedSlots
+    ]);
+
+    useEffect(() => {
+        if (!lockoutApplies) {
+            setLockoutNotice('');
+            return;
+        }
+        const info = bookingWindowForDate(selectedDateStr);
+        if (!info.locked) {
+            setLockoutNotice('');
+            return;
+        }
+        setSelectedSlots([]);
+        selectionAnchorRef.current = null;
+        setSlotWarning('');
+        setLockoutNotice(lockoutMessage(info));
+    }, [lockoutApplies, selectedDateStr]);
+
     const mockCalendarData = {
         timeSlots: generate24HoursTimeSlots(),
-        rooms: [
-            { name: "Ground - Event Space" },
-            { name: "Ground - Design Space" },
-            { name: "Ground - Entire Space" },
-            { name: "Level 1 - Founders Place" },
-            { name: "Level 1 - Group Study" }
-        ]
+        rooms: CALENDAR_ROOMS
     };
 
     const toggleAccordion = (id) => {
@@ -324,8 +666,11 @@ export default function BookingForm() {
     };
 
     const updateCasualStaffDetail = (index, field, value) => {
-        const updated = [...formData.casualStaffDetails];
-        updated[index][field] = value;
+        const updated = formData.casualStaffDetails.map((row, rowIndex) => {
+            if (rowIndex !== index) return row;
+            if (field === 'quantity') return { ...row, quantity: casualQuantityFromInput(value, row.quantity) };
+            return { ...row, [field]: value };
+        });
         setFormData({ ...formData, casualStaffDetails: updated });
     };
 
@@ -334,7 +679,7 @@ export default function BookingForm() {
             ...formData,
             casualStaffDetails: [
                 ...formData.casualStaffDetails,
-                { preferredStaff: '', shiftStart: '', shiftEnd: '', tasks: '' }
+                emptyCasualShift()
             ]
         });
     };
@@ -346,6 +691,115 @@ export default function BookingForm() {
                 casualStaffDetails: formData.casualStaffDetails.filter((_, i) => i !== index)
             });
         }
+    };
+
+    const updateTicketTier = (index, field, value) => {
+        setFormData(prev => ({
+            ...prev,
+            ticketTiers: prev.ticketTiers.map((tier, i) => (
+                i === index ? { ...tier, [field]: value } : tier
+            ))
+        }));
+    };
+
+    const addTicketTier = () => {
+        setFormData(prev => ({
+            ...prev,
+            ticketTiers: [...prev.ticketTiers, { name: '', cap: '' }]
+        }));
+    };
+
+    const updateEmailReminder = (id, field, value, trusted = true) => {
+        if (trusted) {
+            reminderLocksRef.current[id] = {
+                ...(reminderLocksRef.current[id] || {}),
+                [field]: true
+            };
+        }
+        setEmailReminders(previous => previous.map(reminder => (
+            reminder.id === id
+                ? { ...reminder, [field]: value, manuallyEdited: trusted ? true : reminder.manuallyEdited }
+                : reminder
+        )));
+    };
+
+    const addEmailReminder = () => {
+        setEmailReminders(previous => [...previous, blankExtraReminder({
+            space: formData.space,
+            eventDate: localDateString(selectedCalendarDate),
+            eventStart: formData.eventStart || formData.bumpIn,
+            eventEnd: formData.eventEnd || formData.bumpOut
+        })]);
+    };
+
+    const removeEmailReminder = (id) => {
+        setEmailReminders(previous => previous.filter(reminder => reminder.kind === 'default' || reminder.id !== id));
+    };
+
+    const removeTicketTier = (index) => {
+        setFormData(prev => ({
+            ...prev,
+            ticketTiers: prev.ticketTiers.length > 1
+                ? prev.ticketTiers.filter((_, i) => i !== index)
+                : prev.ticketTiers
+        }));
+    };
+
+    const signaturePoint = (event) => {
+        const canvas = signatureCanvasRef.current;
+        const rect = canvas.getBoundingClientRect();
+        return {
+            x: ((event.clientX - rect.left) / rect.width) * canvas.width,
+            y: ((event.clientY - rect.top) / rect.height) * canvas.height
+        };
+    };
+
+    const startSignatureStroke = (event) => {
+        const canvas = signatureCanvasRef.current;
+        if (!canvas) return;
+        signatureDrawing.current = true;
+        const ctx = canvas.getContext('2d');
+        const { x, y } = signaturePoint(event);
+        ctx.strokeStyle = '#111111';
+        ctx.lineWidth = 2.25;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        if (canvas.setPointerCapture) {
+            canvas.setPointerCapture(event.pointerId);
+        }
+    };
+
+    const moveSignatureStroke = (event) => {
+        if (!signatureDrawing.current) return;
+        const canvas = signatureCanvasRef.current;
+        const ctx = canvas.getContext('2d');
+        const { x, y } = signaturePoint(event);
+        ctx.lineTo(x, y);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+    };
+
+    const endSignatureStroke = () => {
+        if (!signatureDrawing.current) return;
+        signatureDrawing.current = false;
+        const canvas = signatureCanvasRef.current;
+        if (!canvas) return;
+        setFormData(prev => ({ ...prev, signature: canvas.toDataURL('image/png') }));
+    };
+
+    const wipeSignatureCanvas = () => {
+        const canvas = signatureCanvasRef.current;
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+    };
+
+    const clearSignature = () => {
+        wipeSignatureCanvas();
+        setFormData(prev => ({ ...prev, signature: '' }));
     };
 
     const getSuggestedSpace = (count) => {
@@ -469,7 +923,7 @@ export default function BookingForm() {
             return;
         }
 
-        if (conductError && !conductAcknowledged) {
+        if (!conductAcknowledged) {
             setConductError(true);
             const section = document.getElementById('conduct-policy-block');
             if (section) section.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -483,37 +937,175 @@ export default function BookingForm() {
             return;
         }
 
+        if (formData.involvesControversialTopics && !formData.securityDetails.trim()) {
+            alert('Please provide details for UNSW Security Services notification.');
+            const section = document.getElementById('security-notification-block');
+            if (section) section.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            return;
+        }
+
+        if (!formData.signature) {
+            alert('Please sign the declaration before submitting.');
+            const section = document.getElementById('signature-block');
+            if (section) section.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            return;
+        }
+
+        if (!formData.mainContact.email.trim()) {
+            alert('Enter the organiser email before submitting.');
+            return;
+        }
+
+        if (isCalendarOption(formData.bookingIntent) && selectedSlots.length === 0) {
+            alert('Select a continuous block of time slots before submitting.');
+            return;
+        }
+
+        const targetIsoDateString = localDateString(selectedCalendarDate);
+        if (lockoutApplies && bookingWindowForDate(targetIsoDateString).locked) {
+            alert(lockoutMessage(bookingWindowForDate(targetIsoDateString)));
+            return;
+        }
+
+        const primaryHold = {
+            space: formData.space,
+            bumpInDate: targetIsoDateString,
+            bumpIn: formData.bumpIn || '09:00',
+            eventStart: formData.eventStart || formData.bumpIn || '09:30',
+            eventEnd: formData.eventEnd || formData.bumpOut || '16:30',
+            bumpOut: formData.bumpOut || '17:00'
+        };
+        if (wantsMultipleHolds) {
+            if (extraHolds.length < 1) {
+                alert('Add at least one extra hold, or turn off multiple booking holds.');
+                return;
+            }
+            for (const hold of extraHolds) {
+                if (!hold.bumpInDate || !hold.bumpIn || !hold.eventStart || !hold.eventEnd || !hold.bumpOut || !hold.space) {
+                    alert('Each extra hold needs a space, date, and all four times.');
+                    return;
+                }
+                if (!(hold.bumpIn <= hold.eventStart && hold.eventStart <= hold.eventEnd && hold.eventEnd <= hold.bumpOut)) {
+                    alert('Each hold needs bump-in, start, end, and bump-out in that order.');
+                    return;
+                }
+                if (lockoutApplies && bookingWindowForDate(hold.bumpInDate).locked) {
+                    alert(lockoutMessage(bookingWindowForDate(hold.bumpInDate)));
+                    return;
+                }
+            }
+        }
+
+        if (seriesPlan?.invalidEnd) {
+            alert('Choose an end date on or after the start date.');
+            return;
+        }
+
+        if (seriesPlan?.pattern === 'weekly' && !seriesPlan.known) {
+            alert('Live availability could not be loaded, so booked times may not appear. Future dates are not shown as available, and this repeating booking cannot be confirmed.');
+            return;
+        }
+
+        if (seriesPlan?.pattern === 'weekly' && seriesPlan.bookedDates.length === 0) {
+            alert('Every date in this series is already booked. Change the repeat pattern or the end date.');
+            return;
+        }
+
         setCateringError(false);
         setConductError(false);
 
-        const targetIsoDateString = selectedCalendarDate.toISOString().split('T')[0];
+        const recurrencePayload = seriesPlan?.pattern === 'weekly'
+            ? {
+                pattern: 'weekly',
+                interval: seriesPlan.interval,
+                end: seriesPlan.end,
+                bookedDates: seriesPlan.bookedDates,
+                skippedDates: seriesPlan.skippedDates
+            }
+            : {
+                pattern: 'none',
+                interval: 1,
+                end: null,
+                bookedDates: [targetIsoDateString],
+                skippedDates: []
+            };
 
         const payload = {
             eventName: formData.eventName || "Untitled MCIC Activation Hold",
+            eventDescription: formData.eventDescription,
             space: formData.space,
             includeColonnadeAddon: formData.includeColonnadeAddon,
             attendees: formData.attendees,
+            userType: formData.userType,
+            companyName: formData.companyName,
+            unswDivision: formData.unswDivision,
             department: formData.department || departmentType,
+            isInnovationOrEntrepreneurship: formData.isInnovationOrEntrepreneurship,
+            wantsCasualStaff: formData.wantsCasualStaff,
+            needsJudgeHelp: formData.needsJudgeHelp,
+            tamaraPresence: formData.tamaraPresence,
+            needsFoundersCasualStaff: formData.needsFoundersCasualStaff,
+            casualStaffDetails: (formData.casualStaffDetails || []).map(row => ({
+                ...row,
+                quantity: casualShiftQuantity(row) || 1,
+                preferredStaff: foundersBooking ? row.preferredStaff : ''
+            })),
+            servicewarePreference: formData.servicewarePreference,
+            foundersSupplies: formData.foundersSupplies,
             catering: formData.catering || "No",
             alcohol: formData.alcohol || "No",
             isHighRisk: formData.isHighRisk,
             riskDetails: formData.isHighRisk ? formData.riskDetails : '',
-            status: 'APPROVED',
+            involvesControversialTopics: formData.involvesControversialTopics,
+            securityDetails: formData.involvesControversialTopics ? formData.securityDetails : '',
+            postToPublicDirectory: formData.postToPublicDirectory,
+            ticketing: {
+                method: formData.ticketingMethod,
+                externalTicketUrl: formData.ticketingMethod === 'external' ? formData.externalTicketUrl : '',
+                ticketBannerName: formData.ticketBannerName,
+                maxTicketCapacity: formData.maxTicketCapacity,
+                ticketTiers: formData.ticketingMethod === 'internal' ? formData.ticketTiers : []
+            },
+            emailReminders: formData.ticketingMethod === 'internal'
+                ? normalizeEmailReminders({
+                    enabled: formData.emailRemindersEnabled,
+                    reminders: emailReminders.map(reminder => ({
+                        id: reminder.id,
+                        kind: reminder.kind,
+                        subject: reminder.subject,
+                        body: reminder.body,
+                        sendAt: reminder.sendAt,
+                        manuallyEdited: Boolean(
+                            reminder.manuallyEdited
+                            || reminderLocksRef.current[reminder.id]?.subject
+                            || reminderLocksRef.current[reminder.id]?.body
+                            || reminderLocksRef.current[reminder.id]?.sendAt
+                        )
+                    }))
+                })
+                : { enabled: false, reminders: [] },
+            conductAcknowledged,
+            status: 'PENDING',
             createdAt: new Date().toISOString(),
             bumpInDate: targetIsoDateString,
+            tentativeHolds: wantsMultipleHolds ? [primaryHold, ...extraHolds].slice(0, 3) : [],
+            recurrence: recurrencePayload,
+            isWeekend: formData.isWeekend,
+            selectedSlots,
             bumpIn: formData.bumpIn || "09:00",
             bumpOut: formData.bumpOut || "17:00",
-            eventStart: formData.eventStart || "09:30",
-            eventEnd: formData.eventEnd || "16:30",
+            eventStart: formData.eventStart || formData.bumpIn || "09:30",
+            eventEnd: formData.eventEnd || formData.bumpOut || "16:30",
+            runsheetObjectives: formData.runsheetObjectives,
             mainContact: {
                 name: formData.mainContact.name || "Guest Applicant",
-                email: formData.mainContact.email || "test@example.com",
+                email: formData.mainContact.email,
                 phone: formData.mainContact.phone || ""
             },
             onDayContact: formData.sameAsMain
                 ? {
                     name: formData.mainContact.name || "Guest Applicant",
-                    email: formData.mainContact.email || "test@example.com",
+                    email: formData.mainContact.email,
                     phone: formData.mainContact.phone || ""
                 }
                 : {
@@ -546,7 +1138,8 @@ export default function BookingForm() {
             const res = await apiResponse.json();
 
             if (res.success) {
-                alert("🎉 Booking hold request logged onto server tracking systems!");
+                const calendarNote = res.calendarError ? ` Calendar hold could not be created: ${res.calendarError}` : '';
+                alert(`Booking request saved as pending. Sign in at My bookings with ${formData.mainContact.email} to request a change or cancellation.${calendarNote}`);
             } else {
                 alert(`⚠️ Error submitting booking: ${res.error}`);
             }
@@ -577,6 +1170,9 @@ export default function BookingForm() {
     };
 
     const activeWeekDays = getDynamicWeekDays(currentWeekStart);
+    const lockoutWeekNotes = lockoutApplies
+        ? [...new Set(activeWeekDays.map(dateItem => lockoutSummary(bookingWindowForDate(localDateString(dateItem)))).filter(Boolean))]
+        : [];
 
     const handleNextWeek = () => {
         setCurrentWeekStart(prev => {
@@ -594,10 +1190,24 @@ export default function BookingForm() {
         });
     };
 
+    const chooseCalendarDay = (date) => {
+        const info = bookingWindowForDate(localDateString(date));
+        setSelectedCalendarDate(date);
+        setSelectedSlots([]);
+        selectionAnchorRef.current = null;
+        setSlotWarning('');
+        if (lockoutApplies && info.locked) {
+            setLockoutNotice(lockoutMessage(info));
+        } else {
+            setLockoutNotice('');
+        }
+    };
+
     const handleDatePickerChange = (dateString) => {
         if (!dateString) return;
-        const targetDate = new Date(dateString);
-        setSelectedCalendarDate(targetDate);
+        const [year, month, day] = dateString.split('-').map(Number);
+        const targetDate = new Date(year, month - 1, day);
+        chooseCalendarDay(targetDate);
         const dayOffset = targetDate.getDay() === 0 ? 6 : targetDate.getDay() - 1;
         const matchingMonday = new Date(targetDate);
         matchingMonday.setDate(targetDate.getDate() - dayOffset);
@@ -607,6 +1217,71 @@ export default function BookingForm() {
     const formatDayKey = (date) => {
         const weekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
         return `${weekdays[date.getDay()]} ${String(date.getDate()).padStart(2, '0')}`;
+    };
+
+    const handleSlotClick = (event, room, slot) => {
+        if (lockoutApplies && bookingWindowForDate(localDateString(selectedCalendarDate)).locked) return;
+        const dayKey = formatDayKey(selectedCalendarDate);
+        const allSlots = generate24HoursTimeSlots();
+        const prefix = `${room.name}|${dayKey}|`;
+        const clickedKey = `${prefix}${slot}`;
+        const sameRoom = selectedSlots.filter(key => key.startsWith(prefix));
+        const existingTimes = sameRoom.map(key => key.slice(prefix.length)).sort();
+        const anchor = selectionAnchorRef.current;
+        const anchorMatches = anchor && anchor.room === room.name && anchor.dayKey === dayKey;
+
+        const rangeBetween = (fromSlot, toSlot) => {
+            const startIndex = allSlots.indexOf(fromSlot);
+            const endIndex = allSlots.indexOf(toSlot);
+            if (startIndex < 0 || endIndex < 0) return null;
+            const [from, to] = startIndex <= endIndex ? [startIndex, endIndex] : [endIndex, startIndex];
+            const range = allSlots.slice(from, to + 1);
+            if (range.some(time => isSlotBlockedByCalendar(room.space, time))) return null;
+            return range;
+        };
+
+        let nextSlots = null;
+
+        if (existingTimes.length === 0 || !selectedSlots.every(key => key.startsWith(prefix))) {
+            selectionAnchorRef.current = { room: room.name, dayKey, slot };
+            nextSlots = [slot];
+        } else if (event.shiftKey && anchorMatches) {
+            nextSlots = rangeBetween(anchor.slot, slot);
+        } else if (existingTimes.length === 1 && existingTimes[0] === slot) {
+            selectionAnchorRef.current = null;
+            nextSlots = [];
+        } else if (existingTimes.includes(slot)) {
+            selectionAnchorRef.current = { room: room.name, dayKey, slot };
+            nextSlots = [slot];
+        } else {
+            const from = slot < existingTimes[0] ? slot : existingTimes[0];
+            const to = slot > existingTimes[existingTimes.length - 1] ? slot : existingTimes[existingTimes.length - 1];
+            nextSlots = rangeBetween(from, to);
+            if (!anchorMatches) selectionAnchorRef.current = { room: room.name, dayKey, slot: existingTimes[0] };
+        }
+
+        if (nextSlots === null) {
+            setSlotWarning('That range crosses a booked time. Choose a continuous run of available slots.');
+            return;
+        }
+
+        setSlotWarning('');
+        setSelectedSlots(nextSlots.map(time => `${prefix}${time}`));
+
+        if (nextSlots.length > 0) {
+            const ordered = [...nextSlots].sort();
+            const bumpIn = ordered[0];
+            const bumpOut = addMinutesToTime(ordered[ordered.length - 1], 30);
+            setFormData(prev => ({
+                ...prev,
+                space: room.space,
+                bumpIn,
+                bumpOut,
+                eventStart: bumpIn,
+                eventEnd: bumpOut
+            }));
+            setShowroomSpace(room.space);
+        }
     };
 
     const isColonnadeAddonEligible = ['MCIC Ground - Event Space', 'MCIC Ground - Design Space', 'MCIC Ground - Entire Space'].includes(formData.space);
@@ -706,6 +1381,109 @@ export default function BookingForm() {
                         </div>
                     </div>
                 </div>
+
+                <label className="flex items-start gap-3 p-3 bg-white border border-gray-200 rounded-sm cursor-pointer select-none">
+                    <input
+                        type="checkbox"
+                        checked={wantsMultipleHolds}
+                        onChange={(event) => {
+                            const on = event.target.checked;
+                            setWantsMultipleHolds(on);
+                            if (on) {
+                                setRecurrence(prev => ({ ...prev, pattern: 'none' }));
+                                setExtraHolds(current => current.length ? current : [{
+                                    space: formData.space,
+                                    bumpInDate: '',
+                                    bumpIn: formData.bumpIn || '09:00',
+                                    eventStart: formData.eventStart || '09:30',
+                                    eventEnd: formData.eventEnd || '16:30',
+                                    bumpOut: formData.bumpOut || '17:00'
+                                }]);
+                            }
+                        }}
+                        className="w-4 h-4 accent-black mt-0.5"
+                    />
+                    <span>
+                        <span className="text-xs font-bold uppercase tracking-wide text-neutral-900 block">I would like to put in multiple booking holds</span>
+                        <span className="text-[11px] text-neutral-600 block mt-0.5">The date and times above are hold 1. You can add up to two more tentative holds for the same event. All of them are sent for approval or rejection.</span>
+                    </span>
+                </label>
+
+                {wantsMultipleHolds && (
+                    <div className="space-y-4">
+                        {extraHolds.map((hold, index) => (
+                            <div key={index} className="p-4 bg-white border border-gray-200 rounded-sm space-y-3">
+                                <div className="flex items-center justify-between gap-3">
+                                    <p className="text-xs font-black uppercase tracking-wider">Hold {index + 2}</p>
+                                    <button
+                                        type="button"
+                                        onClick={() => setExtraHolds(current => current.filter((_, itemIndex) => itemIndex !== index))}
+                                        className="text-[10px] font-bold uppercase tracking-wider text-neutral-500"
+                                    >
+                                        Remove
+                                    </button>
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                    <label className="space-y-1">
+                                        <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Space</span>
+                                        <select
+                                            value={hold.space}
+                                            onChange={(event) => setExtraHolds(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, space: event.target.value } : item))}
+                                            className="w-full p-2 border border-gray-200 text-xs font-semibold rounded-sm bg-white"
+                                        >
+                                            {Object.keys(venueShowroom).map(spaceName => (
+                                                <option key={spaceName} value={spaceName}>{spaceName}</option>
+                                            ))}
+                                        </select>
+                                    </label>
+                                    <label className="space-y-1">
+                                        <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Date</span>
+                                        <input
+                                            type="date"
+                                            value={hold.bumpInDate}
+                                            onChange={(event) => setExtraHolds(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, bumpInDate: event.target.value } : item))}
+                                            className="w-full p-2 border border-gray-200 text-xs font-semibold rounded-sm bg-white"
+                                        />
+                                    </label>
+                                </div>
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                                    {[
+                                        ['bumpIn', 'Bump-in'],
+                                        ['eventStart', 'Event starts'],
+                                        ['eventEnd', 'Event ends'],
+                                        ['bumpOut', 'Bump-out']
+                                    ].map(([field, label]) => (
+                                        <label key={field} className="space-y-1">
+                                            <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">{label}</span>
+                                            <input
+                                                type="time"
+                                                value={hold[field]}
+                                                onChange={(event) => setExtraHolds(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, [field]: event.target.value } : item))}
+                                                className="w-full p-2 border border-gray-200 text-xs font-semibold rounded-sm bg-white"
+                                            />
+                                        </label>
+                                    ))}
+                                </div>
+                            </div>
+                        ))}
+                        {extraHolds.length < 2 && (
+                            <button
+                                type="button"
+                                onClick={() => setExtraHolds(current => [...current, {
+                                    space: formData.space,
+                                    bumpInDate: '',
+                                    bumpIn: formData.bumpIn || '09:00',
+                                    eventStart: formData.eventStart || '09:30',
+                                    eventEnd: formData.eventEnd || '16:30',
+                                    bumpOut: formData.bumpOut || '17:00'
+                                }])}
+                                className="text-xs font-bold uppercase tracking-wider border border-black px-3 py-2 rounded-sm"
+                            >
+                                Add another hold
+                            </button>
+                        )}
+                    </div>
+                )}
             </div>
 
             <div className="space-y-2 pt-2">
@@ -1006,7 +1784,7 @@ export default function BookingForm() {
                     ) : (
                         <div className="border border-gray-200 divide-y divide-gray-100 rounded-sm overflow-hidden shadow-xs">
                             {sharedEquipmentMaster.map((item) => {
-                                const reservedInSlot = MOCK_TIME_SLOT_RESERVATIONS[item.key] || 0;
+                                const reservedInSlot = 0;
                                 const availableStock = Math.max(0, item.totalHubStock - reservedInSlot);
                                 const currentValue = formData.av[item.key] || (item.isToggle ? false : 0);
                                 const isSelected = item.isToggle ? currentValue : currentValue > 0;
@@ -1215,6 +1993,43 @@ export default function BookingForm() {
                         />
                     </div>
                 )}
+
+                <label className="flex items-start gap-3 p-4 bg-neutral-50 border border-neutral-200 rounded-sm cursor-pointer select-none">
+                    <input
+                        type="checkbox"
+                        checked={formData.involvesControversialTopics}
+                        onChange={(e) => setFormData(prev => ({
+                            ...prev,
+                            involvesControversialTopics: e.target.checked,
+                            securityDetails: e.target.checked ? prev.securityDetails : ''
+                        }))}
+                        className="w-4 h-4 accent-black mt-0.5 rounded-sm"
+                    />
+                    <div>
+                        <span className="text-xs font-bold uppercase tracking-wider text-black block">
+                            Controversial Topics & Security Notification
+                        </span>
+                        <span className="text-xs text-gray-600 mt-1 block leading-relaxed">
+                            Does this event involve controversial topics, sensitive political discussions, or high-profile guest speakers that may require security presence or crowd management?
+                        </span>
+                    </div>
+                </label>
+
+                {formData.involvesControversialTopics && (
+                    <div id="security-notification-block" className="p-4 bg-red-50/60 border border-red-200 rounded-sm space-y-2 animate-in fade-in">
+                        <label className="text-xs font-bold uppercase tracking-wider text-red-900 block">
+                            If yes, please provide details for UNSW Security Services notification. *
+                        </label>
+                        <textarea
+                            rows={3}
+                            required
+                            placeholder="Describe the topic, speakers, expected attendance, and any crowd or security considerations..."
+                            value={formData.securityDetails}
+                            onChange={(e) => setFormData(prev => ({ ...prev, securityDetails: e.target.value }))}
+                            className="w-full p-3 border border-red-200 bg-white text-xs text-black font-medium rounded-sm outline-none focus:border-red-500"
+                        />
+                    </div>
+                )}
             </div>
         </section>
     );
@@ -1408,14 +2223,16 @@ export default function BookingForm() {
                                     {showroomSpace.replace('MCIC Ground - ', '').replace('MCIC Level 1 - ', '')}
                                 </h4>
                             </div>
-                            <p
-                                className="text-xs text-gray-600 leading-relaxed font-normal"
+                            <div
+                                className="text-xs text-gray-600 leading-relaxed font-normal space-y-2 [&_strong]:text-neutral-900"
                                 dangerouslySetInnerHTML={{ __html: venueShowroom[showroomSpace]?.description }}
                             />
                         </div>
                     </div>
                 </section>
             </div>
+
+            <EventFAQs />
 
             {/* THE MAIN FORM WRAPPER TRACK BOX */}
             <form id="booking-form" onSubmit={handleFormSubmit} className="space-y-12">
@@ -1493,6 +2310,12 @@ export default function BookingForm() {
                                                     <span className="w-2.5 h-2.5 bg-rose-100 border border-rose-300 rounded-sm block" />
                                                     <span className="text-neutral-600">Unavailable</span>
                                                 </div>
+                                                {lockoutApplies && (
+                                                    <div className="flex items-center gap-1.5">
+                                                        <span className="w-2.5 h-2.5 bg-rose-50 border border-rose-300 rounded-sm block" />
+                                                        <span className="text-neutral-600">Lockout</span>
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
 
@@ -1500,31 +2323,210 @@ export default function BookingForm() {
                                             <button type="button" onClick={handlePrevWeek} className="p-1.5 text-xs font-black bg-white border border-neutral-300 rounded-sm hover:bg-neutral-50">←</button>
                                             <div className="flex gap-1 overflow-x-auto flex-1 justify-center">
                                                 {activeWeekDays.map((dateItem) => {
-                                                    const isSelected = selectedCalendarDate.toDateString() === dateItem.toDateString();
+                                                    const dayLock = lockoutApplies ? bookingWindowForDate(localDateString(dateItem)) : null;
+                                                    const isLocked = Boolean(dayLock?.locked);
+                                                    const isSelected = !isLocked && selectedCalendarDate.toDateString() === dateItem.toDateString();
+                                                    const isFocusedLock = isLocked && selectedCalendarDate.toDateString() === dateItem.toDateString();
                                                     return (
                                                         <button
                                                             key={dateItem.toISOString()}
                                                             type="button"
-                                                            onClick={() => setSelectedCalendarDate(dateItem)}
-                                                            className={`px-3 py-1.5 text-xs font-mono rounded-sm border flex flex-col items-center min-w-[65px] transition-all ${isSelected
+                                                            disabled={isLocked}
+                                                            title={isLocked ? lockoutMessage(dayLock) : undefined}
+                                                            onClick={() => chooseCalendarDay(dateItem)}
+                                                            className={`px-3 py-1.5 text-xs font-mono rounded-sm border flex flex-col items-center min-w-[65px] transition-all disabled:opacity-100 ${isSelected
                                                                 ? 'bg-neutral-900 border-black text-white font-black scale-[1.02]'
-                                                                : 'bg-white border-transparent text-neutral-600 hover:bg-neutral-50'
+                                                                : isLocked
+                                                                    ? `bg-rose-50 border-rose-200 text-rose-800 cursor-not-allowed ${isFocusedLock ? 'ring-2 ring-rose-400' : ''}`
+                                                                    : 'bg-white border-transparent text-neutral-600 hover:bg-neutral-50'
                                                                 }`}
                                                         >
                                                             <span className="text-[9px] uppercase opacity-60">{dateItem.toLocaleDateString('en-US', { weekday: 'short' })}</span>
                                                             <span>{dateItem.getDate()}</span>
+                                                            {isLocked && <span className="text-[8px] uppercase tracking-wide">Lockout</span>}
                                                         </button>
                                                     );
                                                 })}
                                             </div>
                                             <button type="button" onClick={handleNextWeek} className="p-1.5 text-xs font-black bg-white border border-neutral-300 rounded-sm hover:bg-neutral-50">→</button>
                                         </div>
+                                        {lockoutWeekNotes.length > 0 && (
+                                            <p className="text-xs font-bold text-amber-800">Dates in lockout are held so Founders Program Managers have first access to space bookings.</p>
+                                        )}
+                                        {lockoutWeekNotes.map(note => (
+                                            <p key={note} className="text-xs font-bold text-amber-800">{note}</p>
+                                        ))}
+                                        {lockoutNotice && (
+                                            <p className="text-xs font-bold text-rose-800">{lockoutNotice}</p>
+                                        )}
 
                                         <div className="p-3.5 bg-neutral-900 text-white font-bold rounded-xs text-xs">
-                                            Select your time blocks below. Scroll up/down to see full 24-hour availability. Hold <kbd className="bg-neutral-800 px-1 rounded-sm border border-neutral-700 text-[10px] font-mono">Shift</kbd> to select ranges.
+                                            Select a start time, then another time in the same room. Every slot between them is selected, including when you hold <kbd className="bg-neutral-800 px-1 rounded-sm border border-neutral-700 text-[10px] font-mono">Shift</kbd> from the start to the end. Booked times cannot sit in the middle.
                                             <br />Note: You can only book one room at a time.
                                         </div>
+                                        {calendarNotice && (
+                                            <p className="text-xs font-bold text-amber-800">{calendarNotice}</p>
+                                        )}
+                                        {slotWarning && (
+                                            <p className="text-xs font-bold text-red-700">{slotWarning}</p>
+                                        )}
+                                        {selectedSlots.length > 0 && (
+                                            <p className="text-xs font-bold text-neutral-800">
+                                                {selectedSlots.length} adjacent {selectedSlots.length === 1 ? 'slot' : 'slots'} selected, {formData.bumpIn} to {formData.bumpOut}.
+                                            </p>
+                                        )}
 
+                                        {foundersBooking && selectedSlots.length > 0 && (
+                                            <div className="p-4 bg-white border border-neutral-200 rounded-sm space-y-4">
+                                                <div className="space-y-2">
+                                                    <label className="text-xs font-bold uppercase tracking-wider text-gray-500 block">Repeat</label>
+                                                    <div className="grid grid-cols-2 gap-3">
+                                                        {[
+                                                            { id: 'none', label: 'Does not repeat' },
+                                                            { id: 'weekly', label: 'Weekly' }
+                                                        ].map(option => (
+                                                            <button
+                                                                key={option.id}
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    setRecurrence(prev => ({ ...prev, pattern: option.id }));
+                                                                    if (option.id === 'weekly') setWantsMultipleHolds(false);
+                                                                }}
+                                                                className={`p-3 text-xs font-bold uppercase tracking-wider text-center border rounded-sm transition-all ${recurrence.pattern === option.id
+                                                                    ? 'bg-black text-white border-black shadow-sm'
+                                                                    : 'bg-white border-gray-200 text-neutral-700 hover:bg-neutral-50'
+                                                                    }`}
+                                                            >
+                                                                {option.label}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                </div>
+
+                                                {recurrence.pattern === 'weekly' && (
+                                                    <>
+                                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                                            <div className="space-y-2">
+                                                                <label className="text-xs font-bold uppercase tracking-wider text-gray-500 block">Every</label>
+                                                                <div className="flex items-center gap-2">
+                                                                    <input
+                                                                        type="number"
+                                                                        min={1}
+                                                                        max={MAX_SERIES_OCCURRENCES}
+                                                                        value={recurrence.interval}
+                                                                        onChange={(e) => setRecurrence(prev => ({
+                                                                            ...prev,
+                                                                            interval: Math.min(MAX_SERIES_OCCURRENCES, Math.max(1, Number(e.target.value) || 1))
+                                                                        }))}
+                                                                        className="w-20 p-2 border border-gray-300 bg-white text-sm font-medium rounded-sm text-black outline-none"
+                                                                    />
+                                                                    <span className="text-xs font-medium text-neutral-700">{Number(recurrence.interval) === 1 ? 'week' : 'weeks'}</span>
+                                                                </div>
+                                                            </div>
+                                                            <div className="space-y-2">
+                                                                <label className="text-xs font-bold uppercase tracking-wider text-gray-500 block">Ends</label>
+                                                                <div className="grid grid-cols-2 gap-2">
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => setRecurrence(prev => ({ ...prev, endType: 'on' }))}
+                                                                        className={`p-2 text-[11px] font-bold uppercase tracking-wider border rounded-sm ${recurrence.endType === 'on' ? 'bg-black text-white border-black' : 'bg-white border-gray-200 text-neutral-700'}`}
+                                                                    >
+                                                                        On a date
+                                                                    </button>
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => setRecurrence(prev => ({ ...prev, endType: 'after' }))}
+                                                                        className={`p-2 text-[11px] font-bold uppercase tracking-wider border rounded-sm ${recurrence.endType === 'after' ? 'bg-black text-white border-black' : 'bg-white border-gray-200 text-neutral-700'}`}
+                                                                    >
+                                                                        After
+                                                                    </button>
+                                                                </div>
+                                                                {recurrence.endType === 'on' ? (
+                                                                    <input
+                                                                        type="date"
+                                                                        value={recurrence.endDate}
+                                                                        min={selectedDateStr}
+                                                                        onChange={(e) => setRecurrence(prev => ({ ...prev, endDate: e.target.value }))}
+                                                                        className="w-full p-2 border border-gray-300 bg-white text-sm font-medium rounded-sm text-black outline-none"
+                                                                    />
+                                                                ) : (
+                                                                    <div className="flex items-center gap-2">
+                                                                        <input
+                                                                            type="number"
+                                                                            min={1}
+                                                                            max={MAX_SERIES_OCCURRENCES}
+                                                                            value={recurrence.occurrences}
+                                                                            onChange={(e) => setRecurrence(prev => ({
+                                                                                ...prev,
+                                                                                occurrences: Math.min(MAX_SERIES_OCCURRENCES, Math.max(1, Number(e.target.value) || 1))
+                                                                            }))}
+                                                                            className="w-20 p-2 border border-gray-300 bg-white text-sm font-medium rounded-sm text-black outline-none"
+                                                                        />
+                                                                        <span className="text-xs font-medium text-neutral-700">occurrences</span>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                        <p className="text-[11px] font-medium text-neutral-500">
+                                                            Same weekday and time. A series stops at 52 occurrences. Dates that are already booked are left out.
+                                                        </p>
+                                                        {seriesPlan?.invalidEnd && (
+                                                            <p className="text-xs font-bold text-red-700">Choose an end date on or after the start date.</p>
+                                                        )}
+                                                        {!seriesPlan?.invalidEnd && (seriesAvailability.status === 'loading' || seriesAvailability.status === 'idle') && (
+                                                            <p className="text-xs font-bold text-neutral-600">Checking each date against the room calendar…</p>
+                                                        )}
+                                                        {!seriesPlan?.invalidEnd && seriesAvailability.status === 'error' && (
+                                                            <div className="space-y-1">
+                                                                <p className="text-xs font-bold text-amber-800">
+                                                                    {calendarNotice || 'Live availability could not be loaded, so booked times may not appear.'} Future dates are not shown as available.
+                                                                </p>
+                                                                <ul className="space-y-1">
+                                                                    {(seriesPlan?.dates || []).map(date => (
+                                                                        <li key={date} className="text-xs text-neutral-600">
+                                                                            {formatBookingDate(date, true)} — availability could not be checked
+                                                                        </li>
+                                                                    ))}
+                                                                </ul>
+                                                            </div>
+                                                        )}
+                                                        {seriesPlan?.known && !seriesPlan.invalidEnd && seriesPlan.skippedDates.length > 0 && (
+                                                            <div className="space-y-1">
+                                                                <p className="text-xs font-bold text-rose-800">These dates are already booked and will be left out</p>
+                                                                <ul className="space-y-1">
+                                                                    {seriesPlan.skippedDates.map(item => (
+                                                                        <li key={item.date} className="text-xs text-rose-900">
+                                                                            {formatBookingDate(item.date, true)} — {item.reason}
+                                                                        </li>
+                                                                    ))}
+                                                                </ul>
+                                                            </div>
+                                                        )}
+                                                        {seriesPlan?.known && !seriesPlan.invalidEnd && seriesPlan.bookedDates.length > 0 && (
+                                                            <div className="space-y-1">
+                                                                <p className="text-xs font-bold text-neutral-800">These dates will be booked</p>
+                                                                <ul className="space-y-1">
+                                                                    {seriesPlan.bookedDates.map(date => (
+                                                                        <li key={date} className="text-xs text-neutral-700">
+                                                                            {formatBookingDate(date, true)}, {timeRangeLabel}
+                                                                        </li>
+                                                                    ))}
+                                                                </ul>
+                                                            </div>
+                                                        )}
+                                                        {seriesPlan?.known && seriesPlan.dates.length >= MAX_SERIES_OCCURRENCES && (
+                                                            <p className="text-[11px] font-bold text-neutral-500">Capped at 52 occurrences.</p>
+                                                        )}
+                                                    </>
+                                                )}
+                                            </div>
+                                        )}
+
+                                        {selectedLock.locked ? (
+                                            <div className="p-4 bg-rose-50 border border-rose-200 rounded-sm">
+                                                <p className="text-xs font-bold text-rose-900">{lockoutMessage(selectedLock)} This date cannot be selected.</p>
+                                            </div>
+                                        ) : (
                                         <div className="border border-gray-200 rounded-sm bg-white shadow-sm overflow-hidden">
                                             <div className="overflow-x-auto overflow-y-auto max-h-[480px]">
                                                 <table className="w-full text-left border-collapse min-w-[750px]">
@@ -1546,7 +2548,7 @@ export default function BookingForm() {
                                                                 </td>
                                                                 {mockCalendarData.rooms.map((room) => {
                                                                     const dayKeyString = formatDayKey(selectedCalendarDate);
-                                                                    const isBlocked = isSlotBlockedByCalendar(room.name, slot);
+                                                                    const isBlocked = isSlotBlockedByCalendar(room.space, slot);
                                                                     const compositeSlotKey = `${room.name}|${dayKeyString}|${slot}`;
                                                                     const isCurrentlySelected = selectedSlots.includes(compositeSlotKey);
 
@@ -1555,13 +2557,7 @@ export default function BookingForm() {
                                                                             {!isBlocked ? (
                                                                                 <button
                                                                                     type="button"
-                                                                                    onClick={() => {
-                                                                                        setSelectedSlots(prev =>
-                                                                                            prev.includes(compositeSlotKey)
-                                                                                                ? prev.filter(k => k !== compositeSlotKey)
-                                                                                                : [...prev, compositeSlotKey]
-                                                                                        );
-                                                                                    }}
+                                                                                    onClick={(clickEvent) => handleSlotClick(clickEvent, room, slot)}
                                                                                     className={`w-full py-2 text-[9px] font-black uppercase tracking-wider font-sans border rounded-sm transition-all ${isCurrentlySelected
                                                                                         ? "bg-black border-black text-white shadow-inner"
                                                                                         : "bg-emerald-50 border-emerald-200 text-emerald-800 hover:bg-emerald-100/70"
@@ -1583,6 +2579,7 @@ export default function BookingForm() {
                                                 </table>
                                             </div>
                                         </div>
+                                        )}
 
                                         <div className="pt-4 border-t border-neutral-200/60 text-center">
                                             <button
@@ -1634,9 +2631,26 @@ export default function BookingForm() {
                         {/* SECTION: TICKETING SETUP */}
                         <section className="bg-white p-8 border border-gray-200 rounded-sm shadow-sm space-y-6">
                             <h3 className="text-lg font-extrabold tracking-tight uppercase text-black border-b border-neutral-100 pb-2">
-                                Ticketing & Event Registration
+                                Ticketing & Public Directory
                             </h3>
                             <div className="space-y-4">
+                                <label className="flex items-start gap-3 p-4 bg-neutral-50 border border-neutral-200 rounded-sm cursor-pointer select-none">
+                                    <input
+                                        type="checkbox"
+                                        checked={formData.postToPublicDirectory}
+                                        onChange={(e) => setFormData(prev => ({ ...prev, postToPublicDirectory: e.target.checked }))}
+                                        className="w-4 h-4 accent-black mt-0.5 rounded-sm"
+                                    />
+                                    <div>
+                                        <span className="text-xs font-bold uppercase tracking-wider text-black block">
+                                            Post this event to the public directory
+                                        </span>
+                                        <span className="text-[11px] text-gray-600 font-medium mt-1 block leading-relaxed">
+                                            Tick this if you want the event listed on the MCIC public ticket directory.
+                                        </span>
+                                    </div>
+                                </label>
+
                                 <label className="text-xs font-bold uppercase tracking-wider text-gray-500 block">How will guests register for your event?</label>
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                     <button
@@ -1689,6 +2703,135 @@ export default function BookingForm() {
                                                 className="w-full p-3 border border-gray-200 bg-white text-sm font-medium rounded-sm text-black outline-none"
                                             />
                                         </div>
+
+                                        <div className="space-y-3 pt-2 border-t border-gray-200">
+                                            <div className="flex items-center justify-between gap-3">
+                                                <label className="text-xs font-bold uppercase tracking-wider text-gray-500 block">Ticket Tiers</label>
+                                                <button
+                                                    type="button"
+                                                    onClick={addTicketTier}
+                                                    className="text-[10px] font-bold uppercase tracking-wider px-3 py-1.5 border border-gray-300 bg-white rounded-sm hover:bg-neutral-100"
+                                                >
+                                                    + Add Tier
+                                                </button>
+                                            </div>
+                                            {formData.ticketTiers.map((tier, idx) => (
+                                                <div key={idx} className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
+                                                    <div className="sm:col-span-7 space-y-1">
+                                                        <label className="text-[10px] font-bold uppercase text-gray-500">Tier Name</label>
+                                                        <input
+                                                            type="text"
+                                                            value={tier.name}
+                                                            onChange={(e) => updateTicketTier(idx, 'name', e.target.value)}
+                                                            placeholder="e.g. UNSW Affiliated (Students & Staff)"
+                                                            className="w-full p-2.5 border border-gray-200 bg-white text-xs font-medium rounded-sm text-black outline-none"
+                                                        />
+                                                    </div>
+                                                    <div className="sm:col-span-4 space-y-1">
+                                                        <label className="text-[10px] font-bold uppercase text-gray-500">Tier Capacity</label>
+                                                        <input
+                                                            type="number"
+                                                            min="0"
+                                                            value={tier.cap}
+                                                            onChange={(e) => updateTicketTier(idx, 'cap', e.target.value)}
+                                                            placeholder="e.g. 80"
+                                                            className="w-full p-2.5 border border-gray-200 bg-white text-xs font-medium rounded-sm text-black outline-none"
+                                                        />
+                                                    </div>
+                                                    <div className="sm:col-span-1 text-right">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => removeTicketTier(idx)}
+                                                            disabled={formData.ticketTiers.length === 1}
+                                                            className={`p-2 text-xs font-bold rounded-sm ${formData.ticketTiers.length === 1 ? 'text-gray-300' : 'text-red-600 hover:bg-red-50'}`}
+                                                        >
+                                                            ✕
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+
+                                        <div className="space-y-4 pt-4 border-t border-gray-200">
+                                            <label className="flex items-start gap-3 cursor-pointer select-none">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={formData.emailRemindersEnabled}
+                                                    onChange={(e) => setFormData(prev => ({ ...prev, emailRemindersEnabled: e.target.checked }))}
+                                                    className="w-4 h-4 accent-black mt-0.5 rounded-sm"
+                                                />
+                                                <span>
+                                                    <span className="text-xs font-bold uppercase tracking-wider text-black block">
+                                                        Send automatic email reminders
+                                                    </span>
+                                                    <span className="text-[11px] text-gray-600 font-medium mt-1 block leading-relaxed">
+                                                        Registered guests receive these at the Australia/Sydney times below. The four standard reminders stay unless you turn reminders off. You can edit them and add more.
+                                                    </span>
+                                                </span>
+                                            </label>
+
+                                            {formData.emailRemindersEnabled && emailReminders.map(reminder => (
+                                                <div key={reminder.id} className="bg-white border border-gray-200 rounded-sm p-4 space-y-3">
+                                                    <div className="flex items-center justify-between gap-3">
+                                                        <p className="text-xs font-bold uppercase tracking-wider text-black">
+                                                            {reminder.label}
+                                                            {reminder.kind === 'default' && (
+                                                                <span className="ml-2 text-[10px] font-bold uppercase tracking-wider text-neutral-500">Standard</span>
+                                                            )}
+                                                        </p>
+                                                        {reminder.kind === 'extra' && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => removeEmailReminder(reminder.id)}
+                                                                className="text-[10px] font-bold uppercase tracking-wider text-red-600 hover:bg-red-50 px-2 py-1 rounded-sm"
+                                                            >
+                                                                Remove
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                    <div className="space-y-1">
+                                                        <label className="text-[10px] font-bold uppercase text-gray-500">Send date and time (Australia/Sydney)</label>
+                                                        <input
+                                                            type="datetime-local"
+                                                            value={reminder.sendAt}
+                                                            onChange={(e) => updateEmailReminder(reminder.id, 'sendAt', e.target.value, e.nativeEvent.isTrusted)}
+                                                            className="w-full p-2.5 border border-gray-200 text-xs font-medium rounded-sm text-black outline-none"
+                                                        />
+                                                        {!reminder.sendAt && (
+                                                            <p className="text-[10px] text-neutral-500">Add the event date and start time and this send time fills in. You can still set it yourself.</p>
+                                                        )}
+                                                    </div>
+                                                    <div className="space-y-1">
+                                                        <label className="text-[10px] font-bold uppercase text-gray-500">Subject</label>
+                                                        <input
+                                                            type="text"
+                                                            value={reminder.subject}
+                                                            onChange={(e) => updateEmailReminder(reminder.id, 'subject', e.target.value, e.nativeEvent.isTrusted)}
+                                                            className="w-full p-2.5 border border-gray-200 text-xs font-medium rounded-sm text-black outline-none"
+                                                        />
+                                                    </div>
+                                                    <div className="space-y-1">
+                                                        <label className="text-[10px] font-bold uppercase text-gray-500">Body</label>
+                                                        <textarea
+                                                            rows={8}
+                                                            value={reminder.body}
+                                                            onChange={(e) => updateEmailReminder(reminder.id, 'body', e.target.value, e.nativeEvent.isTrusted)}
+                                                            className="w-full p-2.5 border border-gray-200 text-xs font-medium rounded-sm text-black outline-none leading-relaxed"
+                                                        />
+                                                    </div>
+                                                </div>
+                                            ))}
+
+                                            {formData.emailRemindersEnabled && (
+                                                <button
+                                                    type="button"
+                                                    onClick={addEmailReminder}
+                                                    className="text-[10px] font-bold uppercase tracking-wider px-3 py-2 border border-gray-300 bg-white rounded-sm hover:bg-neutral-100"
+                                                >
+                                                    + Add another reminder
+                                                </button>
+                                            )}
+                                        </div>
                                     </div>
                                 )}
                             </div>
@@ -1705,6 +2848,9 @@ export default function BookingForm() {
                                     <label className="text-xs font-bold uppercase tracking-wider text-gray-500 block">
                                         Does this event have to do with Innovation / Entrepreneurship?
                                     </label>
+                                    <p className="text-[11px] text-neutral-500">
+                                        Selecting Yes applies an automatic discount to your venue hire rate.
+                                    </p>
                                     <div className="flex gap-4 max-w-xs pt-1">
                                         {['Yes', 'No'].map((choice) => (
                                             <button
@@ -1726,6 +2872,9 @@ export default function BookingForm() {
                                     <label className="text-xs font-bold uppercase tracking-wider text-gray-500 block">
                                         Would you like to book a casual staff member for event support?
                                     </label>
+                                    <p className="text-[11px] text-neutral-500">
+                                        Casual staff members are available at $50/hr (3-hour minimum block) to assist with room setup, AV, and guest check-in.
+                                    </p>
                                     <div className="flex gap-4 max-w-xs pt-1">
                                         {['Yes', 'No'].map((choice) => (
                                             <button
@@ -1741,6 +2890,94 @@ export default function BookingForm() {
                                             </button>
                                         ))}
                                     </div>
+                                    {formData.wantsCasualStaff === 'Yes' && (
+                                        <div className="space-y-4 pt-2">
+                                            <label className="text-[11px] font-black uppercase tracking-wider text-neutral-700 block">
+                                                Casual Staff Shift Details
+                                            </label>
+                                            {formData.casualStaffDetails.map((staffRow, idx) => (
+                                                <div key={idx} className={`p-4 bg-white border border-gray-200 rounded-sm grid grid-cols-1 gap-3 items-end ${foundersBooking ? 'md:grid-cols-[minmax(0,1.15fr)_5.5rem_minmax(0,0.85fr)_minmax(0,0.85fr)_minmax(0,1.4fr)_2rem]' : 'md:grid-cols-[5.5rem_minmax(0,0.9fr)_minmax(0,0.9fr)_minmax(0,1.7fr)_2rem]'}`}>
+                                                    {foundersBooking && (
+                                                        <div className="space-y-1">
+                                                            <label className="text-[10px] font-bold text-gray-500 uppercase">Preferred Staff Member</label>
+                                                            <select
+                                                                value={staffRow.preferredStaff}
+                                                                onChange={(e) => updateCasualStaffDetail(idx, 'preferredStaff', e.target.value)}
+                                                                className="w-full p-2 border border-gray-200 rounded-sm text-xs font-medium text-black outline-none focus:border-neutral-400"
+                                                            >
+                                                                <option value="">No Preference</option>
+                                                                {CASUAL_STAFF_LIST.map((name) => (
+                                                                    <option key={name} value={name}>{name}</option>
+                                                                ))}
+                                                            </select>
+                                                        </div>
+                                                    )}
+                                                    <div className="space-y-1">
+                                                        <label className="text-[10px] font-bold text-gray-500 uppercase">How many</label>
+                                                        <input
+                                                            type="number"
+                                                            min={1}
+                                                            max={MAX_CASUAL_QUANTITY}
+                                                            step={1}
+                                                            inputMode="numeric"
+                                                            required
+                                                            value={staffRow.quantity}
+                                                            onChange={(e) => updateCasualStaffDetail(idx, 'quantity', e.target.value)}
+                                                            onBlur={(e) => {
+                                                                if (casualShiftQuantity({ quantity: e.target.value }) == null) updateCasualStaffDetail(idx, 'quantity', 1);
+                                                            }}
+                                                            className="w-full p-2 border border-gray-200 rounded-sm text-xs font-medium text-black outline-none focus:border-neutral-400"
+                                                        />
+                                                    </div>
+                                                    <div className="space-y-1">
+                                                        <label className="text-[10px] font-bold text-gray-500 uppercase">Shift Start</label>
+                                                        <input
+                                                            type="time"
+                                                            value={staffRow.shiftStart}
+                                                            onChange={(e) => updateCasualStaffDetail(idx, 'shiftStart', e.target.value)}
+                                                            className="w-full p-2 border border-gray-200 rounded-sm text-xs font-medium text-black outline-none focus:border-neutral-400"
+                                                        />
+                                                    </div>
+                                                    <div className="space-y-1">
+                                                        <label className="text-[10px] font-bold text-gray-500 uppercase">Shift End</label>
+                                                        <input
+                                                            type="time"
+                                                            value={staffRow.shiftEnd}
+                                                            onChange={(e) => updateCasualStaffDetail(idx, 'shiftEnd', e.target.value)}
+                                                            className="w-full p-2 border border-gray-200 rounded-sm text-xs font-medium text-black outline-none focus:border-neutral-400"
+                                                        />
+                                                    </div>
+                                                    <div className="space-y-1">
+                                                        <label className="text-[10px] font-bold text-gray-500 uppercase">Tasks / Description</label>
+                                                        <input
+                                                            type="text"
+                                                            placeholder="e.g. Stage setup & Slido Q&A mic running"
+                                                            value={staffRow.tasks}
+                                                            onChange={(e) => updateCasualStaffDetail(idx, 'tasks', e.target.value)}
+                                                            className="w-full p-2 border border-gray-200 rounded-sm text-xs font-medium text-black outline-none focus:border-neutral-400"
+                                                        />
+                                                    </div>
+                                                    <div className="text-right">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => removeCasualStaffRow(idx)}
+                                                            disabled={formData.casualStaffDetails.length === 1}
+                                                            className={`p-2 text-xs font-bold rounded-sm ${formData.casualStaffDetails.length === 1 ? 'text-gray-300' : 'text-red-600 hover:bg-red-50'}`}
+                                                        >
+                                                            ✕
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                            <button
+                                                type="button"
+                                                onClick={addCasualStaffRow}
+                                                className="bg-black text-white font-bold text-[10px] tracking-wider px-3.5 py-2 rounded-sm"
+                                            >
+                                                + additional staffing request
+                                            </button>
+                                        </div>
+                                    )}
                                 </div>
 
                                 <div className="space-y-2 pt-4 border-t border-gray-100">
@@ -1767,7 +3004,7 @@ export default function BookingForm() {
                         </section>
 
                         {/* SECTION: INTERNAL UNSW FOUNDERS STAFF COORDINATION */}
-                        {departmentType === 'UNSW Founders' && (
+                        {access.founders && (
                             <section className="bg-amber-50/60 p-8 border border-amber-200 rounded-sm shadow-sm space-y-6">
                                 <h3 className="text-lg font-extrabold tracking-tight uppercase text-amber-900 border-b border-amber-200 pb-2">
                                     Internal Founders Staff Coordination
@@ -1796,111 +3033,68 @@ export default function BookingForm() {
                                     </div>
 
                                     <div className="space-y-4 pt-4 border-t border-amber-200/80">
-                                        <div className="space-y-2">
-                                            <label className="text-xs font-bold uppercase tracking-wider text-amber-900 block">
-                                                Do you need casual staff for this internal booking?
-                                            </label>
-                                            <div className="flex gap-4 max-w-xs pt-1">
-                                                {['Yes', 'No'].map((choice) => (
-                                                    <button
-                                                        key={choice}
-                                                        type="button"
-                                                        onClick={() => setFormData({ ...formData, needsFoundersCasualStaff: choice })}
-                                                        className={`flex-1 py-2 text-xs font-bold uppercase rounded-sm border transition-all ${formData.needsFoundersCasualStaff === choice
-                                                            ? 'bg-amber-900 text-white border-amber-900 shadow-xs'
-                                                            : 'bg-white border-amber-200 text-amber-900 hover:bg-amber-100/50'
-                                                            }`}
-                                                    >
-                                                        {choice}
-                                                    </button>
-                                                ))}
-                                            </div>
-                                        </div>
-
-                                        {formData.needsFoundersCasualStaff === 'Yes' && (
-                                            <div className="space-y-4 pt-2">
-                                                <label className="text-[11px] font-black uppercase tracking-wider text-amber-900 block">
-                                                    Casual Staff Shift Details
-                                                </label>
-                                                {formData.casualStaffDetails.map((staffRow, idx) => (
-                                                    <div key={idx} className="p-4 bg-white border border-amber-200 rounded-sm grid grid-cols-1 md:grid-cols-12 gap-3 items-end shadow-2xs">
-                                                        <div className="md:col-span-3 space-y-1">
-                                                            <label className="text-[10px] font-bold text-gray-500 uppercase">Preferred Staff Member</label>
-                                                            <select
-                                                                value={staffRow.preferredStaff}
-                                                                onChange={(e) => updateCasualStaffDetail(idx, 'preferredStaff', e.target.value)}
-                                                                className="w-full p-2 border border-gray-200 rounded-sm text-xs font-medium text-black outline-none focus:border-amber-400"
-                                                            >
-                                                                <option value="">No Preference</option>
-                                                                {CASUAL_STAFF_LIST.map((name) => (
-                                                                    <option key={name} value={name}>{name}</option>
-                                                                ))}
-                                                            </select>
-                                                        </div>
-                                                        <div className="md:col-span-2 space-y-1">
-                                                            <label className="text-[10px] font-bold text-gray-500 uppercase">Shift Start</label>
-                                                            <input
-                                                                type="time"
-                                                                value={staffRow.shiftStart}
-                                                                onChange={(e) => updateCasualStaffDetail(idx, 'shiftStart', e.target.value)}
-                                                                className="w-full p-2 border border-gray-200 rounded-sm text-xs font-medium text-black outline-none focus:border-amber-400"
-                                                            />
-                                                        </div>
-                                                        <div className="md:col-span-2 space-y-1">
-                                                            <label className="text-[10px] font-bold text-gray-500 uppercase">Shift End</label>
-                                                            <input
-                                                                type="time"
-                                                                value={staffRow.shiftEnd}
-                                                                onChange={(e) => updateCasualStaffDetail(idx, 'shiftEnd', e.target.value)}
-                                                                className="w-full p-2 border border-gray-200 rounded-sm text-xs font-medium text-black outline-none focus:border-amber-400"
-                                                            />
-                                                        </div>
-                                                        <div className="md:col-span-4 space-y-1">
-                                                            <label className="text-[10px] font-bold text-gray-500 uppercase">Tasks / Description</label>
-                                                            <input
-                                                                type="text"
-                                                                placeholder="e.g. Stage setup & Slido Q&A mic running"
-                                                                value={staffRow.tasks}
-                                                                onChange={(e) => updateCasualStaffDetail(idx, 'tasks', e.target.value)}
-                                                                className="w-full p-2 border border-gray-200 rounded-sm text-xs font-medium text-black outline-none focus:border-amber-400"
-                                                            />
-                                                        </div>
-                                                        <div className="md:col-span-1 text-right">
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => removeCasualStaffRow(idx)}
-                                                                disabled={formData.casualStaffDetails.length === 1}
-                                                                className={`p-2 text-xs font-bold rounded-sm ${formData.casualStaffDetails.length === 1 ? 'text-gray-300' : 'text-red-600 hover:bg-red-50'}`}
-                                                            >
-                                                                ✕
-                                                            </button>
-                                                        </div>
-                                                    </div>
-                                                ))}
+                                        <label className="text-xs font-bold uppercase tracking-wider text-amber-900 block">
+                                            What serviceware, food and drinks do you need?
+                                        </label>
+                                        <div className="grid grid-cols-2 gap-3 max-w-sm">
+                                            {[
+                                                { label: 'Throwaway / Disposable', val: 'Throwaway' },
+                                                { label: 'Re-usable', val: 'Re-usable' }
+                                            ].map((pref) => (
                                                 <button
+                                                    key={pref.val}
                                                     type="button"
-                                                    onClick={addCasualStaffRow}
-                                                    className="bg-amber-900 text-white font-bold text-[10px] uppercase tracking-wider px-3.5 py-2 rounded-sm hover:bg-amber-950 transition-all shadow-2xs"
+                                                    onClick={() => setFormData(prev => ({ ...prev, servicewarePreference: pref.val }))}
+                                                    className={`p-2.5 text-xs font-bold uppercase rounded-sm border text-center transition-all ${formData.servicewarePreference === pref.val
+                                                        ? 'bg-amber-900 text-white border-amber-900'
+                                                        : 'bg-white border-amber-200 text-amber-900 hover:bg-amber-100/50'
+                                                        }`}
                                                 >
-                                                    + Add Staff Member
+                                                    {pref.label}
                                                 </button>
-                                            </div>
-                                        )}
+                                            ))}
+                                        </div>
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                                            {[
+                                                { key: 'needWoolworthsOrder', label: 'Woolworths Order (Food, Soft Drink)' },
+                                                { key: 'needDanMurphysOrder', label: "Dan Murphy's Order (Wine, Beer, etc.)" },
+                                                { key: 'needPlates', label: 'Plates' },
+                                                { key: 'needNapkins', label: 'Napkins' },
+                                                { key: 'needTongs', label: 'Tongs' },
+                                                { key: 'needCutlery', label: 'Cutlery' },
+                                                { key: 'needIce', label: 'Ice' }
+                                            ].map((item) => (
+                                                <label key={item.key} className="flex items-center gap-2.5 p-3 bg-white border border-amber-200 rounded-sm cursor-pointer select-none">
+                                                    <input
+                                                        type="checkbox"
+                                                        className="w-4 h-4 accent-black rounded-sm"
+                                                        checked={formData.foundersSupplies?.[item.key] || false}
+                                                        onChange={(e) => setFormData(prev => ({
+                                                            ...prev,
+                                                            foundersSupplies: {
+                                                                ...prev.foundersSupplies,
+                                                                [item.key]: e.target.checked
+                                                            }
+                                                        }))}
+                                                    />
+                                                    <span className="text-xs font-bold text-amber-950">{item.label}</span>
+                                                </label>
+                                            ))}
+                                        </div>
                                     </div>
                                 </div>
                             </section>
                         )}
 
                         {/* SECTION: BILLING & PAYMENT INFORMATION */}
-                        {quote.total > 0 && (
                             <section className="bg-white p-8 border border-gray-200 rounded-sm shadow-sm space-y-6">
                                 <h3 className="text-lg font-extrabold tracking-tight uppercase text-black border-b border-neutral-100 pb-2">
                                     Billing & Payment Details
                                 </h3>
                                 <div className="space-y-4">
                                     <label className="text-xs font-bold uppercase tracking-wider text-gray-500 block">Payment Method</label>
-                                    <div className="grid grid-cols-2 gap-4">
-                                        {['Invoice', 'Credit Card'].map(method => (
+                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                        {['Journal Transfer', 'Invoice', 'Credit Card'].map(method => (
                                             <button
                                                 key={method}
                                                 type="button"
@@ -1911,6 +3105,12 @@ export default function BookingForm() {
                                             </button>
                                         ))}
                                     </div>
+
+                                    {formData.paymentMethod === 'Journal Transfer' && (
+                                        <p className="text-sm text-neutral-700 bg-neutral-50 border border-gray-200 rounded-sm p-4">
+                                            Not sure how to organise a Journal Transfer? The related Finance Analyst in your faculty or division can process the internal journal transfer.
+                                        </p>
+                                    )}
 
                                     {formData.paymentMethod === 'Invoice' && (
                                         <div className="pt-4 border-t border-gray-100 space-y-4">
@@ -1938,9 +3138,9 @@ export default function BookingForm() {
                                             </div>
                                             <div className="space-y-1">
                                                 <label className="text-[10px] font-bold uppercase text-gray-500">Billing Address</label>
-                                                <input
-                                                    type="text"
-                                                    placeholder="Street Address, Suburb, Postcode"
+                                                <textarea
+                                                    rows={3}
+                                                    placeholder="Street Address, Suburb, State, Postcode"
                                                     value={formData.billingAddress}
                                                     onChange={(e) => setFormData(prev => ({ ...prev, billingAddress: e.target.value }))}
                                                     className="w-full p-2.5 border border-gray-200 bg-white text-xs font-medium rounded-sm text-black outline-none"
@@ -1950,7 +3150,6 @@ export default function BookingForm() {
                                     )}
                                 </div>
                             </section>
-                        )}
 
                         {/* SECTION: SIGNATURE & ACKNOWLEDGEMENT */}
                         <section className="bg-white p-8 border border-gray-200 rounded-sm shadow-sm space-y-6">
@@ -1980,16 +3179,71 @@ export default function BookingForm() {
                                         />
                                     </div>
                                 </div>
-                                <div className="space-y-1">
-                                    <label className="text-[10px] font-bold uppercase text-gray-500">Digital Signature (Type Full Name) *</label>
+                                <div id="signature-block" className="space-y-2">
+                                    <div className="flex items-center justify-between gap-3">
+                                        <label className="text-[10px] font-bold uppercase text-gray-500">Signature *</label>
+                                        <button
+                                            type="button"
+                                            onClick={clearSignature}
+                                            className="text-[10px] font-bold uppercase tracking-wider text-neutral-600 hover:text-black"
+                                        >
+                                            Clear
+                                        </button>
+                                    </div>
+                                    <canvas
+                                        ref={signatureCanvasRef}
+                                        width={900}
+                                        height={180}
+                                        onPointerDown={startSignatureStroke}
+                                        onPointerMove={moveSignatureStroke}
+                                        onPointerUp={endSignatureStroke}
+                                        onPointerCancel={endSignatureStroke}
+                                        className="w-full h-36 bg-white border border-gray-300 rounded-sm touch-none cursor-crosshair"
+                                        aria-label="Draw your signature"
+                                    />
+                                    <p className="text-[11px] text-gray-500">Draw your signature in the box above. You can also type it below.</p>
                                     <input
                                         type="text"
-                                        required
-                                        placeholder="Type name to sign digitally"
-                                        value={formData.signature}
-                                        onChange={(e) => setFormData(prev => ({ ...prev, signature: e.target.value }))}
+                                        placeholder="Or type your full name to sign"
+                                        value={formData.signature.startsWith('data:image') ? '' : formData.signature}
+                                        onChange={(e) => {
+                                            wipeSignatureCanvas();
+                                            setFormData(prev => ({ ...prev, signature: e.target.value }));
+                                        }}
                                         className="w-full p-2.5 border border-gray-200 bg-white text-xs font-serif italic text-black outline-none"
                                     />
+                                </div>
+
+                                <div
+                                    id="conduct-policy-block"
+                                    className={`p-4 border rounded-sm space-y-3 transition-colors duration-200 ${conductError
+                                        ? 'border-red-300 bg-red-50/60 text-red-900'
+                                        : 'bg-neutral-50 border-gray-200'
+                                        }`}
+                                >
+                                    <div className="text-xs font-bold uppercase tracking-wide text-black">
+                                        Code of Conduct & Terms and Conditions
+                                    </div>
+                                    <p className="text-xs text-gray-600 leading-relaxed">
+                                        All hirers and guests at the Michael Crouch Innovation Centre must abide by the Terms and Conditions of Use and the Campus Policy and Code of Conduct.
+                                    </p>
+                                    <label className="flex items-start gap-3 cursor-pointer select-none">
+                                        <input
+                                            type="checkbox"
+                                            checked={conductAcknowledged}
+                                            onChange={(e) => {
+                                                setConductAcknowledged(e.target.checked);
+                                                if (e.target.checked) setConductError(false);
+                                            }}
+                                            className="w-4 h-4 rounded-sm border-gray-300 accent-black mt-0.5"
+                                        />
+                                        <span className={`text-xs font-bold uppercase tracking-tight ${conductError ? 'text-red-700' : 'text-black'}`}>
+                                            I agree to abide by the Terms and Conditions of Use and the Campus Policy and Code of Conduct.
+                                        </span>
+                                    </label>
+                                    {conductError && (
+                                        <p className="text-[11px] font-bold text-red-700">Please acknowledge the code of conduct before submitting.</p>
+                                    )}
                                 </div>
                             </div>
                         </section>
@@ -2012,11 +3266,11 @@ export default function BookingForm() {
                                     <div className="space-y-4 text-neutral-700 font-medium">
                                         <div className="p-3.5 bg-neutral-900 text-white font-medium rounded-xs">
                                             <strong className="block uppercase text-[10px] tracking-wide mb-0.5">Mandatory Staffing (After-Hours)</strong>
-                                            This space is managed by standard staff working 8:30am – 4:30pm on weekdays. If your booking requires access prior to 8:30am or extends past 4:30pm, hiring dedicated casual staff is mandatory ($50/hr, min 3 hours; min 4 hours on Sundays/Public Holidays).
+                                            This space is managed by standard staff working {WORK_HOURS_LABEL} on weekdays. If your booking requires access {OUTSIDE_WORK_HOURS_LABEL.toLowerCase()}, hiring dedicated casual staff is mandatory ($50/hr, min 3 hours; min 4 hours on Sundays/Public Holidays).
                                         </div>
                                         <div>
                                             <strong className="text-neutral-900 block uppercase text-[10px] tracking-wide mb-1">Optional Staffing (Standard Hours)</strong>
-                                            During core office hours (8:30am – 4:30pm), standard staffing covers room unlock, basic orientation, final checkout and is on call for ad-hoc technical requests. You should opt to pay for casual staff ($50/hr, minimum 3 hours) if:
+                                            During core office hours ({WORK_HOURS_LABEL}), standard staffing covers room unlock, basic orientation, final checkout and is on call for ad-hoc technical requests. You should opt to pay for casual staff ($50/hr, minimum 3 hours) if:
                                             <ul className="list-disc pl-4 mt-2 space-y-1 font-normal text-gray-600">
                                                 <li>You require tables, chairs, or stage configurations fully staged prior to your arrival.</li>
                                                 <li>You want a staff member present inside the room throughout the session to continuously assist with microphones, live streams, or slides.</li>
@@ -2028,52 +3282,73 @@ export default function BookingForm() {
                             )}
                         </section>
 
-                        <button type="submit" className="w-full bg-black text-white font-extrabold py-5 text-sm uppercase tracking-widest rounded-sm hover:bg-neutral-800 transition-all duration-200 shadow-md cursor-pointer">
-                            Submit Booking Hold Request
-                        </button>
-                    </div>
-                )}
-                {/* LIVE QUOTE BREAKDOWN CONTAINER */}
-                <div className="bg-neutral-900 text-white p-6 border border-neutral-800 rounded-sm space-y-4">
-                    <div className="flex justify-between items-center border-b border-neutral-800 pb-3">
-                        <div>
-                            <h3 className="text-sm font-extrabold uppercase tracking-wider">Live Estimated Quote Breakdown</h3>
-                            <p className="text-[11px] text-neutral-400">Calculated automatically based on affiliation, hours, and selected assets.</p>
-                        </div>
-                        {quote.discountPercentage > 0 && (
-                            <span className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 text-[10px] font-mono font-bold uppercase px-2.5 py-1 rounded-sm">
-                                {quote.discountPercentage}% Discount Applied
-                            </span>
+                        {access.signedIn && (() => {
+                            const lineItems = quote.lineItems || [];
+                            const discountTotal = lineItems.reduce((sum, item) => sum + (Number(item.discount) || 0), 0);
+                            const money = (value) => `$${Number(value || 0).toFixed(2)}`;
+                            return (
+                                <div className="bg-neutral-900 text-white p-6 border border-neutral-800 rounded-sm space-y-4">
+                                    <div className="flex justify-between items-center border-b border-neutral-800 pb-3">
+                                        <div>
+                                            <h3 className="text-sm font-extrabold uppercase tracking-wider">Quote Breakdown</h3>
+                                            <p className="text-[11px] text-neutral-400">Itemised hire, discounts, GST, and the total due.</p>
+                                        </div>
+                                        {quote.discountPercentage > 0 && (
+                                            <span className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 text-[10px] font-mono font-bold uppercase px-2.5 py-1 rounded-sm">
+                                                {quote.discountPercentage}% Discount Applied
+                                            </span>
+                                        )}
+                                    </div>
+
+                                    {lineItems.length > 0 ? (
+                                        <div className="space-y-2 divide-y divide-neutral-800 text-xs">
+                                            {lineItems.map((item, idx) => {
+                                                const listPrice = Number(item.total || 0) + Number(item.discount || 0);
+                                                return (
+                                                    <div key={idx} className="flex justify-between gap-4 pt-2">
+                                                        <span className="text-neutral-300 font-medium">{item.description || item.label}</span>
+                                                        <span className="font-mono font-bold text-white">{money(listPrice)}</span>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    ) : (
+                                        <p className="text-xs text-neutral-400 italic py-2">
+                                            Select your affiliation, booking duration, and equipment above to compute itemized line items.
+                                        </p>
+                                    )}
+
+                                    <div className="pt-4 border-t border-neutral-800 space-y-2 text-xs">
+                                        <div className="flex justify-between">
+                                            <span className="text-neutral-400 uppercase tracking-wider text-[10px] font-bold">Subtotal (ex GST)</span>
+                                            <span className="font-mono font-bold">{money(quote.subtotalExcludingTax)}</span>
+                                        </div>
+                                        <div className="flex justify-between">
+                                            <span className="text-emerald-400 uppercase tracking-wider text-[10px] font-bold">Discounts</span>
+                                            <span className="font-mono font-bold text-emerald-400">-{money(discountTotal)}</span>
+                                        </div>
+                                        <div className="flex justify-between">
+                                            <span className="text-neutral-400 uppercase tracking-wider text-[10px] font-bold">GST (10%)</span>
+                                            <span className="font-mono font-bold">{money(quote.taxIncluded)}</span>
+                                        </div>
+                                        <div className="flex justify-between items-end pt-3 border-t border-neutral-800">
+                                            <span className="text-[10px] uppercase font-bold text-neutral-400 tracking-wider">Total due</span>
+                                            <span className="text-2xl font-black font-mono text-white">{money(quote.totalDue || quote.total)}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        })()}
+
+                        {access.signedIn ? (
+                            <button type="submit" className="w-full bg-black text-white font-extrabold py-5 text-sm uppercase tracking-widest rounded-sm hover:bg-neutral-800 transition-all duration-200 shadow-md cursor-pointer">
+                                Submit Booking Hold Request
+                            </button>
+                        ) : (
+                            <a href="/login?next=/booking" className="block w-full bg-black text-white font-extrabold py-5 text-sm uppercase tracking-widest rounded-sm text-center">Sign in to see the quote and submit</a>
                         )}
                     </div>
-
-                    {quote.lineItems && quote.lineItems.length > 0 ? (
-                        <div className="space-y-2 divide-y divide-neutral-800 text-xs">
-                            {quote.lineItems.map((item, idx) => (
-                                <div key={idx} className="flex justify-between pt-2">
-                                    <span className="text-neutral-300 font-medium">{item.description || item.label}</span>
-                                    <span className="font-mono font-bold text-white">
-                                        {item.cost === 0 ? 'Included ($0)' : `$${(item.cost || 0).toFixed(2)}`}
-                                    </span>
-                                </div>
-                            ))}
-                        </div>
-                    ) : (
-                        <p className="text-xs text-neutral-400 italic py-2">
-                            Select your affiliation, booking duration, and equipment above to compute itemized line items.
-                        </p>
-                    )}
-
-                    <div className="pt-4 border-t border-neutral-800 flex justify-between items-end">
-                        <div>
-                            <span className="text-[10px] uppercase font-bold text-neutral-400 block tracking-wider">Total Estimated Fee</span>
-                            <span className="text-2xl font-black font-mono text-white">
-                                ${(quote.totalDue || quote.total || 0).toFixed(2)}
-                            </span>
-                            <span className="text-[10px] text-neutral-400 font-normal block">Includes GST (10%)</span>
-                        </div>
-                    </div>
-                </div>
+                )}
             </form>
         </div>
     );

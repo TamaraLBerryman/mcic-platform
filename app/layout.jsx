@@ -3,9 +3,12 @@
 import "./global.css";
 import Link from 'next/link';
 import { useState, useEffect, useRef } from 'react';
+import { allows } from './lib/access';
+import { useAccess } from '../components/useAccess';
 
 // Global Navbar Component with Hamburger Drawer
 function Navbar() {
+    const { access } = useAccess();
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const navRef = useRef(null);
 
@@ -78,22 +81,28 @@ function Navbar() {
                 {isMenuOpen && (
                     <div className="bg-neutral-900 border-b border-neutral-800 animate-in slide-in-from-top duration-200 relative z-50">
                         <nav className="max-w-7xl mx-auto px-6 py-8 flex flex-col gap-5 text-sm font-bold uppercase tracking-wider">
-
-                            <Link
-                                href="/booking"
-                                onClick={closeMenu}
-                                className="hover:text-[#EAD64D] transition-colors py-1 border-b border-neutral-800/60"
-                            >
-                                Book an Event Space
-                            </Link>
-
-                            <Link
-                                href="/coworking"
-                                onClick={closeMenu}
-                                className="hover:text-[#EAD64D] transition-colors py-1 border-b border-neutral-800/60"
-                            >
-                                Startup Access & Coworking
-                            </Link>
+                            {[
+                                { href: '/booking', label: 'Book an Event Space', level: 'public' },
+                                { href: '/casuals', label: 'Book casual staff', level: 'founders' },
+                                { href: '/my-bookings', label: 'My bookings', level: 'account' },
+                                { href: '/events', label: 'Events', level: 'public' },
+                                { href: '/boards', label: 'Event countdown', level: 'founders' },
+                                { href: '/boards/spaces', label: 'Spaces today', level: 'public' },
+                                { href: '/coworking', label: 'Startup Access & Coworking', level: 'public' },
+                                { href: '/inventory', label: 'MCIC Inventory', level: 'public' },
+                                { href: '/kitchen', label: 'Kitchen search', level: 'staff' },
+                                { href: '/lockers', label: 'Lockers', level: 'staff' },
+                                { href: '/timesheets', label: 'Submit a Timesheet', level: 'staff' },
+                                { href: '/casuals/available', label: 'Shift availability', level: 'casual' },
+                                { href: '/casuals/hours', label: 'My shifts', level: 'casual' },
+                                { href: '/casuals/approve', label: 'Approve casual hours', level: 'founders' },
+                                { href: '/OnTheDay', label: 'On the day', level: 'public' },
+                                { href: '/admin', label: 'Admin', level: 'founders' }
+                            ].filter((item) => item.level === 'public' || item.level === 'account' || allows(access, item.level)).map((item) => (
+                                <Link key={item.href} href={item.href} onClick={closeMenu} className="hover:text-[#EAD64D] transition-colors py-1 border-b border-neutral-800/60">
+                                    {item.label}
+                                </Link>
+                            ))}
 
                             {/* EXTERNAL MAKERSPACE LINK */}
                             <a
@@ -118,24 +127,6 @@ function Navbar() {
                                 <span>Main UNSW Founders Site ↗</span>
                                 <span className="text-xs text-neutral-500">↗</span>
                             </a>
-
-                            {/* NEW ROUTE 1: MCIC INVENTORY */}
-                            <Link
-                                href="/inventory"
-                                onClick={closeMenu}
-                                className="hover:text-[#EAD64D] transition-colors py-1 border-b border-neutral-800/60"
-                            >
-                                MCIC Inventory
-                            </Link>
-
-                            {/* NEW ROUTE 2: TIMESHEETS */}
-                            <Link
-                                href="/timesheets"
-                                onClick={closeMenu}
-                                className="hover:text-[#EAD64D] transition-colors py-1 border-b border-neutral-800/60"
-                            >
-                                Submit a Timesheet
-                            </Link>
 
                             {/* YELLOW PRIMARY ACTION BUTTON */}
                             <div className="pt-2">

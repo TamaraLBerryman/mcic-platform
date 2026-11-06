@@ -1,7 +1,12 @@
 "use client";
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { addDoc, collection, doc, onSnapshot } from 'firebase/firestore';
+import { db } from '../lib/firebase';
+import { DEFAULT_DESK_LAYOUT } from '../lib/deskLayout';
+import { sessionIsActive } from '../lib/hotDesks';
+import DeskMap from '../../components/DeskMap';
 
 export default function CoworkingPage() {
     // Navigation tab state: 'apply' | 'floorplan'
@@ -10,6 +15,7 @@ export default function CoworkingPage() {
     // Pipeline status search state
     const [statusSearchQuery, setStatusSearchQuery] = useState('');
     const [matchedRecord, setMatchedRecord] = useState(null);
+    const [searchNote, setSearchNote] = useState('');
     const [hasSearchedStatus, setHasSearchedStatus] = useState(false);
     const [activePipelineStep, setActivePipelineStep] = useState(1); // 1 | 2 | 3 | 4
 
@@ -60,57 +66,6 @@ export default function CoworkingPage() {
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedEntity, setSelectedEntity] = useState(null);
 
-    // Pipeline Stages Data Definition
-    const pipelineStages = [
-        { title: 'Application Received', subtitle: 'Reviewed and sent on once per week.' },
-        { title: 'Submitted to HR (non-current Staff/Students) or Security (current Staff/Students)' },
-        { title: 'zID Created or Re-activated by HR', subtitle: 'Only for non-current Staff/Students. Processing times vary from 1-3 weeks.' },
-        { title: 'New zID activates in Security System', subtitle: '3 days after zID crreation or re-activation.' },
-        { title: 'Request Access applied to new or re-activated zID', subtitle: 'Requested once per week.' },
-        { title: 'Access is active and Card can be collected ($25)', subtitle: 'Online Induction' },
-        { title: 'Online Induction must be completed within XX weeks', subtitle: 'Non-Current Staff/Students' },
-    ];
-
-    // Mock Access Database for Status Search Engine
-    const mockAccessAccounts = [
-        {
-            zid: "z5392014",
-            name: "Alex Rivera",
-            startup: "Solaris AI",
-            category: "Current UNSW Student",
-            stageIndex: 3, // Step 04
-            stageLabel: "Card Encoding / Badge Pickup",
-            eta: "1-2 Business Days",
-            updatedAt: "Today at 9:30 AM",
-            nextAction: "Your zID clearance is approved! Visit the MCIC Level 1 Ops Desk to activate your physical swipe card.",
-            moodleUrl: "https://moodle.telt.unsw.edu.au/"
-        },
-        {
-            zid: "z5104882",
-            name: "Samantha Chen",
-            startup: "BioMesh Tech",
-            category: "Pre-10x Incubator",
-            stageIndex: 2, // Step 03
-            stageLabel: "Safety Moodle Pending",
-            eta: "Pending User Completion",
-            updatedAt: "Yesterday at 4:15 PM",
-            nextAction: "Complete the mandatory UNSW WHS Safety Moodle module linked below to unlock card encoding.",
-            moodleUrl: "https://moodle.telt.unsw.edu.au/"
-        },
-        {
-            zid: "z5294011",
-            name: "Marcus Vance",
-            startup: "QuantumLeap Dynamics",
-            category: "External / Alumni",
-            stageIndex: 1, // Step 02
-            stageLabel: "HR / zID Affiliate Setup",
-            eta: "3-5 Business Days",
-            updatedAt: "12 Aug 2026",
-            nextAction: "UNSW HR is processing your external affiliate zID setup. You will receive an email once your zID is issued.",
-            moodleUrl: null
-        }
-    ];
-
     // Outlook Meeting Room Location Codes & Details
     const outlookRooms = [
         // LEVEL 1
@@ -142,157 +97,51 @@ export default function CoworkingPage() {
         { lvl: 7, seats: '10 seats', code: 'Kens HILMER E10 Lv7 723', remarks: 'Enter via SEB E8' }
     ];
 
-    // Updated Data Structure grouped by Pods
-    const deskPods = [
-        {
-            id: 'pod-0',
-            podLabel: 'POD 0',
-            category: 'staff',
-            rows: [
-                { id: 'r1', is2Col: true, desks: [{ name: '2. Dina Titkova', role: 'Senior Manager, Entrepreneurship' }, { name: '3. Celine Olarte', role: 'Program Coordinator' }] }
-            ]
-        },
-        {
-            id: 'pod-1',
-            podLabel: 'POD 1',
-            category: 'staff',
-            rows: [
-                { id: 'r2', is2Col: true, desks: [{ name: '4. Steven', role: 'Project Officer - Splice' }, { name: '5. Nina Juhl', role: 'Senior Manager, Entrepreneurship' }] },
-                { id: 'r3', is2Col: true, desks: [{ name: '6. Maddison McCoy', role: 'Community Manager, Engineering' }, { name: '7. Wisiani Wijaya', role: 'Investment Portfolio Coordinator' }] }
-            ]
-        },
-        {
-            id: 'pod-2',
-            podLabel: 'POD 2',
-            category: 'staff',
-            rows: [
-                { id: 'r4', is2Col: true, desks: [{ name: '8. Vern Chan', role: 'Global Program Manager' }, { name: '9. Hotdesk', role: '(Founders Staff Only)' }] },
-                { id: 'r5', is2Col: true, desks: [{ name: '10. Sasha Whittle', role: 'Program Manager' }, { name: '11. Joseph Po', role: 'Health Accelerator Program Manager' }] }
-            ]
-        },
-        {
-            id: 'pod-3',
-            podLabel: 'POD 3',
-            category: 'staff',
-            rows: [
-                { id: 'r6', is2Col: true, desks: [{ name: '12. Mariana Luis Castillo Patron', role: 'Community Manager' }, { name: '13. Georgia Lyons', role: 'Program Manager' }] },
-                { id: 'r7', is2Col: true, desks: [{ name: '14. Ria Kapoor', role: 'Comms Intern' }, { name: '15. Eleni Assargiotis', role: 'Program Manager, Foundry 10x' }] }
-            ]
-        },
-        {
-            id: 'pod-4',
-            podLabel: 'POD 4',
-            category: 'staff',
-            rows: [
-                { id: 'r8', is2Col: true, desks: [{ name: '16. Priscilla Tan', role: 'Program Manager, Edu Entre' }, { name: '17. Hotdesk', role: '(Founders Staff Only)' }] },
-                { id: 'r9', is2Col: true, desks: [{ name: '18. Hamish McFarlane', role: 'MCIC Makerspace Coordinator' }, { name: '19. Tamara Berryman', role: 'Event Coordinator' }] }
-            ]
-        },
-        {
-            id: 'pod-5',
-            podLabel: 'POD 5',
-            category: 'resident',
-            rows: [
-                { id: 'r10', is2Col: false, desks: [{ name: '20. Reckro', role: 'Reuben Roy' }, { name: '21. Reckro' }, { name: '22. Hotdesk', type: 'hotdesk-red' }] },
-                { id: 'r11', is2Col: false, desks: [{ name: '23. Talk Lawyers', role: 'Simon Lim' }, { name: '24. Green Dynamic' }, { name: '25. Green Dynamic' }] }
-            ]
-        },
-        {
-            id: 'pod-6',
-            podLabel: 'POD 6',
-            category: 'resident',
-            rows: [
-                { id: 'r12', is2Col: false, desks: [{ name: '26. Peak Medical' }, { name: '27. Peak Medical' }, { name: '28. Hotdesk', type: 'hotdesk-red' }] },
-                { id: 'r13', is2Col: false, desks: [{ name: '29. Gridsight' }, { name: '30. Gridsight' }, { name: '31. Gridsight' }] }
-            ]
-        },
-        {
-            id: 'pod-7',
-            podLabel: 'POD 7',
-            category: 'resident',
-            rows: [
-                { id: 'r14', is2Col: false, desks: [{ name: '32. Extraterrestrial Power', role: 'Peter Toth' }, { name: '33. Extraterrestrial Power' }, { name: '34. Extraterrestrial Power', role: 'Jacques-Samuel Prolon' }] }
-            ]
-        },
-        {
-            id: 'framery-block',
-            category: 'amenity',
-            desks: [{ name: 'Meeting Pod' }, { name: 'Meeting Pod' }]
-        },
-        {
-            id: 'pod-8',
-            podLabel: 'POD 8',
-            category: 'resident',
-            rows: [
-                { id: 'r15', is2Col: true, desks: [{ name: '35. Vesiculate', role: 'Chin (Ken) Wong' }, { name: '37. Square Storm Interactive', role: 'Matt Cabanag' }] }
-            ]
-        },
-        {
-            id: 'pod-9',
-            podLabel: 'POD 9',
-            category: 'resident',
-            rows: [
-                { id: 'r16', is2Col: true, desks: [{ name: '38. ConnectOnion' }, { name: '40. Clave Systems' }] },
-                { id: 'r17', is2Col: true, desks: [{ name: '41. ConnectOnion', role: 'Aaron' }, { name: '43. Clave Systems', role: 'Sam Brew' }] }
-            ]
-        },
-        {
-            id: 'pod-10',
-            podLabel: 'POD 10',
-            category: 'resident',
-            rows: [
-                { id: 'r18', is2Col: false, desks: [{ name: '44. Vixia' }, { name: '45. DocuBuild' }, { name: '46. Hotdesk', type: 'hotdesk-red' }] },
-                { id: 'r19', is2Col: false, desks: [{ name: '47. Tendor', role: 'Jason Cai' }, { name: '48. Tendor' }, { name: '49. Tendor' }] }
-            ]
-        },
-        {
-            id: 'pod-11',
-            podLabel: 'POD 11',
-            category: 'resident',
-            rows: [
-                { id: 'r20', is2Col: false, desks: [{ name: '50. Zenith' }, { name: '51. Zenith' }, { name: '52. Zenith' }] },
-                { id: 'r21', is2Col: false, desks: [{ name: '53. Zenith' }, { name: '54. Zenith' }, { name: '55. Zenith' }] }
-            ]
-        },
-        {
-            id: 'pod-12',
-            podLabel: 'POD 12',
-            category: 'resident',
-            rows: [
-                { id: 'r22', is2Col: false, desks: [{ name: '56. Innersteps', role: 'Jesse' }, { name: '57. Innersteps' }, { name: '58. Innersteps', role: 'Matt' }] },
-                { id: 'r23', is2Col: false, desks: [{ name: '59. Vocare' }, { name: '60. Vocare' }, { name: '61. Vocare' }] }
-            ]
-        },
-        {
-            id: 'pod-13',
-            podLabel: 'POD 13',
-            category: 'resident',
-            rows: [
-                { id: 'r24', is2Col: false, desks: [{ name: '62. Rhombus AI' }, { name: '63. Rhombus AI' }, { name: '64. Rhombus AI' }] },
-                { id: 'r25', is2Col: false, desks: [{ name: '65. Hello solar again' }, { name: '66. Hoogly' }, { name: '67. Hoogly', role: 'Mohit Midha' }] }
-            ]
-        },
-        {
-            id: 'pod-14',
-            podLabel: 'POD 14',
-            category: 'resident',
-            rows: [
-                { id: 'r26', is2Col: true, desks: [{ name: '68. Hello solar again' }, { name: '70. Hello solar again' }] }
-            ]
-        }
-    ];
+    const [deskPods, setDeskPods] = useState(DEFAULT_DESK_LAYOUT);
+    const [hotDeskSessions, setHotDeskSessions] = useState([]);
 
-    // Status search engine handler
-    const handleStatusSearch = (e) => {
+    useEffect(() => {
+        const unsubscribe = onSnapshot(doc(db, 'settings', 'deskLayout'), (snapshot) => {
+            const published = snapshot.data()?.published;
+            if (Array.isArray(published) && published.length > 0) {
+                setDeskPods(published);
+            }
+        });
+        const stopSessions = onSnapshot(collection(db, 'hotDeskSessions'), (snapshot) => {
+            setHotDeskSessions(snapshot.docs.map((entry) => ({ id: entry.id, ...entry.data() })));
+        });
+        return () => {
+            unsubscribe();
+            stopSessions();
+        };
+    }, []);
+
+    const hotDeskOccupancy = hotDeskSessions.reduce((map, session) => {
+        if (sessionIsActive(session)) map[session.id] = { name: session.occupantName };
+        return map;
+    }, {});
+
+    const handleStatusSearch = async (e) => {
         e.preventDefault();
         setHasSearchedStatus(true);
-        const query = statusSearchQuery.toLowerCase().trim();
-        const found = mockAccessAccounts.find(
-            acc => acc.zid.toLowerCase().includes(query) ||
-                acc.name.toLowerCase().includes(query) ||
-                acc.startup.toLowerCase().includes(query)
-        );
-        setMatchedRecord(found || null);
+        setMatchedRecord(null);
+        setSearchNote('');
+        try {
+            const response = await fetch(`/api/coworking/status?name=${encodeURIComponent(statusSearchQuery.trim())}`);
+            const data = await response.json();
+            if (data.status === 'several') {
+                setSearchNote('More than one application matches. Type your full name.');
+                return;
+            }
+            if (data.status !== 'found') return;
+            setMatchedRecord({
+                name: data.name,
+                startup: data.startup,
+                stageIndex: data.step
+            });
+        } catch (error) {
+            setSearchNote('The search could not be completed. Try again.');
+        }
     };
 
     // Copy Outlook Room Code to Clipboard
@@ -316,9 +165,27 @@ export default function CoworkingPage() {
     };
 
     // Application form submission handler
-    const handleSubmit = (e) => {
+    const [submitError, setSubmitError] = useState('');
+
+    const handleSubmit = async (e) => {
         e.preventDefault();
-        setSubmitted(true);
+        setSubmitError('');
+        const wantsDesk = formData.accessStatusNeeded === 'No'
+            || formData.deskRequestType === 'Formal Co-Working Dedicated Desk Request';
+        try {
+            await addDoc(collection(db, 'coworkingApplications'), {
+                ...formData,
+                wantsDesk,
+                desksRequestedCount: wantsDesk ? Number(formData.desksRequestedCount) || 1 : 0,
+                waitlistOrder: wantsDesk ? Date.now() : null,
+                pipelineStep: 1,
+                createdAt: new Date().toISOString()
+            });
+            setSubmitted(true);
+        } catch (error) {
+            console.error('Coworking application save failed:', error);
+            setSubmitError('The application could not be saved. Please try again.');
+        }
     };
 
     // Smooth scroll helpers
@@ -603,7 +470,11 @@ export default function CoworkingPage() {
                                                     {/* UNBOXED SEARCH RESULT WITH YELLOW ACCENT TAG */}
                                                     {hasSearchedStatus && (
                                                         <div className="animate-in fade-in duration-200 w-full sm:w-auto text-right pt-1">
-                                                            {!matchedRecord ? (
+                                                            {searchNote ? (
+                                                                <div className="text-right text-xs">
+                                                                    <span className="font-bold text-gray-700 block">{searchNote}</span>
+                                                                </div>
+                                                            ) : !matchedRecord ? (
                                                                 <div className="text-right text-xs">
                                                                     <span className="font-bold text-gray-700 block">No Application Found</span>
                                                                     <span className="text-[10px] text-gray-500">No match for "{statusSearchQuery}"</span>
@@ -1037,6 +908,10 @@ export default function CoworkingPage() {
                                                 </label>
                                             </div>
                                         </section>
+
+                                        {submitError && (
+                                            <p className="text-xs font-bold text-red-600">{submitError}</p>
+                                        )}
 
                                         <button
                                             type="submit"
@@ -2744,143 +2619,13 @@ export default function CoworkingPage() {
                                 </div>
                             </div>
 
-                            {/* MAIN FLOORPLAN VIEWPORT */}
-                            <div className="bg-white border border-gray-200 p-6 md:p-8 rounded-sm shadow-xs space-y-4 overflow-x-auto min-w-[950px]">
-
-                                {/* TOP AMENITIES ROW */}
-                                <div className="grid grid-cols-12 gap-2 text-center text-[11px] font-extrabold text-black uppercase tracking-tight">
-                                    <div className="col-span-5 bg-[#E2EFDA] border border-green-300 p-3 rounded-xs flex items-center justify-center">
-                                        <span>Kitchen</span>
-                                    </div>
-                                    <div className="col-span-2 bg-[#E2EFDA] border border-green-300 p-3 rounded-xs flex items-center justify-center">
-                                        <span>Copy Room</span>
-                                    </div>
-                                    <div className="col-span-1 bg-[#FFD966] border border-amber-400 p-2 rounded-xs flex flex-col items-center justify-center text-[9px]">
-                                        <span className="font-extrabold">1. David's Office</span>
-                                    </div>
-                                    <div className="col-span-4 grid grid-cols-3 gap-2">
-                                        <div className="bg-neutral-200 border border-gray-300 p-2 rounded-xs flex items-center justify-center text-[9px] text-neutral-700 font-bold">
-                                            Materials Science Office
-                                        </div>
-                                        <div className="bg-neutral-200 border border-gray-300 p-2 rounded-xs flex items-center justify-center text-[9px] text-neutral-700 font-bold">
-                                            Materials Science Office
-                                        </div>
-                                        <div className="bg-neutral-200 border border-gray-300 p-2 rounded-xs flex items-center justify-center text-[9px] text-neutral-700 font-bold">
-                                            Materials Science Office
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* BODY GRID */}
-                                <div className="grid grid-cols-12 gap-4">
-
-                                    {/* LEFT SIDE: POD GROUPS (MERGED LABELS) */}
-                                    <div className="col-span-5 space-y-3">
-                                        {deskPods.map((pod) => {
-                                            // MEETING PODS BLOCK
-                                            if (pod.category === 'amenity') {
-                                                return (
-                                                    <div key={pod.id} className="grid grid-cols-2 gap-2 my-3">
-                                                        {pod.desks.map((desk, idx) => (
-                                                            <div
-                                                                key={idx}
-                                                                className="bg-[#E2EFDA] border border-green-300 text-center py-3 rounded-xs text-[11px] font-extrabold text-black uppercase"
-                                                            >
-                                                                {desk.name}
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                );
-                                            }
-
-                                            // Check search matching across all desks in the pod
-                                            const matchesSearch = searchQuery === '' || pod.rows.some(r =>
-                                                r.desks.some(d =>
-                                                    (d.name && d.name.toLowerCase().includes(searchQuery.toLowerCase())) ||
-                                                    (d.role && d.role.toLowerCase().includes(searchQuery.toLowerCase()))
-                                                )
-                                            );
-
-                                            return (
-                                                <div
-                                                    key={pod.id}
-                                                    className={`flex gap-2 items-stretch transition-all ${matchesSearch ? 'opacity-100' : 'opacity-25'}`}
-                                                >
-                                                    {/* UNIFIED MERGED POD SIDEBAR */}
-                                                    <div className="w-14 flex-shrink-0 bg-neutral-100 border border-gray-200 rounded-xs flex items-center justify-center text-[9px] font-mono font-extrabold text-neutral-700 uppercase p-1">
-                                                        {pod.podLabel}
-                                                    </div>
-
-                                                    {/* DESK ROWS WITHIN POD */}
-                                                    <div className={`flex-1 space-y-1.5 p-1.5 rounded-xs border ${pod.category === 'staff'
-                                                        ? 'bg-[#FFD966]/20 border-amber-300'
-                                                        : 'bg-neutral-50 border-gray-200'
-                                                        }`}>
-                                                        {pod.rows.map((row) => (
-                                                            <div
-                                                                key={row.id}
-                                                                className={`grid gap-1.5 ${row.is2Col ? 'grid-cols-2' : 'grid-cols-3'}`}
-                                                            >
-                                                                {row.desks.map((desk, idx) => {
-                                                                    const isStaff = pod.category === 'staff';
-                                                                    const isRedHotdesk = desk.type === 'hotdesk-red';
-
-                                                                    return (
-                                                                        <div
-                                                                            key={idx}
-                                                                            onClick={() => setSelectedEntity(desk)}
-                                                                            className={`p-2 rounded-xs border text-center cursor-pointer flex flex-col justify-center transition-all ${isStaff
-                                                                                ? 'bg-[#FFD966] border-amber-400 text-black hover:bg-black hover:text-white'
-                                                                                : isRedHotdesk
-                                                                                    ? 'bg-red-600 border-red-700 text-white hover:bg-black'
-                                                                                    : 'bg-black border-neutral-900 text-white hover:bg-[#FFD966] hover:text-black'
-                                                                                }`}
-                                                                        >
-                                                                            <div className="font-extrabold text-[10px] leading-tight">
-                                                                                {desk.name}
-                                                                            </div>
-                                                                            {desk.role && (
-                                                                                <div className="text-[8px] opacity-80 mt-0.5 leading-tight font-medium truncate">
-                                                                                    {desk.role}
-                                                                                </div>
-                                                                            )}
-                                                                        </div>
-                                                                    );
-                                                                })}
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-
-                                    {/* MIDDLE SECTION: MATERIALS SCIENCE LABS */}
-                                    <div className="col-span-4 bg-neutral-200 border border-gray-300 rounded-xs flex items-center justify-center p-6 text-center">
-                                        <span className="text-sm font-black uppercase tracking-wider text-neutral-700">
-                                            Materials Science Labs
-                                        </span>
-                                    </div>
-
-                                    {/* RIGHT SIDE: FOUNDERS PLACE */}
-                                    <div className="col-span-3 flex flex-col gap-3">
-                                        <div className="flex-1 bg-[#E2EFDA] border border-green-300 p-6 rounded-xs flex items-center justify-center text-center">
-                                            <div>
-                                                <h3 className="font-black text-base text-black uppercase tracking-tight">Founders Place</h3>
-                                                <span className="text-xs font-semibold text-neutral-700 block mt-0.5">(Event Space)</span>
-                                            </div>
-                                        </div>
-
-                                        <div className="flex-1 bg-[#E2EFDA] border border-green-300 p-6 rounded-xs flex items-center justify-center text-center">
-                                            <div>
-                                                <h3 className="font-black text-base text-black uppercase tracking-tight">Founders Place</h3>
-                                                <span className="text-xs font-semibold text-neutral-700 block mt-0.5">(Group Study)</span>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                </div>
-
+                            <div className="bg-white border border-gray-200 p-6 md:p-8 rounded-sm shadow-xs overflow-x-auto">
+                                <DeskMap
+                                    layout={deskPods}
+                                    searchQuery={searchQuery}
+                                    occupancy={hotDeskOccupancy}
+                                    onSelect={setSelectedEntity}
+                                />
                             </div>
 
                             {/* SELECTED ALLOCATION POPUP */}
@@ -2888,7 +2633,9 @@ export default function CoworkingPage() {
                                 <div className="p-4 bg-[#FFD966] border border-amber-400 text-black rounded-sm flex justify-between items-center text-xs font-bold">
                                     <div>
                                         <span>Selected Allocation: <strong>{selectedEntity.name}</strong></span>
-                                        {selectedEntity.role && <span className="ml-2 font-normal">// {selectedEntity.role}</span>}
+                                        {selectedEntity.occupied
+                                            ? <span className="ml-2 font-normal">// Occupied{selectedEntity.occupantName ? ` · ${selectedEntity.occupantName}` : ''}</span>
+                                            : selectedEntity.role && <span className="ml-2 font-normal">// {selectedEntity.role}</span>}
                                     </div>
                                     <button
                                         type="button"

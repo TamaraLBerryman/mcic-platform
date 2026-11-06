@@ -2,6 +2,7 @@
 
 import { useMemo, useState, useRef } from "react";
 import Link from 'next/link';
+import Gate from '../../components/Gate';
 
 const pending = "Contents to be added";
 
@@ -53,7 +54,7 @@ function percentageRect([x, y, width, height]) {
   };
 }
 
-export default function KitchenItemFinderPage() {
+function KitchenItemFinderPage() {
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState(null);
   const [focused, setFocused] = useState(false);
@@ -240,4 +241,8 @@ export default function KitchenItemFinderPage() {
       </div>
     </main>
   );
+}
+
+export default function Page() {
+  return <Gate level="staff"><KitchenItemFinderPage /></Gate>;
 }
