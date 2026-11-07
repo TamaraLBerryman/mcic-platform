@@ -383,6 +383,7 @@ export default function CoworkingPage() {
                             { id: 'faqs', label: 'Space Use FAQs' },
                             { id: 'floorplan', label: 'Live desk availability' },
                             { id: 'officehours', label: 'Book Startup Support' },
+                            { id: 'spaces', label: 'Spaces today', href: '/boards/spaces' },
                             { id: 'contact', label: 'Contact Us', href: '/contact' }
                         ].map((tab) =>
                             tab.href ? (

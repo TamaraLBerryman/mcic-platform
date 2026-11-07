@@ -542,7 +542,7 @@ export default function DayOfEventiPadPage() {
                                     <p><strong>1.2 Balance Payment:</strong> The remaining 50% balance must be paid no later than 48 hours prior to the event commencement time upon receipt of a tax invoice.</p>
                                     <p><strong>1.3 Failure to Pay:</strong> Failure to settle the deposit or final balance within the required timeframe grants UNSW Founders the right to cancel the booking.</p>
                                     <p><strong>1.4 Cleaning & Reset Surcharges:</strong> If the Hired and Shared Areas are left disorderly or dirty, or requiring furniture resets after the booking window, UNSW Founders reserves the right to recover full cleaning costs at a minimum rate of $200 + GST.</p>
-                                    <p><strong>1.5 Casual Staffing Rates:</strong> Event support staff are billed at $50 per hour (minimum 3-hour shift for Mon–Sat; minimum 4-hour shift for Sundays and Public Holidays).</p>
+                                    <p><strong>1.5 Casual Staffing Rates:</strong> Event support staff are billed at $50 per hour. The minimum is 3 hours, or 4 hours on a weekend.</p>
                                     <p><strong>1.6 Staff Overtime:</strong> Overtime beyond 8 hours is charged at 1.5x the base rate ($75/hr). Shifts exceeding 10 hours are charged at double time ($100/hr).</p>
                                 </div>
 
@@ -567,7 +567,7 @@ export default function DayOfEventiPadPage() {
                                 <div className="space-y-1 border-b border-neutral-100 pb-2">
                                     <h5 className="font-bold text-neutral-900 uppercase text-[9px] tracking-wide">SECTION 4–9. EQUIPMENT, CATERING, TICKETING & WHS</h5>
                                     <p><strong>4.1 Care & Safety:</strong> Restore equipment to original condition upon conclusion. Open flames and hazardous materials strictly prohibited.</p>
-                                    <p><strong>5.1 RSA Compliance:</strong> Valid NSW RSA competency card required if alcohol is served.</p>
+                                    <p><strong>5.1 RSA Compliance:</strong> A valid NSW RSA competency card is required if alcohol is served. Alcohol may be served by a bartender or from a supervised gallery station, and food and non-alcoholic drinks must be available.</p>
                                     <p><strong>8.1 Indemnity:</strong> Hirer holds UNSW Founders indemnified against third-party claims or loss during event.</p>
                                 </div>
                             </div>

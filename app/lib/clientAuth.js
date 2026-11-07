@@ -2,16 +2,14 @@
 
 import { useEffect, useState } from 'react';
 import {
+    createUserWithEmailAndPassword,
     getAuth,
-    isSignInWithEmailLink,
     onAuthStateChanged,
-    sendSignInLinkToEmail,
-    signInWithEmailLink,
+    sendPasswordResetEmail,
+    signInWithEmailAndPassword,
     signOut
 } from 'firebase/auth';
 import { app } from './firebaseApp';
-
-const EMAIL_KEY = 'mcicEmailForSignIn';
 
 export function firebaseAuth() {
     return getAuth(app);
@@ -46,32 +44,18 @@ export function useSignedInUser() {
     return state;
 }
 
-export async function sendMagicLink(email) {
-    const cleaned = email.trim();
-    await sendSignInLinkToEmail(firebaseAuth(), cleaned, {
-        url: `${window.location.origin}/login/finish`,
-        handleCodeInApp: true
-    });
-    window.localStorage.setItem(EMAIL_KEY, cleaned);
-}
-
-export function savedSignInEmail() {
-    if (typeof window === 'undefined') return '';
-    return window.localStorage.getItem(EMAIL_KEY) || '';
-}
-
-export function rememberSignInEmail(email) {
-    window.localStorage.setItem(EMAIL_KEY, email.trim());
-}
-
-export function linkIsSignIn(url) {
-    return isSignInWithEmailLink(firebaseAuth(), url);
-}
-
-export async function completeMagicLink(url, email) {
-    const credential = await signInWithEmailLink(firebaseAuth(), email.trim(), url);
-    window.localStorage.removeItem(EMAIL_KEY);
+export async function signInWithPassword(email, password) {
+    const credential = await signInWithEmailAndPassword(firebaseAuth(), email.trim(), password);
     return credential.user;
+}
+
+export async function createAccountWithPassword(email, password) {
+    const credential = await createUserWithEmailAndPassword(firebaseAuth(), email.trim(), password);
+    return credential.user;
+}
+
+export async function sendPasswordReset(email) {
+    await sendPasswordResetEmail(firebaseAuth(), email.trim());
 }
 
 export async function authFetch(url, options = {}) {

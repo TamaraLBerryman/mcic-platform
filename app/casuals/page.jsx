@@ -80,7 +80,7 @@ function CasualBookingPage() {
                 setError(data.error || 'The casual request could not be saved.');
                 return;
             }
-            setNotice('Sent. Casual staff are $50 per hour, with a 3-hour minimum.');
+            setNotice('Sent. Casual staff are $50 per hour. The minimum is 3 hours, or 4 hours on a weekend.');
             setRequests(current => [{
                 id: data.id,
                 bookingId,
@@ -151,7 +151,7 @@ function CasualBookingPage() {
                             Would you like to book a casual staff member for event support?
                         </label>
                         <p className="text-[11px] text-neutral-500">
-                            Casual staff members are available at $50/hr (3-hour minimum block) to assist with room setup, AV, and guest check-in.
+                            Casual staff members are available at $50 per hour. The minimum is 3 hours, or 4 hours on a weekend. They can assist with room setup, AV, and guest check-in.
                         </p>
                         <div className="flex gap-4 max-w-xs pt-1">
                             {['Yes', 'No'].map(choice => (

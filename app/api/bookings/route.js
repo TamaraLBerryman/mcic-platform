@@ -1,6 +1,7 @@
 import { addDoc, collection, doc, getDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { emailFromRequest, hasAdminAccess } from '../../lib/verifyUser';
+import { siteSettings } from '../../lib/siteSettings';
 import { createBookingCalendarHolds } from '../../lib/googleCalendar';
 import { fetchBusySlotsForDates } from '../../lib/calendarAvailability';
 import { normalizeEmailReminders } from '../../lib/eventReminders';
@@ -213,6 +214,12 @@ export async function POST(request) {
         }
 
         const origin = new URL(request.url).origin;
+        const ticketingOn = (await siteSettings()).ticketing;
+        if (!ticketingOn) {
+            bookingData.postToPublicDirectory = false;
+            bookingData.ticketing = { method: 'none', externalTicketUrl: '', ticketBannerName: '', maxTicketCapacity: 0, ticketTiers: [] };
+            bookingData.emailReminders = { enabled: false, reminders: [] };
+        }
         const emailReminders = bookingData.ticketing?.method === 'internal'
             ? normalizeEmailReminders(bookingData.emailReminders)
             : { enabled: false, reminders: [] };

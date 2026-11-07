@@ -1,17 +1,34 @@
 'use client';
 
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { allows } from '../app/lib/access';
+import { signOutUser } from '../app/lib/clientAuth';
 import { useAccess } from './useAccess';
 
 export default function Navbar() {
-    const { access } = useAccess();
+    const { ready, access } = useAccess();
+    const pathname = usePathname();
     const [isMenuOpen, setIsMenuOpen] = useState(false);
+    const [ticketing, setTicketing] = useState(true);
     const navRef = useRef(null);
 
     const toggleMenu = () => setIsMenuOpen(!isMenuOpen);
     const closeMenu = () => setIsMenuOpen(false);
+
+    useEffect(() => {
+        let cancelled = false;
+        fetch('/api/site')
+            .then((response) => response.json())
+            .then((data) => {
+                if (!cancelled && data.success) setTicketing(data.ticketing !== false);
+            })
+            .catch(() => {});
+        return () => {
+            cancelled = true;
+        };
+    }, []);
 
     useEffect(() => {
         function handleClickOutside(event) {
@@ -52,6 +69,31 @@ export default function Navbar() {
                         <span>Platform</span>
                     </Link>
 
+                    <div className="flex items-center gap-2">
+                        {ready && (access.signedIn ? (
+                            <button
+                                type="button"
+                                onClick={() => signOutUser()}
+                                className="text-xs font-extrabold uppercase tracking-wider text-white hover:text-[#EAD64D] px-2 py-2"
+                            >
+                                Log out
+                            </button>
+                        ) : pathname === '/booking' ? (
+                            <button
+                                type="button"
+                                onClick={() => window.dispatchEvent(new CustomEvent('mcic-open-signin'))}
+                                className="text-xs font-extrabold uppercase tracking-wider bg-[#EAD64D] text-black px-3 py-2 rounded-sm hover:bg-white"
+                            >
+                                Log in
+                            </button>
+                        ) : (
+                            <Link
+                                href={`/login?next=${encodeURIComponent(pathname && pathname !== '/login' && pathname !== '/login/finish' ? pathname : '/')}`}
+                                className="text-xs font-extrabold uppercase tracking-wider bg-[#EAD64D] text-black px-3 py-2 rounded-sm hover:bg-white"
+                            >
+                                Log in
+                            </Link>
+                        ))}
                     <button
                         type="button"
                         onClick={toggleMenu}
@@ -67,16 +109,17 @@ export default function Navbar() {
                             <span className={`w-full h-0.5 bg-current transition-all duration-200 ${isMenuOpen ? '-rotate-45 -translate-y-2.5' : ''}`} />
                         </div>
                     </button>
+                    </div>
                 </div>
 
                 {isMenuOpen && (
                     <div className="bg-neutral-900 border-b border-neutral-800 animate-in slide-in-from-top duration-200 relative z-50">
                         <nav className="max-w-7xl mx-auto px-6 py-8 flex flex-col gap-5 text-sm font-bold uppercase tracking-wider">
-                            {[
+                            {(access.signedIn ? [
                                 { href: '/booking', label: 'Book an Event Space', level: 'public' },
                                 { href: '/casuals', label: 'Book casual staff', level: 'founders' },
                                 { href: '/my-bookings', label: 'My bookings', level: 'account' },
-                                { href: '/events', label: 'Events', level: 'public' },
+                                { href: '/events', label: 'Attend our Events', level: 'public' },
                                 { href: '/boards', label: 'Event countdown', level: 'founders' },
                                 { href: '/boards/spaces', label: 'Spaces today', level: 'public' },
                                 { href: '/coworking', label: 'Startup Access & Coworking', level: 'public' },
@@ -89,7 +132,11 @@ export default function Navbar() {
                                 { href: '/casuals/approve', label: 'Approve casual hours', level: 'founders' },
                                 { href: '/OnTheDay', label: 'On the day', level: 'public' },
                                 { href: '/admin', label: 'Admin', level: 'founders' }
-                            ].filter((item) => item.level === 'public' || item.level === 'account' || allows(access, item.level)).map((item) => (
+                            ] : [
+                                { href: '/booking', label: 'Book an Event Space', level: 'public' },
+                                { href: '/coworking', label: 'Startup Access & Coworking', level: 'public' },
+                                { href: '/events', label: 'Attend our Events', level: 'public' }
+                            ]).filter((item) => (item.href !== '/events' || ticketing) && (item.level === 'public' || item.level === 'account' || allows(access, item.level))).map((item) => (
                                 <Link key={item.href} href={item.href} onClick={closeMenu} className="hover:text-[#EAD64D] transition-colors py-1 border-b border-neutral-800/60">
                                     {item.label}
                                 </Link>
@@ -100,10 +147,9 @@ export default function Navbar() {
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 onClick={closeMenu}
-                                className="hover:text-[#EAD64D] transition-colors py-1 border-b border-neutral-800/60 flex items-center justify-between"
+                                className="hover:text-[#EAD64D] transition-colors py-1 border-b border-neutral-800/60"
                             >
-                                <span>Makerspace ↗</span>
-                                <span className="text-xs text-neutral-500">↗</span>
+                                Makerspace ↗
                             </a>
 
                             <a
@@ -111,10 +157,9 @@ export default function Navbar() {
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 onClick={closeMenu}
-                                className="hover:text-[#EAD64D] transition-colors py-1 border-b border-neutral-800/60 flex items-center justify-between"
+                                className="hover:text-[#EAD64D] transition-colors py-1 border-b border-neutral-800/60"
                             >
-                                <span>Main UNSW Founders Site ↗</span>
-                                <span className="text-xs text-neutral-500">↗</span>
+                                Main UNSW Founders Site ↗
                             </a>
 
                             <div className="pt-2">

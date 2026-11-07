@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { OUTSIDE_WORK_HOURS_LABEL, WORK_HOURS_LABEL } from '../app/lib/workingHours';
 
 export default function EventFAQs() {
@@ -9,6 +9,33 @@ export default function EventFAQs() {
     const toggleAccordion = (id) => {
         setActiveAccordion(activeAccordion === id ? null : id);
     };
+
+    useEffect(() => {
+        const openFromHash = () => {
+            if (window.location.hash !== '#faq-security') return;
+            setActiveAccordion('security');
+            requestAnimationFrame(() => {
+                document.getElementById('faq-security')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            });
+        };
+        openFromHash();
+        window.addEventListener('hashchange', openFromHash);
+        return () => window.removeEventListener('hashchange', openFromHash);
+    }, []);
+
+    const FaqButton = ({ id, icon, label }) => (
+        <button
+            type="button"
+            onClick={() => toggleAccordion(id)}
+            className="w-full p-4 flex justify-between items-center gap-3 text-xs font-bold uppercase tracking-wide text-neutral-800 bg-neutral-50/60 hover:bg-neutral-50 border-t border-neutral-100 cursor-pointer"
+        >
+            <span className="flex items-center gap-2 text-left">
+                <span aria-hidden="true" className="text-base leading-none">{icon}</span>
+                <span>{label}</span>
+            </span>
+            <span className="shrink-0">{activeAccordion === id ? '−' : '+'}</span>
+        </button>
+    );
 
     return (
         <div className="space-y-4 bg-white p-6 border border-gray-200 rounded-sm shadow-sm">
@@ -25,47 +52,136 @@ export default function EventFAQs() {
 
                         {/* 15. WHO CAN BOOK OUR SPACES */}
                         <div>
-                            <button
-                                type="button"
-                                onClick={() => toggleAccordion('eligibility')}
-                                className="w-full p-4 flex justify-between items-center text-xs font-bold uppercase tracking-wide text-neutral-800 bg-neutral-50/60 hover:bg-neutral-50 border-t border-neutral-100 cursor-pointer"
-                            >
-                                <span>Who can book our spaces?</span>
-                                <span>{activeAccordion === 'eligibility' ? '−' : '+'}</span>
-                            </button>
+                            <FaqButton id="eligibility" icon="💳" label="Who can book our spaces and at what cost?" />
                             {activeAccordion === 'eligibility' && (
-                                <div className="p-6 bg-white text-xs space-y-4 animate-in slide-in-from-top-1 duration-150 text-neutral-700 font-normal leading-relaxed">
+                                <div className="p-6 bg-white text-xs space-y-5 animate-in slide-in-from-top-1 duration-150 text-neutral-700 font-normal leading-relaxed">
                                     <p className="font-medium text-neutral-900">
                                         Anyone can book an event space at the Michael Crouch Innovation Centre.
                                     </p>
-                                    <ul className="space-y-2.5 text-neutral-700">
-                                        <li>
-                                            <strong>External Bookings:</strong> Charged a full fee.
-                                        </li>
-                                        <li>
-                                            <strong>UNSW Startups & Arc Student Societies:</strong> Fees are completely waived for registered Arc student societies and UNSW startups running entrepreneurship related events (subject to MCIC team approval).
-                                        </li>
-                                        <li>
-                                            <strong>UNSW Departments:</strong> Charged a discounted fee.
-                                        </li>
-                                        <li>
-                                            <strong>Alignment Discounts:</strong> MCIC event spaces are prioritised for initiatives aligned with innovation, entrepreneurship, and creative problem-solving across UNSW, so extra discounts can be applied when an event aligns.
-                                        </li>
-                                    </ul>
+
+                                    <div className="space-y-1">
+                                        <span className="font-bold text-neutral-900 uppercase text-[10px] tracking-wide block border-b border-neutral-100 pb-1">
+                                            Who pays what
+                                        </span>
+                                        <dl className="divide-y divide-neutral-100">
+                                            <div className="py-2.5 grid grid-cols-1 sm:grid-cols-[13rem_1fr] gap-x-4 gap-y-0.5">
+                                                <dt className="font-bold text-neutral-900">External bookings</dt>
+                                                <dd>Charged a full fee.</dd>
+                                            </div>
+                                            <div className="py-2.5 grid grid-cols-1 sm:grid-cols-[13rem_1fr] gap-x-4 gap-y-0.5">
+                                                <dt className="font-bold text-neutral-900">UNSW startups & Arc student societies</dt>
+                                                <dd>Fees are completely waived for registered Arc student societies and UNSW startups running entrepreneurship related events (subject to MCIC team approval).</dd>
+                                            </div>
+                                            <div className="py-2.5 grid grid-cols-1 sm:grid-cols-[13rem_1fr] gap-x-4 gap-y-0.5">
+                                                <dt className="font-bold text-neutral-900">UNSW departments</dt>
+                                                <dd>Charged a discounted fee.</dd>
+                                            </div>
+                                            <div className="py-2.5 grid grid-cols-1 sm:grid-cols-[13rem_1fr] gap-x-4 gap-y-0.5">
+                                                <dt className="font-bold text-neutral-900">Alignment discounts</dt>
+                                                <dd>MCIC event spaces are prioritised for initiatives aligned with innovation, entrepreneurship, and creative problem-solving across UNSW, so extra discounts can be applied when an event aligns (subject to MCIC team approval).</dd>
+                                            </div>
+                                        </dl>
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <span className="font-bold text-neutral-900 uppercase text-[10px] tracking-wide block border-b border-neutral-100 pb-1">
+                                            Full fee rates
+                                        </span>
+                                        <p className="pt-1">The booking form calculates your quote before you submit. The rates below are GST inclusive at full fee rates. A half day is 4 hours or less. A longer booking is a full day.</p>
+                                        <div className="border border-neutral-200 rounded-sm overflow-hidden">
+                                            <table className="w-full text-left">
+                                                <thead className="bg-neutral-50 text-[10px] font-bold uppercase tracking-wide text-neutral-500">
+                                                    <tr>
+                                                        <th className="px-3 py-2 font-bold">Space</th>
+                                                        <th className="px-3 py-2 font-bold">Half day</th>
+                                                        <th className="px-3 py-2 font-bold">Full day</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-neutral-100 text-neutral-700">
+                                                    {[
+                                                        ['Entire Space', '$1,600', '$2,800'],
+                                                        ['Event Space', '$900', '$1,600'],
+                                                        ['Design Space', '$700', '$1,200'],
+                                                        ['Founders Place', '$700', '$1,200'],
+                                                        ['Group Study', '$250', '$400'],
+                                                        ['Colonnade', '$300', '$500']
+                                                    ].map(([space, half, full]) => (
+                                                        <tr key={space}>
+                                                            <td className="px-3 py-2 font-medium text-neutral-900">{space}</td>
+                                                            <td className="px-3 py-2">{half}</td>
+                                                            <td className="px-3 py-2">{full}</td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-1">
+                                        <span className="font-bold text-neutral-900 uppercase text-[10px] tracking-wide block border-b border-neutral-100 pb-1">
+                                            Event staffing
+                                        </span>
+                                        <p className="pt-1">Event staffing, when it applies, is $50 per hour. The minimum is 3 hours, or 4 hours on a weekend. Casual staff overtime is $75 per hour after 8 hours, and $100 per hour after 10 hours.</p>
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <span className="font-bold text-neutral-900 uppercase text-[10px] tracking-wide block border-b border-neutral-100 pb-1">
+                                            How to pay
+                                        </span>
+                                        <p className="pt-1">You can pay by journal transfer or invoice. A 50% deposit confirms the booking. The remaining 50% is due no later than 48 hours before the event.</p>
+                                        <p className="font-medium text-neutral-900">If you are a UNSW department, Journal Transfer is preferred.</p>
+                                        <ul className="space-y-1.5">
+                                            <li>Not sure how to organise a Journal Transfer? The related Finance Analyst in your faculty or division can process the internal journal transfer. Simply contact them.</li>
+                                            <li>
+                                                Who is my Finance Analyst? Check the Finance SharePoint:{' '}
+                                                <a href="https://unsw.sharepoint.com/sites/finance-hub/SitePages/Contact-Finance.aspx" target="_blank" rel="noopener noreferrer" className="font-bold text-black underline decoration-2 decoration-[#EAD64D] underline-offset-4">
+                                                    Contact Finance
+                                                </a>
+                                            </li>
+                                        </ul>
+                                    </div>
+
+                                    <div className="space-y-1">
+                                        <span className="font-bold text-neutral-900 uppercase text-[10px] tracking-wide block border-b border-neutral-100 pb-1">
+                                            Overtime
+                                        </span>
+                                        <p className="pt-1">A 15-minute grace window applies at the start and end of your booking. Time beyond that is charged at $150 per hour, pro-rata.</p>
+                                    </div>
+
+                                    <div className="space-y-1">
+                                        <span className="font-bold text-neutral-900 uppercase text-[10px] tracking-wide block border-b border-neutral-100 pb-1">
+                                            Cleaning
+                                        </span>
+                                        <p className="pt-1">Leave the space as clean and orderly as you found it. Rubbish, catering waste, or promotional clutter starts a cleaning fee of $200 + GST minimum.</p>
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <span className="font-bold text-neutral-900 uppercase text-[10px] tracking-wide block border-b border-neutral-100 pb-1">
+                                            Cancellation
+                                        </span>
+                                        <p className="pt-1">Cancellations must be made in writing. The charge depends on how much notice you give:</p>
+                                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                            <div className="p-2.5 bg-neutral-50 border border-neutral-200 rounded-xs">
+                                                <span className="block font-bold text-neutral-900 uppercase text-[9px]">6+ working days</span>
+                                                <span className="font-medium text-neutral-900">Full refund / no fee</span>
+                                            </div>
+                                            <div className="p-2.5 bg-neutral-50 border border-neutral-200 rounded-xs">
+                                                <span className="block font-bold text-neutral-900 uppercase text-[9px]">3–5 working days</span>
+                                                <span className="font-medium text-neutral-900">50% of the fee is forfeited</span>
+                                            </div>
+                                            <div className="p-2.5 bg-neutral-50 border border-neutral-200 rounded-xs">
+                                                <span className="block font-bold text-neutral-900 uppercase text-[9px]">Less than 2 working days</span>
+                                                <span className="font-medium text-neutral-900">100% of the fee is forfeited</span>
+                                            </div>
+                                        </div>
+                                        <p>All outstanding balances must be fully resolved before securing future bookings.</p>
+                                    </div>
                                 </div>
                             )}
                         </div>
-
                         {/* 10. OPERATING HOURS & STAFFING FEES */}
                         <div>
-                            <button
-                                type="button"
-                                onClick={() => toggleAccordion('hours')}
-                                className="w-full p-4 flex justify-between items-center text-xs font-bold uppercase tracking-wide text-neutral-800 bg-neutral-50/60 hover:bg-neutral-50 border-t border-neutral-100 cursor-pointer"
-                            >
-                                <span>Operating Hours & Staffing Fees</span>
-                                <span>{activeAccordion === 'hours' ? '−' : '+'}</span>
-                            </button>
+                            <FaqButton id="hours" icon="🕐" label="Operating Hours & Staffing Fees" />
                             {activeAccordion === 'hours' && (
                                 <div className="p-6 bg-white text-xs space-y-4 animate-in slide-in-from-top-1 duration-150 text-gray-600 font-normal leading-relaxed">
                                     <p>
@@ -78,23 +194,15 @@ export default function EventFAQs() {
                                         </p>
                                         <p>
                                             <strong className="text-neutral-900 block uppercase text-[10px] tracking-wide mb-0.5">Outside Office Hours ({OUTSIDE_WORK_HOURS_LABEL})</strong>
-                                            Hiring a dedicated casual staff support member is required. This costs $50 per hour (3-hour minimum block). Sunday or Public Holiday shifts require a 4-hour minimum.
+                                            Hiring a dedicated casual staff support member is required. This costs $50 per hour. The minimum is 3 hours, or 4 hours on a weekend. Casual staff overtime is $75 per hour after 8 hours, and $100 per hour after 10 hours.
                                         </p>
                                     </div>
                                 </div>
                             )}
                         </div>
-
                         {/* 1. LOCATION, TRANSPORT & PARKING */}
                         <div>
-                            <button
-                                type="button"
-                                onClick={() => toggleAccordion('location-transport')}
-                                className="w-full p-4 flex justify-between items-center text-xs font-bold uppercase tracking-wide text-neutral-800 bg-neutral-50/60 hover:bg-neutral-50 border-t border-neutral-100 cursor-pointer"
-                            >
-                                <span>Location, Transport, Parking & Deliveries</span>
-                                <span>{activeAccordion === 'location-transport' ? '−' : '+'}</span>
-                            </button>
+                            <FaqButton id="location-transport" icon="📍" label="Location, Transport, Parking & Deliveries" />
                             {activeAccordion === 'location-transport' && (
                                 <div className="p-6 bg-white text-xs space-y-5 animate-in slide-in-from-top-1 duration-150 text-neutral-600 font-normal leading-relaxed">
                                     <div className="space-y-1">
@@ -141,17 +249,6 @@ export default function EventFAQs() {
                                             <p className="text-neutral-500 italic">
                                                 Payment is required on arrival via CellOPark App or Pay-By-Plate meter. Parking is <strong>free between 7:30 PM and 7:30 AM weekdays, and all day weekends & public holidays</strong>.
                                             </p>
-
-                                            {/* CELLOPARK STEPS */}
-                                            <div className="p-3 bg-neutral-50 border border-neutral-200/80 rounded-xs space-y-1">
-                                                <span className="font-bold text-neutral-900 block uppercase text-[10px]">CellOPark App Setup:</span>
-                                                <ol className="list-decimal pl-4 space-y-0.5 text-[11px] text-neutral-600">
-                                                    <li>Download CellOPark and add your zID & email to your profile.</li>
-                                                    <li>Register your vehicle plate number and credit card details.</li>
-                                                    <li>Select zone <strong className="font-mono text-black">2052033 UNSW Permit Holder Parking</strong> (tap the STAR to favourite).</li>
-                                                    <li>Press <strong>START</strong> on arrival. Flat rate is $8/day (no need to press stop).</li>
-                                                </ol>
-                                            </div>
 
                                             {/* EV, MOTORCYCLES & BICYCLES */}
                                             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px] pt-1">
@@ -215,17 +312,100 @@ export default function EventFAQs() {
                                 </div>
                             )}
                         </div>
-
+                        {/* WHAT HOURS SHOULD I BOOK THE SPACE */}
+                        <div>
+                            <FaqButton id="bookingHours" icon="⏱️" label="What hours should I book the space for?" />
+                            {activeAccordion === 'bookingHours' && (
+                                <div className="p-6 bg-white text-xs space-y-4 animate-in slide-in-from-top-1 duration-150 text-neutral-600 font-normal leading-relaxed">
+                                    <p>
+                                        Please book the space for the entire period you require access—from the moment you need to enter for setup to the exact time you will depart after cleaning up and packing down (not just the time your event runs).
+                                    </p>
+                                    <p>
+                                        You will <strong>not</strong> have access to the space before or after your confirmed booking window. Be sure to factor in sufficient time for setting up equipment, tables, and chairs prior to your event, as well as clearing away rubbish and tidying the room afterward. Usually factor in 30min to 1 hour before and after your event.
+                                    </p>
+                                    <p>
+                                        A staff member will always unlock the space, show you how to use and find equipment, and lock the room at check-out. If you require support in the room for the entirety of your event you must hire casual staff through the booking form. Event staffing, when it applies, is $50 per hour. The minimum is 3 hours, or 4 hours on a weekend.
+                                    </p>
+                                </div>
+                            )}
+                        </div>
+                        {/* 3. WILL THE SPACE BE SET-UP FOR ME */}
+                        <div>
+                            <FaqButton id="setup" icon="🪑" label="Will the space be set-up for me?" />
+                            {activeAccordion === 'setup' && (
+                                <div className="p-6 bg-white text-xs space-y-4 animate-in slide-in-from-top-1 duration-150 text-neutral-600 font-normal leading-relaxed">
+                                    <p>
+                                        Please expect to set up the chairs, tables, and equipment yourself. While we aim to assist or arrange layouts prior to your arrival, this is not always possible.
+                                    </p>
+                                    <p>
+                                        A staff member will always unlock the space, show you how to use and find equipment, and lock the room at check-out. If you require support in the room for the entirety of your event you must hire casual staff through the booking form. Event staffing, when it applies, is $50 per hour. The minimum is 3 hours, or 4 hours on a weekend.
+                                    </p>
+                                </div>
+                            )}
+                        </div>
+                        {/* 4. WILL THERE BE STAFF TO HELP ME AT ALL TIMES */}
+                        <div>
+                            <FaqButton id="staff" icon="🙋" label="Will there be staff to help me at all times?" />
+                            {activeAccordion === 'staff' && (
+                                <div className="p-6 bg-white text-xs space-y-4 animate-in slide-in-from-top-1 duration-150 text-neutral-600 font-normal leading-relaxed">
+                                    <p>
+                                        A staff member will always unlock the space, show you how to use and find equipment, and lock the room at check-out.
+                                    </p>
+                                    <p>
+                                        Throughout your event booking, staff are located within the building and can be called to come downstairs and troubleshoot unexpected technical issues at any time.
+                                    </p>
+                                    <p>
+                                        If you require support in the room for the entirety of your event you must hire casual staff through the booking form. Event staffing, when it applies, is $50 per hour. The minimum is 3 hours, or 4 hours on a weekend.
+                                    </p>
+                                </div>
+                            )}
+                        </div>
+                        {/* 5. DO I NEED TO BE THERE THE WHOLE TIME WITH GUESTS */}
+                        <div>
+                            <FaqButton id="host-responsibility" icon="👥" label="Do I need to be there the whole time if I have guests in the space?" />
+                            {activeAccordion === 'host-responsibility' && (
+                                <div className="p-6 bg-white text-xs space-y-4 animate-in slide-in-from-top-1 duration-150 text-neutral-600 font-normal leading-relaxed">
+                                    <div className="p-3.5 bg-neutral-900 text-white font-medium rounded-xs">
+                                        Yes. You are fully responsible for all room assets during the entirety of your booking window. This means you cannot:
+                                    </div>
+                                    <ul className="list-disc pl-4 space-y-1.5 text-neutral-700 font-medium">
+                                        <li>leave guests unattended inside the space at any point.</li>
+                                        <li>leave the facility doors unlocked or pinned open while completely unattended.</li>
+                                        <li>depart before your attendees have fully exited. You must stay to the end to ensure the space is cleaned up and assets are locked away.</li>
+                                        <li>book rooms for unstaffed "drop-in" functions and request doors remain unlocked. A dedicated, responsible organiser must be physically present to supervise the space at all times.</li>
+                                    </ul>
+                                    <p>
+                                        If you must step out of the room at any point during your booking, you must contact venue staff immediately so they can come and lock the equipment away.
+                                    </p>
+                                </div>
+                            )}
+                        </div>
+                        {/* WHEN ARE BOOKINGS OPEN / AVAILABILITY */}
+                        <div>
+                            <FaqButton id="availability" icon="📅" label="When can I book the space / How far in advance?" />
+                            {activeAccordion === 'availability' && (
+                                <div className="p-6 bg-white text-xs space-y-4 animate-in slide-in-from-top-1 duration-150 text-neutral-600 font-normal leading-relaxed">
+                                    <p>
+                                        Our spaces are subject to a standard booking lockout until closer to term start. This allows our internal UNSW Founders team to finalise program schedules and secure priority space allocations.
+                                    </p>
+                                    <div className="p-3 bg-neutral-50 border border-neutral-200 rounded-xs space-y-1 text-neutral-800">
+                                        <strong className="block uppercase text-[10px] tracking-wide">Lockout dates are as follows:</strong>
+                                        <ul className="list-disc pl-4 space-y-1 text-[11px] text-neutral-700">
+                                            <li><strong>1 January – 28 May</strong>: non-staff bookings open from 20 November of the previous year</li>
+                                            <li><strong>29 May – 10 September</strong>: non-staff bookings open from 23 April of the same year</li>
+                                            <li><strong>11 September – 9 December</strong>: non-staff bookings open from 6 August of the same year</li>
+                                            <li><strong>10 December – 31 December</strong>: outside these periods and stays closed to anyone who is not UNSW staff</li>
+                                        </ul>
+                                    </div>
+                                    <p>
+                                        Because we receive high-volume booking requests from across the university, spaces are allocated on a <strong>first-come, first-served basis</strong> once lockouts expire.
+                                    </p>
+                                </div>
+                            )}
+                        </div>
                         {/* 2. DIGITAL & WI-FI ACCESS */}
                         <div>
-                            <button
-                                type="button"
-                                onClick={() => toggleAccordion('digital')}
-                                className="w-full p-4 flex justify-between items-center text-xs font-bold uppercase tracking-wide text-neutral-800 bg-neutral-50/60 hover:bg-neutral-50 border-t border-neutral-100 cursor-pointer"
-                            >
-                                <span>Can I access WiFi for myself and my attendees?</span>
-                                <span>{activeAccordion === 'digital' ? '−' : '+'}</span>
-                            </button>
+                            <FaqButton id="digital" icon="📶" label="Can I access WiFi for myself and my attendees?" />
                             {activeAccordion === 'digital' && (
                                 <div className="p-6 bg-white text-xs space-y-6 animate-in slide-in-from-top-1 duration-150 text-neutral-600 font-normal leading-relaxed">
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -245,8 +425,8 @@ export default function EventFAQs() {
 
                                                 <div className="p-3 bg-white border border-neutral-200 rounded-xs space-y-1 font-mono text-[11px]">
                                                     <div><span className="text-neutral-400 uppercase text-[9px] font-sans font-bold block">Network Name:</span> eduroam</div>
-                                                    <div><span className="text-neutral-400 uppercase text-[9px] font-sans font-bold block">Username:</span> zID@ad.unsw.edu.au</div>
-                                                    <div><span className="text-neutral-400 uppercase text-[9px] font-sans font-bold block">Password:</span> zID Password</div>
+                                                    <div><span className="text-neutral-400 uppercase text-[9px] font-sans font-bold block">Username:</span> University associated email, e.g. zID@ad.unsw.edu.au</div>
+                                                    <div><span className="text-neutral-400 uppercase text-[9px] font-sans font-bold block">Password:</span> University password used with the email provided</div>
                                                 </div>
                                             </div>
 
@@ -316,17 +496,9 @@ export default function EventFAQs() {
                                 </div>
                             )}
                         </div>
-
                         {/* 3. PRINTING & COPYING SERVICES */}
                         <div>
-                            <button
-                                type="button"
-                                onClick={() => toggleAccordion('printing')}
-                                className="w-full p-4 flex justify-between items-center text-xs font-bold uppercase tracking-wide text-neutral-800 bg-neutral-50/60 hover:bg-neutral-50 border-t border-neutral-100 cursor-pointer"
-                            >
-                                <span>Can I print or photocopy documents on-site?</span>
-                                <span>{activeAccordion === 'printing' ? '−' : '+'}</span>
-                            </button>
+                            <FaqButton id="printing" icon="🖨️" label="Can I print or photocopy documents on-site?" />
                             {activeAccordion === 'printing' && (
                                 <div className="p-6 bg-white text-xs space-y-6 animate-in slide-in-from-top-1 duration-150 text-neutral-600 font-normal leading-relaxed">
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -335,10 +507,10 @@ export default function EventFAQs() {
                                         <div className="p-5 border border-neutral-200 bg-neutral-50/40 rounded-xs space-y-3 flex flex-col justify-between">
                                             <div className="space-y-3">
                                                 <div className="flex items-center gap-1.5 text-neutral-900 font-bold uppercase tracking-tight text-[10px]">
-                                                    <span>🖨️</span> MCIC On-Site Printing (Design Space)
+                                                    <span>🖨️</span> MCIC On-Site Printing
                                                 </div>
                                                 <p className="text-neutral-600 text-xs leading-relaxed">
-                                                    There is a printer located in the <strong>MCIC Design Space</strong>. Please note it is <strong>not connected to the UNSW network</strong>, so jobs can only be printed locally via USB flash drive.
+                                                    There is a printer located in the <strong>MCIC Design Space</strong> (can be accessed if Entire Space or Design Space is booked). Please note it is <strong>not connected to the UNSW network</strong>, so jobs can only be printed locally via USB flash drive.
                                                 </p>
                                                 <p>
                                                     For other Event Spaces, if you require 30 or less A4 pages printed daily for an upcoming event, email <a href="mailto:MCIC@UNSW.edu.au" className="font-mono font-bold text-black underline">MCIC@UNSW.edu.au</a> and our team can print them out for you.
@@ -372,152 +544,9 @@ export default function EventFAQs() {
                                 </div>
                             )}
                         </div>
-
-                        {/* 3. WILL THE SPACE BE SET-UP FOR ME */}
-                        <div>
-                            <button
-                                type="button"
-                                onClick={() => toggleAccordion('setup')}
-                                className="w-full p-4 flex justify-between items-center text-xs font-bold uppercase tracking-wide text-neutral-800 bg-neutral-50/60 hover:bg-neutral-50 border-t border-neutral-100 cursor-pointer"
-                            >
-                                <span>Will the space be set-up for me?</span>
-                                <span>{activeAccordion === 'setup' ? '−' : '+'}</span>
-                            </button>
-                            {activeAccordion === 'setup' && (
-                                <div className="p-6 bg-white text-xs space-y-4 animate-in slide-in-from-top-1 duration-150 text-neutral-600 font-normal leading-relaxed">
-                                    <p>
-                                        Please expect to set up the chairs, tables, and equipment yourself. While we aim to assist or arrange layouts prior to your arrival, this is not always possible.
-                                    </p>
-                                    <p>
-                                        A staff member will always unlock the space, show you how to use and find equipment, and lock the room at check-out. If you require support in the room for the entirety of your event you must hire casual staff through the booking form at a cost of $50 per hour (minimum 3 hours).
-                                    </p>
-                                </div>
-                            )}
-                        </div>
-
-                        {/* WHAT HOURS SHOULD I BOOK THE SPACE */}
-                        <div>
-                            <button
-                                type="button"
-                                onClick={() => toggleAccordion('bookingHours')}
-                                className="w-full p-4 flex justify-between items-center text-xs font-bold uppercase tracking-wide text-neutral-800 bg-neutral-50/60 hover:bg-neutral-50 border-t border-neutral-100 cursor-pointer"
-                            >
-                                <span>What hours should I book the space for?</span>
-                                <span>{activeAccordion === 'bookingHours' ? '−' : '+'}</span>
-                            </button>
-                            {activeAccordion === 'bookingHours' && (
-                                <div className="p-6 bg-white text-xs space-y-4 animate-in slide-in-from-top-1 duration-150 text-neutral-600 font-normal leading-relaxed">
-                                    <p>
-                                        Please book the space for the entire period you require access—from the moment you need to enter for setup to the exact time you will depart after cleaning up and packing down (not just the time your event runs).
-                                    </p>
-                                    <p>
-                                        You will <strong>not</strong> have access to the space before or after your confirmed booking window. Be sure to factor in sufficient time for setting up equipment, tables, and chairs prior to your event, as well as clearing away rubbish and tidying the room afterward.
-                                    </p>
-                                    <p>
-                                        A staff member will always unlock the space, show you how to use and find equipment, and lock the room at check-out. If you require support in the room for the entirety of your event you must hire casual staff through the booking form at a cost of $50 per hour (minimum 3 hours).
-                                    </p>
-                                </div>
-                            )}
-                        </div>
-
-                        {/* 4. WILL THERE BE STAFF TO HELP ME AT ALL TIMES */}
-                        <div>
-                            <button
-                                type="button"
-                                onClick={() => toggleAccordion('staff')}
-                                className="w-full p-4 flex justify-between items-center text-xs font-bold uppercase tracking-wide text-neutral-800 bg-neutral-50/60 hover:bg-neutral-50 border-t border-neutral-100 cursor-pointer"
-                            >
-                                <span>Will there be staff to help me at all times?</span>
-                                <span>{activeAccordion === 'staff' ? '−' : '+'}</span>
-                            </button>
-                            {activeAccordion === 'staff' && (
-                                <div className="p-6 bg-white text-xs space-y-4 animate-in slide-in-from-top-1 duration-150 text-neutral-600 font-normal leading-relaxed">
-                                    <p>
-                                        A staff member will be on-site to facilitate check-in, demonstrate core AV equipment controls, and securely lock the facility doors at the conclusion of your reservation window.
-                                    </p>
-                                    <p>
-                                        Throughout your event window, staff remain inside the core building infrastructure and can be paged immediately to troubleshoot unexpected technical issues. Staff do not maintain an ongoing presence inside your room unless dedicated casual staffing coverage is requested ($50/hr, min 3 hours).
-                                    </p>
-                                </div>
-                            )}
-                        </div>
-
-                        {/* 5. DO I NEED TO BE THERE THE WHOLE TIME WITH GUESTS */}
-                        <div>
-                            <button
-                                type="button"
-                                onClick={() => toggleAccordion('host-responsibility')}
-                                className="w-full p-4 flex justify-between items-center text-xs font-bold uppercase tracking-wide text-neutral-800 bg-neutral-50/60 hover:bg-neutral-50 border-t border-neutral-100 cursor-pointer"
-                            >
-                                <span>Do I need to be there the whole time if I have guests in the space?</span>
-                                <span>{activeAccordion === 'host-responsibility' ? '−' : '+'}</span>
-                            </button>
-                            {activeAccordion === 'host-responsibility' && (
-                                <div className="p-6 bg-white text-xs space-y-4 animate-in slide-in-from-top-1 duration-150 text-neutral-600 font-normal leading-relaxed">
-                                    <div className="p-3.5 bg-neutral-900 text-white font-medium rounded-xs">
-                                        Yes. You are fully responsible for all equipment, asset safety, and room conditions during the entirety of your booking window.
-                                    </div>
-                                    <div className="space-y-1.5 font-medium text-neutral-800">
-                                        <p className="text-neutral-950 font-bold uppercase text-[10px] tracking-wide mb-1">Strict Supervision Directives:</p>
-                                        <p>• <strong>Do not leave guests unattended</strong> inside the space at any point.</p>
-                                        <p>• <strong>Do not leave the facility doors wide open</strong> or unlocked while completely unattended.</p>
-                                    </div>
-                                    <div className="space-y-3 border-t border-neutral-100 pt-3">
-                                        <p>
-                                            If you must step out of the room at any point during your booking, you must contact venue staff immediately so they can come and lock the facility doors securely.
-                                        </p>
-                                        <p>
-                                            We frequently experience situations where hosts depart before their attendees have fully exited, resulting in guests slowly filtering out over time with absolutely nobody cleaning up the space, resetting equipment, or locking down university assets.
-                                        </p>
-                                        <p>
-                                            Similarly, you <strong>cannot</strong> book rooms for unstaffed "drop-in" functions and request doors remain unlocked if a dedicated, responsible organizer is not physically present to supervise the space.
-                                        </p>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-
-                        {/* WHEN ARE BOOKINGS OPEN / AVAILABILITY */}
-                        <div>
-                            <button
-                                type="button"
-                                onClick={() => toggleAccordion('availability')}
-                                className="w-full p-4 flex justify-between items-center text-xs font-bold uppercase tracking-wide text-neutral-800 bg-neutral-50/60 hover:bg-neutral-50 border-t border-neutral-100 cursor-pointer"
-                            >
-                                <span>When can I book the space / How far in advance?</span>
-                                <span>{activeAccordion === 'availability' ? '−' : '+'}</span>
-                            </button>
-                            {activeAccordion === 'availability' && (
-                                <div className="p-6 bg-white text-xs space-y-4 animate-in slide-in-from-top-1 duration-150 text-neutral-600 font-normal leading-relaxed">
-                                    <p>
-                                        Our spaces are subject to a standard booking lockout until closer to term start. This allows our internal UNSW Founders team to finalise program schedules and secure priority space allocations.
-                                    </p>
-                                    <div className="p-3 bg-neutral-50 border border-neutral-200 rounded-xs space-y-1 text-neutral-800">
-                                        <strong className="block uppercase text-[10px] tracking-wide">Lockout dates are as follows:</strong>
-                                        <ul className="list-disc pl-4 space-y-1 text-[11px] text-neutral-700">
-                                            <li><strong>1 January – 28 May</strong>: non-staff bookings open from 20 November of the previous year</li>
-                                            <li><strong>29 May – 10 September</strong>: non-staff bookings open from 23 April of the same year</li>
-                                            <li><strong>11 September – 9 December</strong>: non-staff bookings open from 6 August of the same year</li>
-                                            <li><strong>10 December – 31 December</strong>: outside these periods and stays closed to anyone who is not UNSW staff</li>
-                                        </ul>
-                                    </div>
-                                    <p>
-                                        Because we receive high-volume booking requests from across the university, spaces are allocated on a <strong>first-come, first-served basis</strong> once lockouts expire.
-                                    </p>
-                                </div>
-                            )}
-                        </div>
-
                         {/* 6. STORAGE PROTOCOLS */}
                         <div>
-                            <button
-                                type="button"
-                                onClick={() => toggleAccordion('storage')}
-                                className="w-full p-4 flex justify-between items-center text-xs font-bold uppercase tracking-wide text-neutral-800 bg-neutral-50/60 hover:bg-neutral-50 border-t border-neutral-100 cursor-pointer"
-                            >
-                                <span>Can I store items in the space before or after my event?</span>
-                                <span>{activeAccordion === 'storage' ? '−' : '+'}</span>
-                            </button>
+                            <FaqButton id="storage" icon="📦" label="Can I store items in the space before or after my event?" />
                             {activeAccordion === 'storage' && (
                                 <div className="p-6 bg-white text-xs space-y-4 animate-in slide-in-from-top-1 duration-150 text-neutral-600 font-normal leading-relaxed">
                                     <div className="p-3.5 bg-neutral-900 text-white font-medium rounded-xs">
@@ -535,45 +564,18 @@ export default function EventFAQs() {
                                 </div>
                             )}
                         </div>
-
-                        {/* 7. FACILITY CONSUMABLES */}
+                        {/* 7. FOOD, DRINKS & CATERING */}
                         <div>
-                            <button
-                                type="button"
-                                onClick={() => toggleAccordion('consumables')}
-                                className="w-full p-4 flex justify-between items-center text-xs font-bold uppercase tracking-wide text-neutral-800 bg-neutral-50/60 hover:bg-neutral-50 border-t border-neutral-100 cursor-pointer"
-                            >
-                                <span>Can I use the milk, tea, coffee, soft drinks, paper plates, or cups at the facility?</span>
-                                <span>{activeAccordion === 'consumables' ? '−' : '+'}</span>
-                            </button>
-                            {activeAccordion === 'consumables' && (
-                                <div className="p-6 bg-white text-xs space-y-4 animate-in slide-in-from-top-1 duration-150 text-neutral-600 font-normal leading-relaxed">
-                                    <div className="p-3.5 bg-neutral-900 text-white font-medium rounded-xs">
-                                        No. This venue functions under a strict self-service model regarding food, beverages, and event consumables.
-                                    </div>
-                                    <ul className="list-disc pl-4 space-y-1.5 text-neutral-700 font-medium">
-                                        <li>All food items, hot drink stock, and disposable serviceware stored on shelves belong to core Founders programs and cannot be accessed.</li>
-                                        <li>Hirers are responsible for bringing all event serviceware including plates, napkins, cups, serving utensils, and cutlery items.</li>
-                                        <li>Glassware setups, ceramic mugs and plates, ice buckets and a water dispenser can be added to your booking for an extra fee via the booking form.</li>
-                                    </ul>
-                                </div>
-                            )}
-                        </div>
-
-                        {/* 8. HOW DOES CATERING WORK */}
-                        <div>
-                            <button
-                                type="button"
-                                onClick={() => toggleAccordion('catering-hub')}
-                                className="w-full p-4 flex justify-between items-center text-xs font-bold uppercase tracking-wide text-neutral-800 bg-neutral-50/60 hover:bg-neutral-50 border-t border-neutral-100 cursor-pointer"
-                            >
-                                <span>How does Catering work?</span>
-                                <span>{activeAccordion === 'catering-hub' ? '−' : '+'}</span>
-                            </button>
+                            <FaqButton id="catering-hub" icon="🍽️" label="How does catering work, and can I use the milk, tea, coffee, or cups?" />
                             {activeAccordion === 'catering-hub' && (
                                 <div className="p-6 bg-white text-xs space-y-5 animate-in slide-in-from-top-1 duration-150 text-neutral-700 font-medium leading-relaxed">
                                     <div className="space-y-2 pl-2 border-l-2 border-neutral-200 text-neutral-600 font-normal">
-                                        <p><strong>Self-Service:</strong> BYO food, drink, ice and serviceware (plates, napkins, cups, serving utensils, and cutlery items). An urn, water dispenser, glasses, plates, mugs and ice buckets are available for an extra fee via the booking form.</p>
+                                        <div className="space-y-1.5">
+                                            <p><strong>Self-Service:</strong> No. This venue functions under a strict self-service model regarding food, beverages, and event consumables.</p>
+                                            <p>All food, drinks and disposable serviceware stored on shelves belong to UNSW Founders and cannot be accessed during your booking.</p>
+                                            <p>Hirers are responsible for bringing all food, drink, ice, and event serviceware, including plates, napkins, cups, serving utensils, and cutlery items.</p>
+                                            <p>The exception is items you hire for the booking. Glassware, ceramic mugs and plates, ice buckets, and a water dispenser can be added for an extra fee via the booking form.</p>
+                                        </div>
                                         <p><strong>Any Caterer:</strong> No restrictions. You can bring any food or external catering you like.</p>
                                         <p><strong>No Storage:</strong> On-site fridge/cupboards are full. Everything must arrive and leave within your booking window. If you want to keep items cold, please supply your own ice and book the Ice Buckets.</p>
                                         <p><strong>Deliveries:</strong> We will not meet your delivery drivers to collect your order. You must direct and meet your own delivery drivers unless you have paid for casual venue staff (you must select this option in your booking form).</p>
@@ -635,51 +637,33 @@ export default function EventFAQs() {
                                 </div>
                             )}
                         </div>
-
                         {/* SERVING ALCOHOL & RSA COMPLIANCE */}
                         <div>
-                            <button
-                                type="button"
-                                onClick={() => toggleAccordion('alcohol-rsa')}
-                                className="w-full p-4 flex justify-between items-center text-xs font-bold uppercase tracking-wide text-neutral-800 bg-neutral-50/60 hover:bg-neutral-50 border-t border-neutral-100 cursor-pointer"
-                            >
-                                <span>Can I serve alcohol at my event?</span>
-                                <span>{activeAccordion === 'alcohol-rsa' ? '−' : '+'}</span>
-                            </button>
+                            <FaqButton id="alcohol-rsa" icon="🍷" label="Can I serve alcohol at my event?" />
                             {activeAccordion === 'alcohol-rsa' && (
                                 <div className="p-6 bg-white text-xs space-y-4 animate-in slide-in-from-top-1 duration-150 text-neutral-600 font-normal leading-relaxed">
                                     <p className="font-medium text-neutral-900">
-                                        Yes, serving alcohol is permitted, provided you strictly comply with NSW liquor legislation and UNSW venue safety policies:
+                                        Yes, serving alcohol is permitted, provided you strictly comply with NSW liquor legislation and UNSW venue safety policies.
                                     </p>
 
                                     <ul className="space-y-3 text-neutral-700">
                                         <li className="p-3 bg-neutral-50 border border-neutral-200 rounded-xs space-y-1">
-                                            <strong className="text-neutral-900 block uppercase text-[10px] tracking-wide">1. Mandatory RSA Holder & Proof Submission</strong>
-                                            <p className="text-neutral-600 text-xs">
-                                                Anyone responsible for supervising or serving alcohol must hold a valid <strong>NSW Responsible Service of Alcohol (RSA) Competency Card</strong>. A photocopy of this card must be submitted to venue management prior to your event commencement.
-                                            </p>
-                                        </li>
-
-                                        <li className="p-3 bg-neutral-50 border border-neutral-200 rounded-xs space-y-1">
-                                            <strong className="text-neutral-900 block uppercase text-[10px] tracking-wide">2. Option to Hire RSA-Certified Venue Staff</strong>
-                                            <p className="text-neutral-600 text-xs">
-                                                If you or your catering team do not hold an RSA card—or if you prefer not to manage service compliance yourself—you can <strong>hire an RSA-certified MCIC casual staff member</strong> directly via the booking form ($50/hr; 3-hr minimum Mon–Sat, 4-hr minimum Sun/Public Holidays). They will oversee a Gallery / Self-Service Station. You will still be resonsible for providing all alcohol, serviceware, ice etc. and ensuring your guests are of legal drinking age.
-                                            </p>
-                                        </li>
-
-                                        <li className="p-3 bg-neutral-50 border border-neutral-200 rounded-xs space-y-1">
-                                            <strong className="text-neutral-900 block uppercase text-[10px] tracking-wide">3. Service Models: Bartender vs. Gallery Self-Service</strong>
+                                            <strong className="text-neutral-900 block uppercase text-[10px] tracking-wide">How alcohol can be served</strong>
                                             <div className="space-y-1 text-xs text-neutral-600">
-                                                <p>Alcohol can be served in two ways depending on your event setup:</p>
+                                                <p>Alcohol can be served in two ways, depending on your event setup:</p>
                                                 <p>• <strong>Dedicated Bartender Service:</strong> Drinks are actively poured and handed out by an RSA holder.</p>
-                                                <p>• <strong>Gallery / Self-Service Station:</strong> Drinks (e.g. wine/beer) can be set out on tables for self-service during exhibitions, networking, or gallery-style events. Under NSW liquor guidelines, an RSA cardholder must still actively oversee the drink station to monitor consumption and prevent underaged access.</p>
+                                                <p>• <strong>Gallery / Self-Service Station:</strong> Drinks (e.g. wine/beer) can be set out on tables for self-service during exhibitions, networking, or gallery-style events. Under NSW liquor guidelines, an RSA cardholder must still actively oversee the drink station to monitor consumption and prevent underage access.</p>
+                                                <p className="italic">Food and non-alcoholic beverage options must be freely available whenever alcohol is served. Venue staff reserve the right to immediately suspend alcohol service if RSA documentation is missing, if minors are present without explicit prior safety arrangements, or if unsafe behaviour occurs.</p>
                                             </div>
                                         </li>
 
                                         <li className="p-3 bg-neutral-50 border border-neutral-200 rounded-xs space-y-1">
-                                            <strong className="text-neutral-900 block uppercase text-[10px] tracking-wide">4. Responsible Consumption & Underage Guests</strong>
+                                            <strong className="text-neutral-900 block uppercase text-[10px] tracking-wide">RSA card</strong>
                                             <p className="text-neutral-600 text-xs">
-                                                Food and non-alcoholic beverage options must be freely available whenever alcohol is served. Venue staff reserve the right to immediately suspend alcohol service if RSA documentation is missing, if minors are present without explicit prior safety arrangements, or if unsafe behaviour occurs.
+                                                Anyone responsible for supervising or serving alcohol must hold a valid <strong>NSW Responsible Service of Alcohol (RSA) Competency Card</strong>. A photocopy of this card must be submitted to venue management before the event.
+                                            </p>
+                                            <p className="text-neutral-600 text-xs">
+                                                If you or your catering team do not hold an RSA card, or you prefer not to manage service compliance yourself, you can <strong>hire an RSA-certified MCIC casual staff member</strong> via the booking form. Event staffing, when it applies, is $50 per hour. The minimum is 3 hours, or 4 hours on a weekend. They will oversee a Gallery / Self-Service Station. You will still be responsible for providing all alcohol, serviceware, and ice, and for ensuring your guests are of legal drinking age.
                                             </p>
                                         </li>
                                     </ul>
@@ -688,14 +672,7 @@ export default function EventFAQs() {
                         </div>
                         {/* TICKETING & REGISTRATION FAQ */}
                         <div>
-                            <button
-                                type="button"
-                                onClick={() => toggleAccordion('ticketing')}
-                                className="w-full p-4 flex justify-between items-center text-xs font-bold uppercase tracking-wide text-neutral-800 bg-neutral-50/60 hover:bg-neutral-50 border-t border-neutral-100 cursor-pointer"
-                            >
-                                <span>How does event ticketing, registration & fee splitting work?</span>
-                                <span>{activeAccordion === 'ticketing' ? '−' : '+'}</span>
-                            </button>
+                            <FaqButton id="ticketing" icon="🎟️" label="How does event ticketing, registration & fee splitting work?" />
                             {activeAccordion === 'ticketing' && (
                                 <div className="p-6 bg-white text-xs space-y-5 animate-in slide-in-from-top-1 duration-150 text-neutral-600 font-normal leading-relaxed">
 
@@ -703,62 +680,49 @@ export default function EventFAQs() {
                                     <div className="space-y-2 border-b border-neutral-100 pb-3">
                                         <span className="font-bold text-neutral-900 uppercase block text-[11px]">Option 1: Managing Your Own Ticketing (Default)</span>
                                         <p className="text-neutral-700">
-                                            By default, event hosts manage their own attendee registration using their preferred ticketing platform (e.g., <strong>Humanitix, Luma, Eventbrite</strong>, or internal web forms). You retain full legal and financial responsibility for managing guest lists, door check-ins, and issuing ticket refunds if your event is cancelled or postponed.
+                                            By default, event hosts manage their own attendee registration using their preferred ticketing platform (e.g. <strong>Humanitix, Luma, Eventbrite, etc.</strong>) You retain full legal and financial responsibility for managing guest lists, door check-ins, and issuing ticket refunds if your event is cancelled or postponed.
                                         </p>
                                     </div>
 
                                     {/* VENUE ASSISTED / OFFICIAL TICKETING */}
-                                    <div className="space-y-2 border-b border-neutral-100 pb-3">
+                                    <div className="space-y-3 border-b border-neutral-100 pb-3">
                                         <span className="font-bold text-neutral-900 uppercase block text-[11px]">Option 2: UNSW Founders / Venue-Managed Ticketing</span>
                                         <p className="text-neutral-700">
-                                            Upon request or by mutual agreement, UNSW Founders can assist with managing registration and attendee check-ins through our nominated venue ticketing channels.
+                                            Upon request, or where UNSW Founders require it, Founders can manage registration and attendee check-ins through our nominated venue ticketing channels.
                                         </p>
-                                    </div>
-
-                                    {/* THREE-WAY MONEY SPLIT EXPLAINED */}
-                                    <div className="space-y-3 border-b border-neutral-100 pb-3">
-                                        <div className="flex justify-between items-center">
-                                            <span className="font-bold text-neutral-900 uppercase">Paid Events & Fee Breakdown</span>
-                                        </div>
-                                        <p className="text-neutral-600 text-[11px]">
-                                            When UNSW Founders manages ticketing for a paid event, ticket revenues collected from attendees are split to cover platform and venue costs before paying out net earnings to the event host:
-                                        </p>
-
-                                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 text-[11px]">
-                                            <div className="p-3 bg-neutral-50 border border-neutral-200 rounded-xs space-y-1">
-                                                <span className="font-bold text-neutral-900 uppercase text-[10px] block">1. Platform / Card Fees</span>
-                                                <p className="text-neutral-600 text-[10px]">
-                                                    Standard processing & booking gateway fees associated with the ticketing software used.
-                                                </p>
-                                            </div>
-                                            <div className="p-3 bg-neutral-50 border border-neutral-200 rounded-xs space-y-1">
-                                                <span className="font-bold text-neutral-900 uppercase text-[10px] block">2. Venue Consignment</span>
-                                                <p className="text-neutral-600 text-[10px]">
-                                                    A flat <strong>$2.50 (inc. GST)</strong> venue consignment fee applies per ticket for paid tickets priced over $25.00.
-                                                </p>
-                                            </div>
-                                            <div className="p-3 bg-neutral-50 border border-neutral-200 rounded-xs space-y-1">
-                                                <span className="font-bold text-neutral-900 uppercase text-[10px] block">3. Host Net Payout</span>
-                                                <p className="text-neutral-600 text-[10px]">
-                                                    All remaining net ticket revenue (less any unpaid venue hire or staffing balances) is paid out to the host.
-                                                </p>
+                                        <div className="space-y-3 pt-1">
+                                            <span className="font-bold text-neutral-900 uppercase block">Paid Events & Fee Breakdown</span>
+                                            <p className="text-neutral-600 text-[11px]">
+                                                When UNSW Founders sells the tickets, the money from each sale is paid out in this order:
+                                            </p>
+                                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 text-[11px]">
+                                                <div className="p-3 bg-neutral-50 border border-neutral-200 rounded-xs space-y-1">
+                                                    <span className="font-bold text-neutral-900 uppercase text-[10px] block">1. Platform and card fees</span>
+                                                    <p className="text-neutral-600 text-[10px]">
+                                                        Taken out first. These are the ticketing platform&apos;s processing and card fees. The amount depends on the software used.
+                                                    </p>
+                                                </div>
+                                                <div className="p-3 bg-neutral-50 border border-neutral-200 rounded-xs space-y-1">
+                                                    <span className="font-bold text-neutral-900 uppercase text-[10px] block">2. Venue fee</span>
+                                                    <p className="text-neutral-600 text-[10px]">
+                                                        Then <strong>$2.50 (including GST)</strong> per ticket, only when the ticket costs more than $25.
+                                                    </p>
+                                                </div>
+                                                <div className="p-3 bg-neutral-50 border border-neutral-200 rounded-xs space-y-1">
+                                                    <span className="font-bold text-neutral-900 uppercase text-[10px] block">3. What you receive</span>
+                                                    <p className="text-neutral-600 text-[10px]">
+                                                        You are paid whatever is left. Any unpaid venue hire or staffing is deducted before that payment.
+                                                    </p>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
                                 </div>
                             )}
                         </div>
-
                         {/* NEW FAQ: PROMOTION & LOGO USE */}
                         <div>
-                            <button
-                                type="button"
-                                onClick={() => toggleAccordion('promotion-branding')}
-                                className="w-full p-4 flex justify-between items-center text-xs font-bold uppercase tracking-wide text-neutral-800 bg-neutral-50/60 hover:bg-neutral-50 border-t border-neutral-100 cursor-pointer"
-                            >
-                                <span>How can I promote my event / Can I use the MCIC or UNSW logo?</span>
-                                <span>{activeAccordion === 'promotion-branding' ? '−' : '+'}</span>
-                            </button>
+                            <FaqButton id="promotion-branding" icon="📣" label="How can I promote my event / Can I use the MCIC or UNSW logo?" />
                             {activeAccordion === 'promotion-branding' && (
                                 <div className="p-6 bg-white text-xs space-y-4 animate-in slide-in-from-top-1 duration-150 text-neutral-600 font-normal leading-relaxed">
                                     <p>
@@ -770,123 +734,32 @@ export default function EventFAQs() {
                                 </div>
                             )}
                         </div>
-
-                        {/* PAYMENT AND HIRE RATES */}
-                        <div>
-                            <button
-                                type="button"
-                                onClick={() => toggleAccordion('payment-rates')}
-                                className="w-full p-4 flex justify-between items-center text-xs font-bold uppercase tracking-wide text-neutral-800 bg-neutral-50/60 hover:bg-neutral-50 border-t border-neutral-100 cursor-pointer"
-                            >
-                                <span>How does payment work, and what are the standard space hire costs?</span>
-                                <span>{activeAccordion === 'payment-rates' ? '−' : '+'}</span>
-                            </button>
-                            {activeAccordion === 'payment-rates' && (
-                                <div className="p-6 bg-white text-xs space-y-4 animate-in slide-in-from-top-1 duration-150 text-neutral-700 font-normal leading-relaxed">
-                                    <p>The booking form calculates your quote before you submit. The rates below are GST inclusive. A half day is 4 hours or less. A longer booking is a full day.</p>
-                                    <ul className="space-y-1">
-                                        <li>Entire Space: $1,600 half day, $2,800 full day</li>
-                                        <li>Event Space: $900 half day, $1,600 full day</li>
-                                        <li>Design Space: $700 half day, $1,200 full day</li>
-                                        <li>Founders Place: $700 half day, $1,200 full day</li>
-                                        <li>Group Study: $250 half day, $400 full day</li>
-                                        <li>Colonnade: $300 half day, $500 full day</li>
-                                    </ul>
-                                    <p>UNSW Founders bookings are fully discounted. Other internal UNSW bookings, and events about innovation or entrepreneurship, receive 50%. An internal booking that is also about innovation or entrepreneurship is fully discounted. External hirers pay the rate above.</p>
-                                    <p>Event staffing, when it applies, is $50 per hour. The minimum is 3 hours, or 4 hours on a weekend.</p>
-                                    <p>You can pay by journal transfer, invoice, or credit card. A 50% deposit confirms the booking. The remaining 50% is due no later than 48 hours before the event.</p>
-                                    <p>Not sure how to organise a Journal Transfer? The related Finance Analyst in your faculty or division can process the internal journal transfer.</p>
-                                </div>
-                            )}
-                        </div>
-
-                        {/* 11. CANCELLATION & FEES (UPDATED TO MATCH T&Cs) */}
-                        <div>
-                            <button
-                                type="button"
-                                onClick={() => toggleAccordion('financial')}
-                                className="w-full p-4 flex justify-between items-center text-xs font-bold uppercase tracking-wide text-neutral-800 bg-neutral-50/60 hover:bg-neutral-50 border-t border-neutral-100 cursor-pointer"
-                            >
-                                <span>Deposit, Overtime, Cleaning & Cancellation Charges</span>
-                                <span>{activeAccordion === 'financial' ? '−' : '+'}</span>
-                            </button>
-                            {activeAccordion === 'financial' && (
-                                <div className="p-6 bg-white text-xs space-y-6 animate-in slide-in-from-top-1 duration-150 text-gray-600 font-normal leading-relaxed">
-
-                                    {/* DEPOSIT & BALANCE SCHEDULE */}
-                                    <div className="space-y-2">
-                                        <div className="flex justify-between items-center border-b border-neutral-100 pb-2">
-                                            <span className="font-bold text-neutral-900 uppercase">Deposit & Balance Schedule</span>
-                                            <span className="font-mono font-bold bg-neutral-900 text-white px-2 py-0.5 rounded-xs">50% / 50%</span>
+                            {/* SUPPLIERS */}
+                            <div>
+                                <FaqButton id="suppliers" icon="📇" label="Suppliers we have seen in the space" />
+                                {activeAccordion === 'suppliers' && (
+                                    <div className="px-6 pb-6 text-sm text-neutral-700 space-y-4">
+                                        <p>These are suppliers other events at the centre have used. They are not endorsed, and you book them directly.</p>
+                                        <div>
+                                            <p className="font-bold text-neutral-900">Photographer / videographer</p>
+                                            <p>Cassandra Hannagan — <a className="underline" href="mailto:cass@cassandrahannagan.com">cass@cassandrahannagan.com</a></p>
+                                            <p>Ken Leanfore — <a className="underline" href="mailto:ken@kenleanfore.com">ken@kenleanfore.com</a></p>
+                                            <p>Nolan Verhij — <a className="underline" href="mailto:nolanverheij@gmail.com">nolanverheij@gmail.com</a></p>
                                         </div>
-                                        <p>
-                                            A <strong>50% deposit</strong> is required upon booking to confirm your reservation. The remaining <strong>50% balance</strong> must be paid no later than <strong>48 hours prior</strong> to the event commencement.
-                                        </p>
-                                    </div>
-
-                                    {/* OVERTIME RATES */}
-                                    <div className="space-y-2">
-                                        <div className="flex justify-between items-center border-b border-neutral-100 pb-2">
-                                            <span className="font-bold text-neutral-900 uppercase">Overtime Rates</span>
-                                            <span className="font-mono font-bold bg-neutral-900 text-white px-2 py-0.5 rounded-xs">$150 / HR</span>
+                                        <div>
+                                            <p className="font-bold text-neutral-900">Florist</p>
+                                            <p>Flowers by Zoe – Maria — <a className="underline" href="mailto:maria@flowersbyzoe.com.au">maria@flowersbyzoe.com.au</a></p>
                                         </div>
-                                        <p>
-                                            A standard 15-minute grace window applies on both ends of your reservation. Extensions exceeding this generate pro-rata penalties based on hourly rate.
-                                        </p>
-                                    </div>
-
-                                    {/* CLEANING & RESET FEE */}
-                                    <div className="space-y-2">
-                                        <div className="flex justify-between items-center border-b border-neutral-100 pb-2">
-                                            <span className="font-bold text-neutral-900 uppercase">Cleaning & Reset Fee</span>
-                                            <span className="font-mono font-bold bg-neutral-900 text-white px-2 py-0.5 rounded-xs">$200 + GST MIN</span>
-                                        </div>
-                                        <p>
-                                            Please leave the space as clean and orderly as you found it. Leaving rubbish, catering waste or promotional clutter will initiate a cleaning fee recovery charge ($200 + GST minimum).
-                                        </p>
-                                    </div>
-
-                                    {/* CANCELLATION CHARGES */}
-                                    <div className="space-y-3">
-                                        <div className="border-b border-neutral-100 pb-2">
-                                            <span className="font-bold text-neutral-900 uppercase">Cancellation Charges</span>
-                                        </div>
-                                        <div className="space-y-2">
-                                            <p>Cancellations must be filed formally in writing. Charges are dependent on notice timelines:</p>
-                                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 font-mono text-[10px]">
-                                                <div className="p-2.5 bg-neutral-50 border border-neutral-200 rounded-xs">
-                                                    <span className="block font-sans font-bold text-neutral-900 uppercase text-[9px]">6+ Working Days</span>
-                                                    <span className="text-neutral-900 font-bold font-sans">Full Refund / No Fee</span>
-                                                </div>
-                                                <div className="p-2.5 bg-neutral-50 border border-neutral-200 rounded-xs">
-                                                    <span className="block font-sans font-bold text-neutral-900 uppercase text-[9px]">3 - 5 Working Days</span>
-                                                    <span className="text-neutral-900 font-bold font-sans">50% Fee Forfeited</span>
-                                                </div>
-                                                <div className="p-2.5 bg-neutral-50 border border-neutral-200 rounded-xs">
-                                                    <span className="block font-sans font-bold text-neutral-900 uppercase text-[9px]">Less than 2 Days</span>
-                                                    <span className="text-neutral-900 font-bold font-sans">100% Fee Forfeited</span>
-                                                </div>
-                                            </div>
+                                        <div>
+                                            <p className="font-bold text-neutral-900">Furniture supplier</p>
+                                            <p>Simply seated – Nicole — <a className="underline" href="mailto:nicolem@simplyseated.com.au">nicolem@simplyseated.com.au</a></p>
                                         </div>
                                     </div>
-
-                                    <p className="text-[10px] text-neutral-400 uppercase tracking-wider pt-2 border-t border-neutral-100">
-                                        ⚠️ All outstanding balances must be fully resolved before securing future bookings.
-                                    </p>
-                                </div>
-                            )}
-                        </div>
-
+                                )}
+                            </div>
                         {/* 12. BUMP-OUT & VACATING */}
                         <div>
-                            <button
-                                type="button"
-                                onClick={() => toggleAccordion('exit')}
-                                className="w-full p-4 flex justify-between items-center text-xs font-bold uppercase tracking-wide text-neutral-800 bg-neutral-50/60 hover:bg-neutral-50 border-t border-neutral-100 cursor-pointer"
-                            >
-                                <span>My event is finished, how should I leave the space?</span>
-                                <span>{activeAccordion === 'exit' ? '−' : '+'}</span>
-                            </button>
+                            <FaqButton id="exit" icon="🧹" label="My event is finished, how should I leave the space?" />
                             {activeAccordion === 'exit' && (
                                 <div className="p-6 bg-white text-xs space-y-5 animate-in slide-in-from-top-1 duration-150 text-gray-600 font-normal leading-relaxed">
                                     <div className="p-3.5 bg-neutral-900 text-white font-medium rounded-xs">
@@ -902,25 +775,64 @@ export default function EventFAQs() {
                                             <li>Load used glasses or mugs straight into the dishwasher (if full, stack neatly inside the sink).</li>
                                             <li>Do not leave food debris in sink drains.</li>
                                             <li>Large boxes (e.g., pizza boxes) must go into the large bins in the Hallway by the back door of the MCIC Design Space.</li>
-                                            <li>Lost items can be taken with you, handed to venue staff, or taken to Gate 2 Security.</li>
-                                            <li>You may be requested to assist setting up the room for the following event during your pack-up time.</li>
-                                            <li>Contact your venue contact to let them know you are ready to depart and need the space locked.</li>
+                                            <li>Lost items can be taken with you, handed to venue staff, or taken to Gate 2 Security.</li>                                            <li>Contact your venue contact to let them know you are ready to depart and need the assets/space locked.</li>
                                         </ul>
                                     </div>
                                 </div>
                             )}
                         </div>
-
+                        {/* DO I NEED TO WRITE MY OWN RISK ASSESSMENT */}
+                        <div>
+                            <FaqButton id="riskAssessment" icon="⚠️" label="Do I need to write my own risk assessment for an event in one of your spaces?" />
+                            {activeAccordion === 'riskAssessment' && (
+                                <div className="p-6 bg-white text-xs space-y-4 animate-in slide-in-from-top-1 duration-150 text-neutral-600 font-normal leading-relaxed">
+                                    <p>
+                                        No, you do not need to create your own risk assessment for standard events hosted in our facilities.
+                                    </p>
+                                    <p>
+                                        We have an official UNSW risk assessment covering general events within the Michael Crouch Innovation Centre (MCIC) Event Spaces: <strong>Risk Assessment #1120290</strong>.
+                                    </p>
+                                    <p>
+                                        However, if your event involves high-power electrical gear, heavy staging, specialised machinery, or high-risk activities beyond standard event operations, please notify our team prior to your booking so safety compliance can be reviewed.
+                                    </p>
+                                </div>
+                            )}
+                        </div>
+                            {/* PREMIERE PRO TRANSCRIPT */}
+                            <div>
+                                <FaqButton id="premiere-transcript" icon="🎬" label="How to transcribe my event video recording" />
+                                {activeAccordion === 'premiere-transcript' && (
+                                    <div className="p-6 bg-white text-xs space-y-4 animate-in slide-in-from-top-1 duration-150 text-neutral-700 font-normal leading-relaxed">
+                                        <p>
+                                            After receiving you event video recording as an MP4, to generate a transcript in Adobe Premiere Pro, follow these steps using the built-in Speech-to-Text feature:
+                                        </p>
+                                        <ol className="list-decimal pl-4 space-y-3">
+                                            <li>
+                                                <strong className="text-neutral-900">Open the Text Panel:</strong> Go to the top menu and select <strong>Window &gt; Text</strong>.
+                                            </li>
+                                            <li>
+                                                <strong className="text-neutral-900">Access the Transcript Tab:</strong> In the newly opened Text panel, make sure you are on the <strong>Transcript</strong> tab.
+                                            </li>
+                                            <li>
+                                                <strong className="text-neutral-900">Initiate Transcription:</strong>
+                                                <ul className="list-disc pl-4 mt-2 space-y-2">
+                                                    <li>Click the blue <strong>Transcribe</strong> button (or <strong>Transcribe Sequence</strong> if working with a full timeline).</li>
+                                                    <li>If a dialogue box appears, choose your preferred settings, such as language, speaker labeling (to separate multiple speakers), and audio range.</li>
+                                                </ul>
+                                            </li>
+                                            <li>
+                                                <strong className="text-neutral-900">Generate:</strong> Click <strong>Transcribe</strong> to let Premiere Pro process the audio.
+                                            </li>
+                                        </ol>
+                                        <p>
+                                            Once finished, you can edit text directly by double-clicking words, use text-based editing to cut your video, turn the transcript into captions by clicking the <strong>CC</strong> button, or export the transcript as a text file by clicking the three-dot menu (<strong>… &gt; Export &gt; Export a text file</strong>).
+                                        </p>
+                                    </div>
+                                )}
+                            </div>
                         {/* 13. OTHER CAMPUS & CBD SPACES */}
                         <div>
-                            <button
-                                type="button"
-                                onClick={() => toggleAccordion('other-spaces')}
-                                className="w-full p-4 flex justify-between items-center text-xs font-bold uppercase tracking-wide text-neutral-800 bg-neutral-50/60 hover:bg-neutral-50 border-t border-neutral-100 cursor-pointer"
-                            >
-                                <span>What other spaces can I book on Kensington campus, Paddington, or in the CBD?</span>
-                                <span>{activeAccordion === 'other-spaces' ? '−' : '+'}</span>
-                            </button>
+                            <FaqButton id="other-spaces" icon="🏛️" label="What other spaces can I book on Kensington campus, Paddington, or in the CBD?" />
                             {activeAccordion === 'other-spaces' && (
                                 <div className="p-6 bg-white text-xs space-y-6 animate-in slide-in-from-top-1 duration-150 text-gray-600 font-normal leading-relaxed">
                                     <p className="text-gray-600 font-medium">
@@ -1095,44 +1007,14 @@ export default function EventFAQs() {
                                 </div>
                             )}
                         </div>
-
-                        {/* DO I NEED TO WRITE MY OWN RISK ASSESSMENT */}
-                        <div>
-                            <button
-                                type="button"
-                                onClick={() => toggleAccordion('riskAssessment')}
-                                className="w-full p-4 flex justify-between items-center text-xs font-bold uppercase tracking-wide text-neutral-800 bg-neutral-50/60 hover:bg-neutral-50 border-t border-neutral-100 cursor-pointer"
-                            >
-                                <span>Do I need to write my own risk assessment for an event in one of your spaces?</span>
-                                <span>{activeAccordion === 'riskAssessment' ? '−' : '+'}</span>
-                            </button>
-                            {activeAccordion === 'riskAssessment' && (
-                                <div className="p-6 bg-white text-xs space-y-4 animate-in slide-in-from-top-1 duration-150 text-neutral-600 font-normal leading-relaxed">
-                                    <p>
-                                        No, you do not need to create your own risk assessment for standard events hosted in our facilities.
-                                    </p>
-                                    <p>
-                                        We have an official UNSW risk assessment covering general events within the Michael Crouch Innovation Centre (MCIC) Event Spaces: <strong>Risk Assessment #1120290</strong>.
-                                    </p>
-                                    <p>
-                                        However, if your event involves high-power electrical gear, heavy staging, specialised machinery, or high-risk activities beyond standard event operations, please notify our team prior to your booking so safety compliance can be reviewed.
-                                    </p>
-                                </div>
-                            )}
-                        </div>
-
                         {/* 14. FIRST AID, SECURITY, EMERGENCY & SAFETY */}
-                        <div>
-                            <button
-                                type="button"
-                                onClick={() => toggleAccordion('security')}
-                                className="w-full p-4 flex justify-between items-center text-xs font-bold uppercase tracking-wide text-neutral-800 bg-neutral-50/60 hover:bg-neutral-50 border-t border-neutral-100 cursor-pointer"
-                            >
-                                <span>First Aid, Security, Emergency & Safety</span>
-                                <span>{activeAccordion === 'security' ? '−' : '+'}</span>
-                            </button>
+                        <div id="faq-security">
+                            <FaqButton id="security" icon="🩹" label="First Aid, Security, Emergency & Safety" />
                             {activeAccordion === 'security' && (
                                 <div className="p-6 bg-white text-xs space-y-5 animate-in slide-in-from-top-1 duration-150 text-neutral-700 font-medium leading-relaxed">
+                                    <p>
+                                        In an emergency, call UNSW Security on <a href="tel:0293856666" className="font-mono font-bold text-black underline">02 9385 6666</a>. Security will contact emergency services and escort them to the venue, because campus is hard for emergency services to navigate.
+                                    </p>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
                                         {/* FIRST AID, INJURY & EVACUATION PROCEDURES (LEFT COLUMN) */}
@@ -1198,10 +1080,19 @@ export default function EventFAQs() {
                                                     </div>
 
                                                     <div className="space-y-1.5 text-[11px]">
-                                                        <span className="font-bold text-neutral-900 block">Evacuation Process & Drills:</span>
                                                         <p className="text-neutral-700">
-                                                            Follow instructions on <strong>orange A3 posters</strong> displayed throughout the building. Annual drills are conducted to ensure safe exit.
+                                                            Alarms, evacuation, fire equipment, and the AED are shown on the{' '}
+                                                            <a href="/images/venues/hilmer-e10-ground-evacuation.jpg" target="_blank" rel="noopener noreferrer" className="font-bold text-black underline">
+                                                                Hilmer Building (E10) ground floor evacuation diagram
+                                                            </a>.
                                                         </p>
+                                                        <a href="/images/venues/hilmer-e10-ground-evacuation.jpg" target="_blank" rel="noopener noreferrer">
+                                                            <img
+                                                                src="/images/venues/hilmer-e10-ground-evacuation.jpg"
+                                                                alt="Hilmer Building (E10) ground floor evacuation diagram"
+                                                                className="mt-2 w-full rounded-xs border border-neutral-200"
+                                                            />
+                                                        </a>
                                                     </div>
                                                 </div>
 
@@ -1284,17 +1175,10 @@ export default function EventFAQs() {
                                     </div>
                                 </div>
                             )}
-
-                            {/* VENUE HIRE TERMS & CONDITIONS */}
+                        </div>
+                        {/* VENUE HIRE TERMS & CONDITIONS */}
                             <div>
-                                <button
-                                    type="button"
-                                    onClick={() => toggleAccordion('terms-conditions')}
-                                    className="w-full p-4 flex justify-between items-center text-xs font-bold uppercase tracking-wide text-neutral-800 bg-neutral-50/60 hover:bg-neutral-50 border-t border-neutral-100 cursor-pointer"
-                                >
-                                    <span>Venue Hire Terms & Conditions (T&Cs)</span>
-                                    <span>{activeAccordion === 'terms-conditions' ? '−' : '+'}</span>
-                                </button>
+                                <FaqButton id="terms-conditions" icon="📜" label="Venue Hire Terms & Conditions (T&Cs)" />
                                 {activeAccordion === 'terms-conditions' && (
                                     <div className="p-6 bg-white text-xs space-y-6 animate-in slide-in-from-top-1 duration-150 text-neutral-700 font-normal leading-relaxed">
 
@@ -1330,8 +1214,9 @@ export default function EventFAQs() {
                                                 <p><strong>1.1 Deposit:</strong> A deposit payment of 50% of the total hire charge is required upon booking to confirm and secure the space reservation.</p>
                                                 <p><strong>1.2 Balance Payment:</strong> The remaining 50% balance must be paid no later than 48 hours prior to the event commencement time upon receipt of a tax invoice.</p>
                                                 <p><strong>1.3 Failure to Pay:</strong> Failure to settle the deposit or final balance within the required timeframe grants UNSW Founders the right to cancel the booking.</p>
-                                                <p><strong>1.4 Cleaning & Reset Surcharges:</strong> If the Hired and Shared Areas are left disorderly, dirty, or requiring furniture resets after the booking window, UNSW Founders reserves the right to recover full cleaning costs at a minimum rate of $200 + GST.</p>
-                                                <p><strong>1.5 Casual Staffing Rates:</strong> Event support staff are billed at $50 per hour (minimum 3-hour shift for Mon–Sat; minimum 4-hour shift for Sundays and Public Holidays).</p>
+                                                <p><strong>1.4 Cleaning Surcharges:</strong>  If the Hired Areas are left disorderly or dirty after the booking window, UNSW Founders reserves the right to recover full cleaning costs at a minimum rate of $200 + GST.
+                                                </p>
+                                                <p><strong>1.5 Casual Staffing Rates:</strong> Event support staff are billed at $50 per hour. The minimum is 3 hours, or 4 hours on a weekend.</p>
                                                 <p><strong>1.6 Staff Overtime:</strong> Overtime beyond 8 hours is charged at 1.5x the base rate ($75/hr). Shifts exceeding 10 hours are charged at double time ($100/hr).</p>
                                             </div>
 
@@ -1373,7 +1258,7 @@ export default function EventFAQs() {
                                             <div className="space-y-1.5 border-b border-neutral-100 pb-4">
                                                 <h5 className="font-bold text-neutral-900 uppercase text-[10px] tracking-wide">SECTION 5. CATERING & ALCOHOL</h5>
                                                 <p><strong>5.1 Self-Service Catering:</strong> Hirers have full responsibility for organising food and beverages. All food and waste must be cleared away before departure. UNSW Founders reserves the right to reject third-party catering services deemed unsafe or damaging.</p>
-                                                <p><strong>5.2 Responsible Service of Alcohol (RSA):</strong> If alcohol is being served, the Hirer or designated server must hold a valid NSW RSA competency card submitted prior to the event. Alcohol must be served responsibly in accordance with NSW legislation. Alternatively, the Hirer may request and hire an RSA-certified UNSW Founders casual staff member at standard casual staffing rates ($50/hr, minimum shift requirements apply). Alcohol service will be refused or suspended if RSA requirements are unfulfilled or if minors are present.</p>
+                                                <p><strong>5.2 Responsible Service of Alcohol (RSA):</strong> If alcohol is being served, anyone supervising or serving it must hold a valid NSW RSA competency card. A photocopy of the card must be submitted to venue management before the event. Alcohol may be served by a dedicated bartender, who pours and hands out drinks, or from a gallery / self-service station, where drinks are set out and an RSA cardholder must still actively oversee the station. If the Hirer or their catering team do not hold an RSA card, or prefer not to manage service compliance, they may hire an RSA-certified UNSW Founders casual staff member at $50 per hour. The minimum is 3 hours, or 4 hours on a weekend. Hired staff oversee a gallery / self-service station. The Hirer remains responsible for providing all alcohol, serviceware, and ice, and for ensuring guests are of legal drinking age. Food and non-alcoholic drinks must be freely available whenever alcohol is served. Alcohol service will be refused or suspended if RSA documentation is missing, if minors are present without explicit prior safety arrangements, or if unsafe behaviour occurs.</p>
                                             </div>
 
                                             {/* SECTION 6 */}
@@ -1418,78 +1303,6 @@ export default function EventFAQs() {
                                 )}
                             </div>
 
-                            {/* SUPPLIERS */}
-                            <div>
-                                <button
-                                    type="button"
-                                    onClick={() => toggleAccordion('suppliers')}
-                                    className="w-full p-4 flex justify-between items-center text-xs font-bold uppercase tracking-wide text-neutral-800 bg-neutral-50/60 hover:bg-neutral-50 border-t border-neutral-100 cursor-pointer"
-                                >
-                                    <span className="text-xs font-black uppercase tracking-widest text-neutral-900">Suppliers we have seen in the space</span>
-                                    <span>{activeAccordion === 'suppliers' ? '−' : '+'}</span>
-                                </button>
-                                {activeAccordion === 'suppliers' && (
-                                    <div className="px-6 pb-6 text-sm text-neutral-700 space-y-4">
-                                        <p>These are suppliers other events at the centre have used. They are not endorsed, and you book them directly.</p>
-                                        <div>
-                                            <p className="font-bold text-neutral-900">Photographer / videographer</p>
-                                            <p>Cassandra Hannagan — <a className="underline" href="mailto:cass@cassandrahannagan.com">cass@cassandrahannagan.com</a></p>
-                                            <p>Ken Leanfore — <a className="underline" href="mailto:ken@kenleanfore.com">ken@kenleanfore.com</a></p>
-                                            <p>Nolan Verhij — <a className="underline" href="mailto:nolanverheij@gmail.com">nolanverheij@gmail.com</a></p>
-                                        </div>
-                                        <div>
-                                            <p className="font-bold text-neutral-900">Florist</p>
-                                            <p>Flowers by Zoe – Maria — <a className="underline" href="mailto:maria@flowersbyzoe.com.au">maria@flowersbyzoe.com.au</a></p>
-                                        </div>
-                                        <div>
-                                            <p className="font-bold text-neutral-900">Furniture supplier</p>
-                                            <p>Simply seated – Nicole — <a className="underline" href="mailto:nicolem@simplyseated.com.au">nicolem@simplyseated.com.au</a></p>
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* PREMIERE PRO TRANSCRIPT */}
-                            <div>
-                                <button
-                                    type="button"
-                                    onClick={() => toggleAccordion('premiere-transcript')}
-                                    className="w-full p-4 flex justify-between items-center text-xs font-bold uppercase tracking-wide text-neutral-800 bg-neutral-50/60 hover:bg-neutral-50 border-t border-neutral-100 cursor-pointer"
-                                >
-                                    <span>How to transcribe my event video recording</span>
-                                    <span>{activeAccordion === 'premiere-transcript' ? '−' : '+'}</span>
-                                </button>
-                                {activeAccordion === 'premiere-transcript' && (
-                                    <div className="p-6 bg-white text-xs space-y-4 animate-in slide-in-from-top-1 duration-150 text-neutral-700 font-normal leading-relaxed">
-                                        <p>
-                                            To generate a transcript in Adobe Premiere Pro, follow these steps using the built-in Speech-to-Text feature:
-                                        </p>
-                                        <ol className="list-decimal pl-4 space-y-3">
-                                            <li>
-                                                <strong className="text-neutral-900">Open the Text Panel:</strong> Go to the top menu and select <strong>Window &gt; Text</strong>.
-                                            </li>
-                                            <li>
-                                                <strong className="text-neutral-900">Access the Transcript Tab:</strong> In the newly opened Text panel, make sure you are on the <strong>Transcript</strong> tab.
-                                            </li>
-                                            <li>
-                                                <strong className="text-neutral-900">Initiate Transcription:</strong>
-                                                <ul className="list-disc pl-4 mt-2 space-y-2">
-                                                    <li>Click the blue <strong>Transcribe</strong> button (or <strong>Transcribe Sequence</strong> if working with a full timeline).</li>
-                                                    <li>If a dialogue box appears, choose your preferred settings, such as language, speaker labeling (to separate multiple speakers), and audio range.</li>
-                                                </ul>
-                                            </li>
-                                            <li>
-                                                <strong className="text-neutral-900">Generate:</strong> Click <strong>Transcribe</strong> to let Premiere Pro process the audio.
-                                            </li>
-                                        </ol>
-                                        <p>
-                                            Once finished, you can edit text directly by double-clicking words, use text-based editing to cut your video, turn the transcript into captions by clicking the <strong>CC</strong> button, or export the transcript as a text file by clicking the three-dot menu (<strong>… &gt; Export &gt; Export a text file</strong>).
-                                        </p>
-                                    </div>
-                                )}
-                            </div>
-
-                        </div>
                     </div>
                 </div>
 

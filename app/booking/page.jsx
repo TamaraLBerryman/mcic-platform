@@ -1,12 +1,165 @@
 "use client";
 
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
+import { deleteObject, getDownloadURL, ref, uploadBytes } from 'firebase/storage';
+import { storage } from '../lib/firebase';
+import { firebaseAuth } from '../lib/clientAuth';
+import { useAccess } from '../../components/useAccess';
 
 const BookingForm = dynamic(() => import('@/components/BookingForm'), {
     loading: () => <p className="text-sm text-neutral-500">Loading the booking form…</p>
 });
 
+
+function VirtualTour() {
+    const { access } = useAccess();
+    const fileRef = useRef(null);
+    const [tourVideoUrl, setTourVideoUrl] = useState('');
+    const [tourVideoPath, setTourVideoPath] = useState('');
+    const [busy, setBusy] = useState(false);
+    const [message, setMessage] = useState('');
+
+    useEffect(() => {
+        let cancelled = false;
+        fetch('/api/site')
+            .then((response) => response.json())
+            .then((data) => {
+                if (cancelled || !data.success) return;
+                setTourVideoUrl(data.tourVideoUrl || '');
+                setTourVideoPath(data.tourVideoPath || '');
+            })
+            .catch(() => {});
+        return () => {
+            cancelled = true;
+        };
+    }, []);
+
+    const saveTour = async (url, path) => {
+        const user = firebaseAuth().currentUser;
+        if (!user) throw new Error('Sign in with an admin email to change the tour video.');
+        const token = await user.getIdToken();
+        const response = await fetch('/api/site', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tourVideoUrl: url, tourVideoPath: path })
+        });
+        const data = await response.json();
+        if (!data.success) throw new Error(data.error || 'The tour video could not be saved.');
+        setTourVideoUrl(data.tourVideoUrl || '');
+        setTourVideoPath(data.tourVideoPath || '');
+    };
+
+    const uploadTour = async (file) => {
+        if (!file) return;
+        if (!file.type.startsWith('video/')) {
+            setMessage('Choose a video file.');
+            return;
+        }
+        setBusy(true);
+        setMessage('');
+        const previousPath = tourVideoPath;
+        try {
+            const safeName = file.name.replace(/[^\w.-]+/g, '-');
+            const path = `site/virtual-tour/${Date.now()}-${safeName}`;
+            const stored = ref(storage, path);
+            await uploadBytes(stored, file);
+            const url = await getDownloadURL(stored);
+            await saveTour(url, path);
+            if (previousPath && previousPath !== path) {
+                deleteObject(ref(storage, previousPath)).catch(() => {});
+            }
+        } catch (error) {
+            setMessage(error.message || 'The tour video could not be uploaded.');
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    const deleteTour = async () => {
+        if (!tourVideoUrl) return;
+        if (!window.confirm('Remove the virtual tour video?')) return;
+        setBusy(true);
+        setMessage('');
+        try {
+            if (tourVideoPath) await deleteObject(ref(storage, tourVideoPath)).catch(() => {});
+            await saveTour('', '');
+        } catch (error) {
+            setMessage(error.message || 'The tour video could not be removed.');
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    return (
+        <section className="md:col-span-5 bg-neutral-50 p-4 border border-gray-100 rounded-sm flex flex-col items-center justify-center space-y-3">
+            <div className="text-center">
+                <h3 className="text-xs font-black uppercase tracking-wider text-neutral-800">Virtual Tour</h3>
+                <p className="text-[11px] text-gray-500 mt-0.5">Explore the Michael Crouch Innovation Centre (MCIC)</p>
+            </div>
+            <div className="w-full max-w-[400px] aspect-[3/4] bg-neutral-900 border border-gray-200 rounded-sm overflow-hidden relative shadow-sm">
+                {tourVideoUrl ? (
+                    <video
+                        src={tourVideoUrl}
+                        controls
+                        playsInline
+                        className="w-full h-full object-cover"
+                    />
+                ) : access.admin ? (
+                    <button
+                        type="button"
+                        onClick={() => fileRef.current?.click()}
+                        disabled={busy}
+                        className="w-full h-full flex flex-col items-center justify-center gap-2 px-6 text-center text-white"
+                    >
+                        <span className="text-sm font-bold tracking-wide">Video Tour coming Soon</span>
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-[#EAD64D]">
+                            {busy ? 'Uploading…' : 'Click to upload'}
+                        </span>
+                    </button>
+                ) : (
+                    <div className="w-full h-full flex items-center justify-center px-6 text-center text-white">
+                        <span className="text-sm font-bold tracking-wide">Video Tour coming Soon</span>
+                    </div>
+                )}
+                {access.admin && tourVideoUrl && (
+                    <div className="absolute bottom-3 left-3 right-3 flex gap-2">
+                        <button
+                            type="button"
+                            onClick={() => fileRef.current?.click()}
+                            disabled={busy}
+                            className="flex-1 bg-black/80 text-[#EAD64D] text-[10px] font-bold uppercase tracking-wider py-2 rounded-sm"
+                        >
+                            {busy ? 'Working…' : 'Replace'}
+                        </button>
+                        <button
+                            type="button"
+                            onClick={deleteTour}
+                            disabled={busy}
+                            className="flex-1 bg-black/80 text-white text-[10px] font-bold uppercase tracking-wider py-2 rounded-sm"
+                        >
+                            Delete
+                        </button>
+                    </div>
+                )}
+            </div>
+            {message && <p className="text-xs font-semibold text-center">{message}</p>}
+            {access.admin && (
+                <input
+                    ref={fileRef}
+                    type="file"
+                    accept="video/*"
+                    className="hidden"
+                    onChange={(event) => {
+                        const file = event.target.files?.[0];
+                        event.target.value = '';
+                        uploadTour(file);
+                    }}
+                />
+            )}
+        </section>
+    );
+}
 
 export default function BookingPage() {
     const scrollToForm = () => {
@@ -56,24 +209,7 @@ export default function BookingPage() {
                     </header>
 
 
-                    {/* PORTRAIT VIDEO CONTAINER */}
-                    <section className="md:col-span-5 bg-neutral-50 p-4 border border-gray-100 rounded-sm flex flex-col items-center justify-center space-y-3">
-                        <div className="text-center">
-                            <h3 className="text-xs font-black uppercase tracking-wider text-neutral-800">Virtual Tour</h3>
-                            <p className="text-[11px] text-gray-500 mt-0.5">Explore the Michael Crouch Innovation Centre (MCIC)</p>
-                        </div>
-                        <div className="w-full max-w-[400px] aspect-[3/4] bg-black border border-gray-200 rounded-sm overflow-hidden relative group shadow-sm">
-                            <video
-                                src="https://assets.mixkit.co/videos/preview/mixkit-vertical-creative-agency-team-discussing-project-42994-large.mp4"
-                                controls
-                                playsInline
-                                loop
-                                muted
-                                className="w-full h-full object-cover"
-                                poster="/images/venues/event-space-1.JPG"
-                            />
-                        </div>
-                    </section>
+                    <VirtualTour />
                 </div>
 
 

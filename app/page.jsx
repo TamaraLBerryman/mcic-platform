@@ -94,7 +94,7 @@ export default function MasterHubPage() {
                             <span>Rapid Prototyping</span>
                         </div>
                         <h2 className="text-2xl font-extrabold tracking-tight text-black group-hover:text-neutral-700 transition-colors flex items-center gap-2">
-                            Makerspace <span className="text-sm font-normal text-gray-400">↗</span>
+                            MCIC Makerspace <span className="text-sm font-normal text-gray-400">↗</span>
                         </h2>
                         <p className="text-neutral-600 text-sm leading-relaxed">
                             Access 3D printers, laser cutters, and fabrication equipment.
@@ -126,7 +126,7 @@ export default function MasterHubPage() {
                     </div>
 
                     <div className="w-full bg-[#EAD64D] text-black text-center font-bold py-3.5 text-xs uppercase tracking-wider rounded-sm group-hover:bg-black group-hover:text-white transition-colors">
-                        Explore Upcoming Events ↗
+                        Explore UNSW Founders main site ↗
                     </div>
                 </a>
 

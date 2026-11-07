@@ -3,8 +3,9 @@
 // components/BookingForm.jsx
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import EventFAQs from '@/components/EventFAQs'; // <--- Import FAQ component
+import SignInPanel from '@/components/SignInPanel';
 import { db } from '../app/lib/firebase'; // <--- Use relative path to app/lib/firebase
 import { collection, getDocs } from 'firebase/firestore';
 import { calculateQuote, ROOM_INCLUSIONS } from '../app/lib/pricing'; // <--- Use relative path to app/lib/pricing
@@ -57,11 +58,13 @@ const SHARED_EQUIPMENT_MASTER_FALLBACK = [
 ];
 
 const CALENDAR_ROOMS = [
-    { name: 'Ground - Event Space', space: 'MCIC Ground - Event Space' },
-    { name: 'Ground - Design Space', space: 'MCIC Ground - Design Space' },
-    { name: 'Ground - Entire Space', space: 'MCIC Ground - Entire Space' },
-    { name: 'Level 1 - Founders Place', space: 'MCIC Level 1 - Founders Place' },
-    { name: 'Level 1 - Group Study', space: 'MCIC Level 1 - Group Study' }
+    { name: 'Entire Space', space: 'MCIC Ground - Entire Space' },
+    { name: 'Event Space', space: 'MCIC Ground - Event Space' },
+    { name: 'Design Space', space: 'MCIC Ground - Design Space' },
+    { name: 'Founders Place', space: 'MCIC Level 1 - Founders Place' },
+    { name: 'Group Study', space: 'MCIC Level 1 - Group Study' },
+    { name: 'Colonnade', space: 'MCIC Ground - Colonnade' },
+    { name: 'AI Makerspace', space: 'MCIC Ground - AI Makerspace - COMING SOON' }
 ];
 
 const addMinutesToTime = (time, minutes) => {
@@ -70,12 +73,53 @@ const addMinutesToTime = (time, minutes) => {
     return `${String(Math.floor(total / 60) % 24).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
 };
 
+function plainSpecText(value) {
+    return String(value || '').replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+}
+
+function specLineText(value) {
+    return String(value || '').replace(/<(?!\/?strong\b)[^>]+>/gi, '').replace(/\s+/g, ' ').trim();
+}
+
+function SpecRichText({ text }) {
+    const parts = String(text || '').split(/(<strong>[\s\S]*?<\/strong>)/gi).filter(Boolean);
+    return parts.map((part, index) => {
+        const bold = part.match(/^<strong>([\s\S]*?)<\/strong>$/i);
+        if (bold) return <strong key={index} className="font-bold text-black">{bold[1]}</strong>;
+        return <span key={index}>{part}</span>;
+    });
+}
+
+function spaceSpecBlocks(html) {
+    return String(html || '')
+        .split(/<br\s*\/?>\s*<br\s*\/?>/i)
+        .map((part) => part.trim())
+        .filter(Boolean)
+        .map((part) => {
+            const match = part.match(/^<strong>([\s\S]*?)<\/strong>\s*(?:<br\s*\/?>)?([\s\S]*)$/i);
+            const title = match ? match[1].replace(/:\s*$/, '').trim() : '';
+            const body = match ? match[2].trim() : part;
+            const lines = body
+                .split(/<br\s*\/?>/i)
+                .map((line) => line.trim().replace(/^[\u2022•]\s*/, ''))
+                .filter(Boolean)
+                .map((line) => {
+                    const item = line.match(/^<strong>([\s\S]*?)<\/strong>\s*([\s\S]*)$/i);
+                    if (!item) return { label: '', text: plainSpecText(line) };
+                    return { label: item[1].replace(/:\s*$/, '').trim(), text: specLineText(item[2]) };
+                })
+                .filter((line) => line.label || line.text);
+            return { title, lines };
+        });
+}
+
 export default function BookingForm() {
     const { access } = useAccess();
-    const router = useRouter();
+    const [signInOpen, setSignInOpen] = useState(false);
+    const [openFormAfterSignIn, setOpenFormAfterSignIn] = useState(false);
     const [showFullForm, setShowFullForm] = useState(false);
     const [showroomSpace, setShowroomSpace] = useState('MCIC Ground - Entire Space');
-    const [activePhotoIndex, setActivePhotoIndex] = useState(0);
+    const photoStripRef = useRef(null);
     const [departmentType, setDepartmentType] = useState('UNSW Founders');
     const [cateringAcknowledged, setCateringAcknowledged] = useState(false);
     const [cateringError, setCateringError] = useState(false);
@@ -96,6 +140,7 @@ export default function BookingForm() {
     const [seriesAvailability, setSeriesAvailability] = useState({ status: 'idle', byDate: null });
     const [lockoutNotice, setLockoutNotice] = useState('');
     const [slotWarning, setSlotWarning] = useState('');
+    const [ticketingEnabled, setTicketingEnabled] = useState(true);
     const selectionAnchorRef = useRef(null);
     const [activeAccordion, setActiveAccordion] = useState(null);
     const [layoutMode, setLayoutMode] = useState('workshop');
@@ -103,6 +148,19 @@ export default function BookingForm() {
     // DYNAMIC FIREBASE INVENTORY DATABASE STATE
     const [equipmentList, setEquipmentList] = useState([]);
     const [isLoadingEquipment, setIsLoadingEquipment] = useState(true);
+
+    useEffect(() => {
+        let cancelled = false;
+        fetch('/api/site')
+            .then((response) => response.json())
+            .then((data) => {
+                if (!cancelled && data.success) setTicketingEnabled(data.ticketing !== false);
+            })
+            .catch(() => {});
+        return () => {
+            cancelled = true;
+        };
+    }, []);
 
     // FETCH LIVE INVENTORY DIRECTLY FROM FIRESTORE
     useEffect(() => {
@@ -138,7 +196,7 @@ export default function BookingForm() {
     };
 
     const [formData, setFormData] = useState({
-        bookingIntent: "",
+        bookingIntent: "I know what space and date/time I want. I just want to check availability.",
         userType: 'Internal to UNSW',
         companyName: '',
         unswDivision: '',
@@ -297,13 +355,14 @@ export default function BookingForm() {
                 '/images/venues/full-space-12.JPG',
                 '/images/venues/full-space-13.JPG',
                 '/images/venues/full-space-14.JPG',
-                '/images/venues/full-space-15.JPG'
+                '/images/venues/full-space-15.JPG',
+                '/images/venues/full-space-16.JPG'
             ],
             description: `The Full Ground Floor Event Space. The concertina doors will be opened to combine the Event Space and Design Space to make the Entire Space.
 <br /><br />
 <strong>Capacity:</strong><br />
 • <strong>Lecture Style:</strong> 120 people maximum (There is more space but this is as many chairs as we have)<br />
-• <strong>Workshop Style:</strong> 100 people maximum<br /><br />
+• <strong>Workshop Style:</strong> 100 people maximum (if both Founders Place and the Entire Space are booked so tables in both spaces can be accessed). <strong>Otherwise</strong> the capacity is 70 maximum.<br /><br />
 <strong>Included Equipment & AV:</strong><br />
 • <strong>Microphones & Audio:</strong> 1 lectern with a built-in microphone, 4 wireless handheld microphones, 4 lapel microphones, and a surround sound system.<br />
 • <strong>Screens & Displays:</strong> 2 projector screens at the front of the room, 2 TV screens in the middle.<br />
@@ -318,21 +377,23 @@ export default function BookingForm() {
 • <strong>Tech:</strong> 6 iPads (for guest check-in or Slido Q&A) and 2 spare laptops (1 Mac, 1 PC), 1 handheld microphone connected only to a portable speaker.<br />
 • <strong>Recording:</strong> Fixed-camera video recording direct to SD Card or live to YouTube (you must have your own YouTube account).<br /><br />
 <strong>Bathrooms:</strong><br />
-This room does not have private bathrooms. The closest toilets are down the hallway in the main foyer and are shared publicly with students, staff, and the rest of the building.
+This room does not have private bathrooms. The closest toilets are in the main Ground Floor foyer and are shared publicly with students, staff, and the rest of the building.
 <br /><br />
 <strong>Emergency & Safety:</strong><br />
 • <strong>First Aid Kit:</strong> Hanging on the wall in the AV Cabinet.<br />
-• <strong>Defibrillator:</strong> Located in the Foyer on the Ground Floor of the building.<br />
-• <strong>Evacuation Routes:</strong> In the event of an emergency, exit through the glass doors and assemble on Alumni Lawn directly beside the room.<br />
-• <strong>Fire Extinguishers:</strong> Please report any incidents or safety hazards immediately to the Venue Staff Member.`
+`
         },
         'MCIC Ground - Event Space': {
             roomNumber: 'Room G26',
             imgs: [
                 '/images/venues/event-space-1.JPG',
-                '/images/venues/event-space-2.JPG'
+                '/images/venues/event-space-2.JPG',
+                '/images/venues/event-space-3.JPG',
+                '/images/venues/event-space-4.JPG',
+                '/images/venues/event-space-5.JPG',
+                '/images/venues/event-space-6.JPG',
             ],
-            description: `The front half of the Entire Space. The concertina doors will divide the Entire Space into two rooms (Event Space and Design Space). Booking the Event Space only gives you access to the front room / half the Entire Space.<br /><br />
+            description: `The front half of the Entire Space. The concertina doors will divide the Entire Space into two rooms (Event Space and Design Space). Booking the Event Space only gives you access to the front room / half the Entire Space.<br />
 If you wish to book the Entire Space, you must select that option or book both the Event and Design Spaces simultaneously.
 <br /><br />
 <strong>Capacity:</strong><br />
@@ -352,21 +413,16 @@ If you wish to book the Entire Space, you must select that option or book both t
 • <strong>Tech:</strong> 6 iPads (for guest check-in or Slido Q&A) and 2 spare laptops (1 Mac, 1 PC), 1 handheld microphone connected only to a portable speaker.<br />
 • <strong>Recording:</strong> Fixed-camera video recording direct to SD Card or live to YouTube (you must have your own YouTube account).<br /><br />
 <strong>Bathrooms:</strong><br />
-This room does not have private bathrooms. The closest toilets are down the hallway in the main foyer and are shared publicly with students, staff, and the rest of the building.
+This room does not have private bathrooms. The closest toilets are in the main Ground Floor foyer and are shared publicly with students, staff, and the rest of the building.
 <br /><br />
 <strong>Emergency & Safety:</strong><br />
 • <strong>First Aid Kit:</strong> Hanging on the wall in the AV Cabinet in the nextdoor room (Design Space).<br />
-• <strong>Defibrillator:</strong> Located in the Foyer on the Ground Floor of the building.<br />
-• <strong>Evacuation Routes:</strong> In the event of an emergency, exit through the glass doors and assemble on Alumni Lawn directly beside the room.<br />
-• <strong>Fire Extinguishers:</strong> Please report any incidents or safety hazards immediately to the Venue Staff Member.`
+`
         },
         'MCIC Ground - Design Space': {
             roomNumber: 'Room G22',
-            imgs: [
-                '/images/venues/event-space-3.JPG',
-                '/images/venues/event-space-4.JPG'
-            ],
-            description: `The back half of the Entire Space. The concertina doors will divide the Entire Space into two rooms (Event Space and Design Space). Booking the Design Space only gives you access to the back room / half the Entire Space.<br /><br />
+            imgs: [],
+            description: `The back half of the Entire Space. The concertina doors will divide the Entire Space into two rooms (Event Space and Design Space). Booking the Design Space only gives you access to the back room / half the Entire Space.<br />
 If you wish to book the Entire Space, you must select that option or book both the Event and Design Spaces simultaneously.<br /><br />
 <strong>Capacity:</strong><br />
 • <strong>Lecture Style:</strong> 50 people maximum<br />
@@ -382,13 +438,11 @@ If you wish to book the Entire Space, you must select that option or book both t
 • <strong>Tech:</strong> 6 iPads (for guest check-in or Slido Q&A) and 2 spare laptops (1 Mac, 1 PC), 1 handheld microphone connected only to a portable speaker.<br />
 • <strong>Recording:</strong> Fixed-camera video recording direct to SD Card or live to YouTube (you must have your own YouTube account).<br /><br />
 <strong>Bathrooms:</strong><br />
-This room does not have private bathrooms. The closest toilets are down the hallway in the main foyer and are shared publicly with students, staff, and the rest of the building.
+This room does not have private bathrooms. The closest toilets are in the main Ground Floor foyer and are shared publicly with students, staff, and the rest of the building.
 <br /><br />
 <strong>Emergency & Safety:</strong><br />
 • <strong>First Aid Kit:</strong> Hanging on the wall in the AV Cabinet.<br />
-• <strong>Defibrillator:</strong> Located in the Foyer on the Ground Floor of the building.<br />
-• <strong>Evacuation Routes:</strong> In the event of an emergency, exit through the glass doors and assemble on Alumni Lawn directly beside the room.<br />
-• <strong>Fire Extinguishers:</strong> Please report any incidents or safety hazards immediately to the Venue Staff Member.`
+`
         },
         'MCIC Level 1 - Founders Place': {
             roomNumber: 'Room 124',
@@ -396,7 +450,8 @@ This room does not have private bathrooms. The closest toilets are down the hall
                 '/images/venues/founders-place-1.JPG',
                 '/images/venues/founders-place-2.JPG',
                 '/images/venues/founders-place-3.JPG',
-                '/images/venues/founders-place-4.JPG'
+                '/images/venues/founders-place-4.JPG',
+                '/images/venues/founders-place-5.JPG',
             ],
             description: `An open room on Level 1. The space is most suited to workshop style events but also able to accommodate lecture/theatre style events.<br /><br />
 <strong>Capacity:</strong><br />
@@ -414,12 +469,10 @@ This room does not have private bathrooms. The closest toilets are down the hall
 • <strong>Tech:</strong> 6 iPads (for guest check-in or Slido Q&A), 2 spare laptops (1 Mac, 1 PC), 1 handheld microphone connected only to a portable speaker.<br />
 • <strong>Recording:</strong> Fixed-camera video recording direct to SD Card or live to YouTube (you must have your own YouTube account).<br /><br />
 <strong>Bathrooms:</strong><br />
-This room does not have private bathrooms. The closest toilets are down the hallway in the main foyer and are shared publicly with students, staff, and the rest of the building.<br /><br />
+This room does not have private bathrooms. The closest toilets are in the main Ground Floor foyer and are shared publicly with students, staff, and the rest of the building.<br /><br />
 <strong>Emergency & Safety:</strong><br />
 • <strong>First Aid Kit:</strong> Sitting on the red AV Cabinet.<br />
-• <strong>Defibrillator:</strong> Located in the Foyer on the Ground Floor of the building.<br />
-• <strong>Evacuation Routes:</strong> In the event of an emergency, proceed down the stairs to the Ground Floor, exit through the glass doors, and assemble on Alumni Lawn directly beside the building.<br />
-• <strong>Fire Extinguishers:</strong> Please report any incidents or safety hazards immediately to the Venue Staff Member.<br /><br />
+<br /><br />
 <strong>Please note:</strong> This room is an open design (no doors). While the hallway it backs onto is very quiet as it only leads to a few labs that do not run large classes and only students with certain access on their swipe card can access, it may not be appropriate for highly confidential or sensitive team meetings.`
         },
         'MCIC Level 1 - Group Study': {
@@ -429,7 +482,6 @@ This room does not have private bathrooms. The closest toilets are down the hall
                 '/images/venues/group-study-1.JPG'
             ],
             description: `Located directly in front of Founders Place, this is a completely open co-working space for Founders. From time to time it can be booked out, usually to house catering or breakout groups for events held in Founders Place, which is located directly next door.<br /><br />
-Not the most suitable for workshops and events.<br /><br />
 <strong>Capacity:</strong><br />
 • <strong>Lecture Style:</strong> 70 people maximum<br />
 • <strong>Workshop Style:</strong> 35 people maximum<br /><br />
@@ -443,29 +495,35 @@ Not the most suitable for workshops and events.<br /><br />
 • <strong>Tech:</strong> 6 iPads (for guest check-in or Slido Q&A), 2 spare laptops (1 Mac, 1 PC), 1 handheld microphone connected only to a portable speaker.<br />
 • <strong>Recording:</strong> Fixed-camera video recording direct to SD Card or live to YouTube (you must have your own YouTube account).<br /><br />
 <strong>Bathrooms:</strong><br />
-This room does not have private bathrooms. The closest toilets are down the hallway in the main foyer and are shared publicly with students, staff, and the rest of the building.<br /><br />
+This room does not have private bathrooms. The closest toilets are in the main Ground Floor foyer and are shared publicly with students, staff, and the rest of the building.<br /><br />
 <strong>Emergency & Safety:</strong><br />
 • <strong>First Aid Kit:</strong> Sitting on the red AV Cabinet nextdoor (in Founders Place).<br />
-• <strong>Defibrillator:</strong> Located in the Foyer on the Ground Floor of the building.<br />
-• <strong>Evacuation Routes:</strong> In the event of an emergency, proceed down the stairs to the Ground Floor, exit through the glass doors, and assemble on Alumni Lawn directly beside the building.<br />
-• <strong>Fire Extinguishers:</strong> Please report any incidents or safety hazards immediately to the Venue Staff Member.<br /><br />
+<br /><br />
 <strong>Please note:</strong> This room has no walls or doors. When not booked, it is used as a co-working space for Founders and a study space for Materials Science students.`
         },
         'MCIC Ground - Colonnade': {
             roomNumber: 'Ground Floor Outdoor Colonnade',
-            imgs: [
-                '/images/venues/colonnade-1.JPG',
-                '/images/venues/colonnade-2.JPG'
-            ],
-            description: `The covered outdoor Colonnade running along the Ground Floor of the Hilmer Building. Ideal for outdoor registration, pop-up exhibitions, catering setups, or stand-alone open air networking. It can be booked on its own or alongside an Event Space or Design Space booking.`
+            imgs: [],
+            description: `The covered outdoor Colonnade running along the Ground Floor of the Hilmer Building. Ideal for outdoor registration, pop-up exhibitions, catering setups, or stand-alone open air networking. It can be booked on its own or alongside an Event Space or Design Space booking.<br /><br />
+<strong>Other Equipment & AV (items are shared between all bookable rooms, availability is dependent on requirements of other bookings):</strong><br /><br />
+<strong>Bathrooms:</strong><br />
+This room does not have private bathrooms. The closest toilets are in the main Ground Floor foyer and are shared publicly with students, staff, and the rest of the building.
+<br /><br />
+<strong>Emergency & Safety:</strong><br />
+• <strong>First Aid Kit:</strong> Hanging on the wall in the AV Cabinet in the Design Space.<br />
+`
         },
         'MCIC Ground - AI Makerspace - COMING SOON': {
             roomNumber: 'Room G17',
-            imgs: [
-                '/images/venues/AI-1.JPG',
-                '/images/venues/AI-2.JPG'
-            ],
-            description: `Our AI Makerspace is a place to test and refine AI technologies. It includes workstations and a supercomputer for AI research and development.`
+            imgs: [],
+            description: `Our AI Makerspace is a place to test and refine AI technologies. It includes workstations and a supercomputer for AI research and development.<br /><br />
+<strong>Other Equipment & AV (items are shared between all bookable rooms, availability is dependent on requirements of other bookings):</strong><br /><br />
+<strong>Bathrooms:</strong><br />
+This room does not have private bathrooms. The closest toilets are in the main Ground Floor foyer and are shared publicly with students, staff, and the rest of the building.
+<br /><br />
+<strong>Emergency & Safety:</strong><br />
+• <strong>First Aid Kit:</strong> Hanging on the wall in the AV Cabinet in the Design Space.<br />
+`
         }
     };
 
@@ -802,25 +860,6 @@ This room does not have private bathrooms. The closest toilets are down the hall
         setFormData(prev => ({ ...prev, signature: '' }));
     };
 
-    const getSuggestedSpace = (count) => {
-        if (count <= 0) return { name: 'MCIC Ground - Design Space', note: 'Please enter attendee numbers below to calibrate recommendations.' };
-        if (count <= 40) return { name: 'MCIC Ground - Design Space', note: 'Ideal capacity match for collaborative workshops and smaller design focus tracks.' };
-        if (count <= 120) return { name: 'MCIC Ground - Event Space', note: 'Best fit for presentations, pitch networks, and medium panel streams.' };
-        return { name: 'MCIC Ground - Entire Space', note: 'Sized to accommodate high-volume campus hackathons or large multi-zone exhibitions.' };
-    };
-
-    const localActiveSuggestedContext = getSuggestedSpace(formData.attendees);
-
-    useEffect(() => {
-        if (formData.bookingIntent === "I am flexible on date/time and space. I'd like to see all my options.") {
-            const calculatedSpace = getSuggestedSpace(formData.attendees);
-            setFormData(prev => {
-                if (prev.space === calculatedSpace.name) return prev;
-                return { ...prev, space: calculatedSpace.name };
-            });
-        }
-    }, [formData.attendees, formData.bookingIntent]);
-
     const handleDeptTypeChange = (type) => {
         setDepartmentType(type);
         if (type === 'UNSW Founders') {
@@ -832,7 +871,7 @@ This room does not have private bathrooms. The closest toilets are down the hall
 
     const updateSpaceSelection = (spaceName) => {
         setShowroomSpace(spaceName);
-        setActivePhotoIndex(0);
+        photoStripRef.current?.scrollTo({ left: 0 });
         const supportsColonnadeAddon = ['MCIC Ground - Event Space', 'MCIC Ground - Design Space', 'MCIC Ground - Entire Space'].includes(spaceName);
 
         setFormData(prev => ({
@@ -1058,15 +1097,15 @@ This room does not have private bathrooms. The closest toilets are down the hall
             riskDetails: formData.isHighRisk ? formData.riskDetails : '',
             involvesControversialTopics: formData.involvesControversialTopics,
             securityDetails: formData.involvesControversialTopics ? formData.securityDetails : '',
-            postToPublicDirectory: formData.postToPublicDirectory,
-            ticketing: {
+            postToPublicDirectory: ticketingEnabled ? formData.postToPublicDirectory : false,
+            ticketing: ticketingEnabled ? {
                 method: formData.ticketingMethod,
                 externalTicketUrl: formData.ticketingMethod === 'external' ? formData.externalTicketUrl : '',
                 ticketBannerName: formData.ticketBannerName,
                 maxTicketCapacity: formData.maxTicketCapacity,
                 ticketTiers: formData.ticketingMethod === 'internal' ? formData.ticketTiers : []
-            },
-            emailReminders: formData.ticketingMethod === 'internal'
+            } : { method: 'none', externalTicketUrl: '', ticketBannerName: '', maxTicketCapacity: 0, ticketTiers: [] },
+            emailReminders: ticketingEnabled && formData.ticketingMethod === 'internal'
                 ? normalizeEmailReminders({
                     enabled: formData.emailRemindersEnabled,
                     reminders: emailReminders.map(reminder => ({
@@ -1153,13 +1192,56 @@ This room does not have private bathrooms. The closest toilets are down the hall
         return value === "I know what space and date/time I want. I just want to check availability.";
     };
 
-    const triggerRevealAllQuestions = () => {
+    const revealBookingForm = () => {
         setShowFullForm(true);
         setTimeout(() => {
             const targetBlock = document.getElementById('rest-of-form-marker');
             if (targetBlock) targetBlock.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }, 150);
     };
+
+    const triggerRevealAllQuestions = () => {
+        if (!access.signedIn) {
+            setOpenFormAfterSignIn(true);
+            setSignInOpen(true);
+            return;
+        }
+        revealBookingForm();
+    };
+
+    const finishSignIn = () => {
+        setSignInOpen(false);
+        if (openFormAfterSignIn) {
+            setOpenFormAfterSignIn(false);
+            revealBookingForm();
+        }
+    };
+
+    useEffect(() => {
+        const openSignIn = () => setSignInOpen(true);
+        window.addEventListener('mcic-open-signin', openSignIn);
+        return () => window.removeEventListener('mcic-open-signin', openSignIn);
+    }, []);
+
+    useEffect(() => {
+        if (!signInOpen) return undefined;
+        const onKey = (event) => {
+            if (event.key === 'Escape') setSignInOpen(false);
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [signInOpen]);
+
+    useEffect(() => {
+        if (!access.signedIn || typeof window === 'undefined') return;
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('form') !== '1') return;
+        setShowFullForm(true);
+        const timer = setTimeout(() => {
+            document.getElementById('rest-of-form-marker')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 150);
+        return () => clearTimeout(timer);
+    }, [access.signedIn]);
 
     const getDynamicWeekDays = (startDate) => {
         return Array.from({ length: 7 }, (_, i) => {
@@ -1309,14 +1391,6 @@ This room does not have private bathrooms. The closest toilets are down the hall
                     <input type="number" min="0" placeholder="0" value={formData.attendees || ''} onChange={(e) => setFormData(prev => ({ ...prev, attendees: parseInt(e.target.value) || 0 }))} className="w-full p-3 border border-gray-200 bg-white text-sm text-black font-medium rounded-sm outline-none" />
                 </div>
             </div>
-
-            {!isCalendarOption(formData.bookingIntent) && formData.attendees > 0 && (
-                <div className="p-4 bg-neutral-900 text-white rounded-sm border border-neutral-800 space-y-1">
-                    <span className="text-[9px] font-black tracking-widest text-white uppercase block">Suggested Target Allocation</span>
-                    <h4 className="text-xs font-bold">Recommended: {localActiveSuggestedContext.name}</h4>
-                    <p className="text-[11px] text-neutral-400 font-normal leading-normal">{localActiveSuggestedContext.note}</p>
-                </div>
-            )}
 
             {/* SPACE SELECTOR & STANDALONE + ADD-ON COLONNADE LOGIC */}
             <div className="p-5 bg-neutral-50 border border-gray-200 rounded-sm space-y-4">
@@ -2158,8 +2232,8 @@ This room does not have private bathrooms. The closest toilets are down the hall
                 <div className="flex flex-col gap-3 border-b border-gray-200 pb-4">
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                         <div>
-                            <h3 className="text-2xl font-black text-black tracking-tight">Six bookable Event Spaces</h3>
-                            <p className="text-xs text-neutral-400 font-medium mt-1">Click any event space to view images, specs, and inclusions.</p>
+                            <h3 className="text-2xl font-black text-black tracking-tight">Bookable Spaces</h3>
+                            <p className="text-xs text-neutral-400 font-medium mt-1">Click any space to view images, specs, and inclusions.</p>
                         </div>
                         <div className="flex flex-wrap gap-1 md:justify-end">
                             {Object.keys(venueShowroom).map((spaceName) => (
@@ -2178,56 +2252,193 @@ This room does not have private bathrooms. The closest toilets are down the hall
                     </div>
                 </div>
 
-                <section className="bg-white border border-gray-200 rounded-sm shadow-sm overflow-hidden grid grid-cols-1 md:grid-cols-12">
-                    <div className="md:col-span-4 bg-neutral-900 p-4 flex flex-col justify-between space-y-4 items-center">
-                        <div className="bg-neutral-800 rounded-sm overflow-hidden relative aspect-[3/4] max-w-[400px] w-full flex items-center justify-center">
-                            <img
-                                src={venueShowroom[showroomSpace]?.imgs[activePhotoIndex] || '/images/venues/event-space-1.JPG'}
-                                alt={`${showroomSpace} view ${activePhotoIndex + 1}`}
-                                className="w-full h-full object-cover"
-                            />
-                            <div className="absolute bottom-3 right-3 bg-black/70 backdrop-blur-sm text-white px-2 py-1 text-[10px] uppercase font-mono tracking-widest rounded-sm">
-                                Photo {activePhotoIndex + 1} of {venueShowroom[showroomSpace]?.imgs.length}
+                <section className="bg-white border border-gray-200 rounded-sm shadow-sm overflow-hidden">
+                    {(() => {
+                        const photos = venueShowroom[showroomSpace]?.imgs || [];
+                        if (!photos.length) {
+                            return (
+                                <div className="bg-neutral-900 text-white h-56 sm:h-72 flex items-center justify-center px-6">
+                                    <p className="text-sm font-bold tracking-wide">Images coming soon</p>
+                                </div>
+                            );
+                        }
+                        const scrollPhotos = (direction) => {
+                            const strip = photoStripRef.current;
+                            const card = strip?.querySelector('[data-photo]');
+                            if (!strip || !card) return;
+                            strip.scrollBy({ left: direction * (card.offsetWidth + 12), behavior: 'smooth' });
+                        };
+                        return (
+                            <div className="relative bg-neutral-100">
+                                <div
+                                    ref={photoStripRef}
+                                    className="flex gap-3 overflow-x-auto scroll-smooth snap-x snap-mandatory px-12 py-4 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+                                >
+                                    {photos.map((src, index) => (
+                                        <img
+                                            key={src}
+                                            data-photo
+                                            src={src}
+                                            alt={`${showroomSpace} view ${index + 1}`}
+                                            className="h-72 sm:h-80 lg:h-[22rem] w-auto aspect-[3/4] object-cover snap-start shrink-0 rounded-sm bg-neutral-200"
+                                        />
+                                    ))}
+                                </div>
+                                {photos.length > 1 && (
+                                    <>
+                                        <button
+                                            type="button"
+                                            aria-label="Previous photo"
+                                            onClick={() => scrollPhotos(-1)}
+                                            className="absolute left-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black/75 text-white flex items-center justify-center hover:bg-black"
+                                        >
+                                            <svg viewBox="0 0 20 20" className="w-5 h-5" aria-hidden="true">
+                                                <path d="M12.5 4.5 7 10l5.5 5.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                                            </svg>
+                                        </button>
+                                        <button
+                                            type="button"
+                                            aria-label="Next photo"
+                                            onClick={() => scrollPhotos(1)}
+                                            className="absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black/75 text-white flex items-center justify-center hover:bg-black"
+                                        >
+                                            <svg viewBox="0 0 20 20" className="w-5 h-5" aria-hidden="true">
+                                                <path d="M7.5 4.5 13 10l-5.5 5.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                                            </svg>
+                                        </button>
+                                    </>
+                                )}
                             </div>
-                        </div>
+                        );
+                    })()}
 
-                        <div className="w-full max-w-[320px] space-y-2">
-                            <div className="text-[10px] text-neutral-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
-                                <span>📸</span> Viewport perspective:
-                            </div>
-                            <div className="flex gap-2 overflow-x-auto pb-2">
-                                {venueShowroom[showroomSpace]?.imgs.map((photoUrl, idx) => (
-                                    <button
-                                        key={idx}
-                                        type="button"
-                                        onClick={() => setActivePhotoIndex(idx)}
-                                        className={`w-12 aspect-[3/4] rounded-sm overflow-hidden bg-neutral-800 border-2 flex-shrink-0 transition-all duration-150 hover:scale-[1.03] ${activePhotoIndex === idx
-                                            ? 'border-yellow-400 opacity-100 scale-[0.95]'
-                                            : 'border-transparent opacity-40 hover:opacity-100'
-                                            }`}
-                                    >
-                                        <img src={photoUrl} alt="Thumbnail preview" className="w-full h-full object-cover pointer-events-none" />
-                                    </button>
-                                ))}
-                            </div>
+                    <div className="px-6 py-6 md:px-8 md:py-7 bg-white border-t border-gray-100 space-y-6">
+                        <div>
+                            <p className="text-[10px] font-bold uppercase tracking-wider text-neutral-400">
+                                {venueShowroom[showroomSpace]?.roomNumber || showroomSpace}
+                            </p>
+                            <h4 className="text-2xl font-extrabold tracking-tight text-black mt-1">
+                                {showroomSpace.replace('MCIC Ground - ', '').replace('MCIC Level 1 - ', '')}
+                            </h4>
                         </div>
-                    </div>
-
-                    <div className="md:col-span-8 p-6 flex flex-col bg-white border-t md:border-t-0 md:border-l border-gray-100">
-                        <div className="space-y-4">
-                            <div>
-                                <span className="text-[9px] font-black tracking-widest text-neutral-400 uppercase">
-                                    {venueShowroom[showroomSpace]?.roomNumber || showroomSpace}
-                                </span>
-                                <h4 className="text-xl font-black tracking-tight text-black mt-0.5">
-                                    {showroomSpace.replace('MCIC Ground - ', '').replace('MCIC Level 1 - ', '')}
-                                </h4>
-                            </div>
-                            <div
-                                className="text-xs text-gray-600 leading-relaxed font-normal space-y-2 [&_strong]:text-neutral-900"
-                                dangerouslySetInnerHTML={{ __html: venueShowroom[showroomSpace]?.description }}
-                            />
-                        </div>
+                        {(() => {
+                            const blocks = spaceSpecBlocks(venueShowroom[showroomSpace]?.description);
+                            const untitled = blocks.filter((block) => !block.title);
+                            const intro = untitled.length ? { title: '', lines: untitled.flatMap((block) => block.lines) } : null;
+                            const note = blocks.find((block) => /please note/i.test(block.title));
+                            const included = blocks.find((block) => /included equipment/i.test(block.title));
+                            const hasSharedEquipment = blocks.some((block) => /other equipment/i.test(block.title));
+                            const sideOrder = [/capacity/i, /bathroom/i, /emergency/i];
+                            const side = blocks
+                                .filter((block) => block.title && block !== note && block !== included && !/other equipment/i.test(block.title))
+                                .sort((a, b) => {
+                                    const rank = (title) => {
+                                        const index = sideOrder.findIndex((pattern) => pattern.test(title));
+                                        return index === -1 ? sideOrder.length : index;
+                                    };
+                                    return rank(a.title) - rank(b.title);
+                                });
+                            const emergencyInLeftColumn = showroomSpace === 'MCIC Ground - Entire Space' || showroomSpace === 'MCIC Ground - Event Space';
+                            const renderBlock = (block) => {
+                                const noteBlock = /please note/i.test(block.title);
+                                const includedBlock = /included equipment/i.test(block.title);
+                                const emergency = /emergency/i.test(block.title);
+                                const lines = emergency
+                                    ? block.lines.filter((line) => /^first aid kit$/i.test(line.label))
+                                    : block.lines;
+                                if (block.sharedOnly) {
+                                    return (
+                                        <section key="shared-equipment" className="border border-neutral-200 rounded-sm p-4">
+                                            <h5 className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-neutral-800 mb-3">
+                                                <span className="w-2 h-2 shrink-0 bg-[#EAD64D]" />
+                                                Shared equipment
+                                            </h5>
+                                            <p className="text-sm leading-relaxed text-neutral-600">
+                                                These items are shared across the bookable rooms, and what is free depends on the other bookings that day.{' '}
+                                                <Link href="/inventory" className="font-bold text-black underline decoration-2 decoration-[#EAD64D] underline-offset-4">
+                                                    View the inventory
+                                                </Link>.
+                                            </p>
+                                        </section>
+                                    );
+                                }
+                                return (
+                                    <section key={block.title || 'intro'} className={block.title ? 'border border-neutral-200 rounded-sm p-4' : ''}>
+                                        {block.title && (
+                                            <h5 className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-neutral-800 mb-3">
+                                                <span className={`w-2 h-2 shrink-0 ${noteBlock ? 'bg-black' : 'bg-[#EAD64D]'}`} />
+                                                {block.title}
+                                            </h5>
+                                        )}
+                                        {noteBlock ? (
+                                            <p className="text-sm leading-relaxed text-neutral-700 border-l-2 border-[#EAD64D] pl-3">
+                                                {lines.map((line) => line.text).filter(Boolean).join(' ')}
+                                            </p>
+                                        ) : (
+                                            <div className={!block.title ? 'space-y-2' : 'divide-y divide-neutral-100'}>
+                                                {lines.map((line, lineIndex) => (
+                                                    <div key={lineIndex} className={!block.title ? '' : 'py-2.5'}>
+                                                        {line.label && (
+                                                            <p className="text-xs font-bold uppercase tracking-wide text-black">{line.label}</p>
+                                                        )}
+                                                        {line.text && (
+                                                            <p className={`leading-relaxed ${line.label ? 'text-sm text-neutral-600 mt-0.5' : 'text-sm text-neutral-600'}`}><SpecRichText text={line.text} /></p>
+                                                        )}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                        {includedBlock && hasSharedEquipment && (
+                                            <p className="text-sm leading-relaxed text-neutral-600 mt-4 pt-4 border-t border-neutral-100">
+                                                <span className="block text-xs font-bold uppercase tracking-wide text-black mb-1">Shared equipment</span>
+                                                These items are shared across the bookable rooms, and what is free depends on the other bookings that day.{' '}
+                                                <Link href="/inventory" className="font-bold text-black underline decoration-2 decoration-[#EAD64D] underline-offset-4">
+                                                    View the inventory
+                                                </Link>.
+                                            </p>
+                                        )}
+                                        {emergency && (
+                                            <p className="text-sm leading-relaxed text-neutral-600 mt-3">
+                                                In an emergency, see{' '}
+                                                <a
+                                                    href="#faq-security"
+                                                    onClick={() => {
+                                                        if (window.location.hash === '#faq-security') {
+                                                            window.dispatchEvent(new HashChangeEvent('hashchange'));
+                                                        }
+                                                    }}
+                                                    className="font-bold text-black underline decoration-2 decoration-[#EAD64D] underline-offset-4"
+                                                >
+                                                    First Aid, Security, Emergency & Safety
+                                                </a>.
+                                            </p>
+                                        )}
+                                    </section>
+                                );
+                            };
+                            const besideEquipment = side.filter((block) => !/emergency/i.test(block.title));
+                            const emergency = side.find((block) => /emergency/i.test(block.title));
+                            const leftColumn = emergencyInLeftColumn ? [...besideEquipment, emergency].filter(Boolean) : besideEquipment;
+                            const sharedSection = !included && hasSharedEquipment ? { title: 'Shared equipment', lines: [], sharedOnly: true } : null;
+                            const rightColumn = included || sharedSection;
+                            return (
+                                <div className="space-y-8">
+                                    {intro && renderBlock(intro)}
+                                    {(leftColumn.length > 0 || rightColumn) && (
+                                        <div className="grid grid-cols-1 gap-y-8 md:grid-cols-2 md:gap-x-12 md:items-start">
+                                            <div className="contents md:flex md:flex-col md:gap-8">
+                                                {leftColumn[0] && renderBlock(leftColumn[0])}
+                                                {rightColumn && <div className="md:hidden">{renderBlock(rightColumn)}</div>}
+                                                {leftColumn.slice(1).map(renderBlock)}
+                                            </div>
+                                            {rightColumn && <div className="hidden md:block">{renderBlock(rightColumn)}</div>}
+                                        </div>
+                                    )}
+                                    {emergency && !emergencyInLeftColumn && renderBlock(emergency)}
+                                    {note && renderBlock(note)}
+                                </div>
+                            );
+                        })()}
                     </div>
                 </section>
             </div>
@@ -2240,59 +2451,14 @@ This room does not have private bathrooms. The closest toilets are down the hall
                     <div className="bg-neutral-900 text-white p-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                         <div>
                             <h2 className="text-xl font-extrabold tracking-tight uppercase">Booking Expression of Interest Form</h2>
-                        </div>
-                        <div className="text-[11px] font-medium text-neutral-400 max-w-xs leading-normal sm:text-right">
-                            Select an option below to initiate space selection or calendar checking.
-                        </div>
-                    </div>
+                        </div>                    </div>
 
                     <div className="px-8 pb-8 pt-2 space-y-6">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    setFormData(prev => ({
-                                        ...prev,
-                                        bookingIntent: "I know what space and date/time I want. I just want to check availability."
-                                    }));
-                                }}
-                                className={`p-6 text-left border-2 rounded-sm transition-all duration-200 flex flex-col justify-center min-h-[120px] outline-none ${formData.bookingIntent === "I know what space and date/time I want. I just want to check availability."
-                                    ? 'bg-neutral-50 border-black text-black font-extrabold shadow-sm'
-                                    : 'bg-white border-neutral-200 text-neutral-800 hover:border-neutral-400 font-semibold'
-                                    }`}
-                            >
-                                <span className="text-sm tracking-tight leading-snug">
-                                    I know what space and/or date/time I want to book. I am just here to check availability.
-                                </span>
-                            </button>
-
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    setFormData(prev => ({
-                                        ...prev,
-                                        bookingIntent: "I am flexible on date/time and space. I'd like to see all my options."
-                                    }));
-                                    setShowFullForm(true);
-                                }}
-                                className={`p-6 text-left border-2 rounded-sm transition-all duration-200 flex flex-col justify-center min-h-[120px] outline-none ${formData.bookingIntent === "I am flexible on date/time and space. I'd like to see all my options."
-                                    ? 'bg-neutral-50 border-black text-black font-extrabold shadow-sm'
-                                    : 'bg-white border-neutral-200 text-neutral-800 hover:border-neutral-400 font-semibold'
-                                    }`}
-                            >
-                                <span className="text-sm tracking-tight leading-snug">
-                                    I am flexible on date/time and space. I'd like to see all my options.
-                                </span>
-                            </button>
-                        </div>
-
-                        {formData.bookingIntent && (
-                            <div className="space-y-6 pt-4 border-t border-dashed border-neutral-200 animate-in fade-in duration-300">
-                                {isCalendarOption(formData.bookingIntent) ? (
-                                    <div className="p-5 border border-neutral-200 bg-neutral-50/50 rounded-sm space-y-4">
+                        <div className="space-y-6">
+                            <div className="p-5 border border-neutral-200 bg-neutral-50/50 rounded-sm space-y-4">
                                         <div className="flex flex-col lg:flex-row lg:justify-between lg:items-center gap-4">
                                             <div className="flex items-center gap-3">
-                                                <h4 className="text-sm font-black uppercase tracking-tight text-black">Live Calendar</h4>
+                                                <h4 className="text-sm font-black uppercase tracking-tight text-black">Live Availability</h4>
                                                 <input
                                                     type="date"
                                                     value={`${selectedCalendarDate.getFullYear()}-${String(selectedCalendarDate.getMonth() + 1).padStart(2, '0')}-${String(selectedCalendarDate.getDate()).padStart(2, '0')}`}
@@ -2318,6 +2484,26 @@ This room does not have private bathrooms. The closest toilets are down the hall
                                                 )}
                                             </div>
                                         </div>
+
+                                        {(calendarNotice || slotWarning || lockoutNotice || lockoutWeekNotes.length > 0) && (
+                                            <div className="space-y-1">
+                                                {calendarNotice && (
+                                                    <p className="text-xs font-bold text-amber-800">{calendarNotice}</p>
+                                                )}
+                                                {slotWarning && (
+                                                    <p className="text-xs font-bold text-red-700">{slotWarning}</p>
+                                                )}
+                                                {lockoutWeekNotes.length > 0 && (
+                                                    <p className="text-xs font-bold text-amber-800">Dates in lockout are held so Founders Program Managers have first access to space bookings.</p>
+                                                )}
+                                                {lockoutWeekNotes.map(note => (
+                                                    <p key={note} className="text-xs font-bold text-amber-800">{note}</p>
+                                                ))}
+                                                {lockoutNotice && (
+                                                    <p className="text-xs font-bold text-rose-800">{lockoutNotice}</p>
+                                                )}
+                                            </div>
+                                        )}
 
                                         <div className="flex items-center justify-between gap-2 bg-neutral-100 p-1 rounded-sm border border-neutral-200">
                                             <button type="button" onClick={handlePrevWeek} className="p-1.5 text-xs font-black bg-white border border-neutral-300 rounded-sm hover:bg-neutral-50">←</button>
@@ -2350,26 +2536,11 @@ This room does not have private bathrooms. The closest toilets are down the hall
                                             </div>
                                             <button type="button" onClick={handleNextWeek} className="p-1.5 text-xs font-black bg-white border border-neutral-300 rounded-sm hover:bg-neutral-50">→</button>
                                         </div>
-                                        {lockoutWeekNotes.length > 0 && (
-                                            <p className="text-xs font-bold text-amber-800">Dates in lockout are held so Founders Program Managers have first access to space bookings.</p>
-                                        )}
-                                        {lockoutWeekNotes.map(note => (
-                                            <p key={note} className="text-xs font-bold text-amber-800">{note}</p>
-                                        ))}
-                                        {lockoutNotice && (
-                                            <p className="text-xs font-bold text-rose-800">{lockoutNotice}</p>
-                                        )}
 
                                         <div className="p-3.5 bg-neutral-900 text-white font-bold rounded-xs text-xs">
-                                            Select a start time, then another time in the same room. Every slot between them is selected, including when you hold <kbd className="bg-neutral-800 px-1 rounded-sm border border-neutral-700 text-[10px] font-mono">Shift</kbd> from the start to the end. Booked times cannot sit in the middle.
+                                            Select all time slots you would like to book. Selecting start and end times automatically selects all in between.
                                             <br />Note: You can only book one room at a time.
                                         </div>
-                                        {calendarNotice && (
-                                            <p className="text-xs font-bold text-amber-800">{calendarNotice}</p>
-                                        )}
-                                        {slotWarning && (
-                                            <p className="text-xs font-bold text-red-700">{slotWarning}</p>
-                                        )}
                                         {selectedSlots.length > 0 && (
                                             <p className="text-xs font-bold text-neutral-800">
                                                 {selectedSlots.length} adjacent {selectedSlots.length === 1 ? 'slot' : 'slots'} selected, {formData.bumpIn} to {formData.bumpOut}.
@@ -2477,11 +2648,7 @@ This room does not have private bathrooms. The closest toilets are down the hall
                                                             <p className="text-xs font-bold text-neutral-600">Checking each date against the room calendar…</p>
                                                         )}
                                                         {!seriesPlan?.invalidEnd && seriesAvailability.status === 'error' && (
-                                                            <div className="space-y-1">
-                                                                <p className="text-xs font-bold text-amber-800">
-                                                                    {calendarNotice || 'Live availability could not be loaded, so booked times may not appear.'} Future dates are not shown as available.
-                                                                </p>
-                                                                <ul className="space-y-1">
+                                                            <div className="space-y-1">                                                                <ul className="space-y-1">
                                                                     {(seriesPlan?.dates || []).map(date => (
                                                                         <li key={date} className="text-xs text-neutral-600">
                                                                             {formatBookingDate(date, true)} — availability could not be checked
@@ -2529,12 +2696,12 @@ This room does not have private bathrooms. The closest toilets are down the hall
                                         ) : (
                                         <div className="border border-gray-200 rounded-sm bg-white shadow-sm overflow-hidden">
                                             <div className="overflow-x-auto overflow-y-auto max-h-[480px]">
-                                                <table className="w-full text-left border-collapse min-w-[750px]">
+                                                <table className="w-full table-fixed text-left border-collapse">
                                                     <thead>
                                                         <tr className="bg-neutral-900 text-white text-[10px] font-black uppercase tracking-wider border-b border-neutral-800 sticky top-0 z-20">
-                                                            <th className="p-3 w-1/6 bg-neutral-900 sticky left-0 z-30">Timeline</th>
+                                                            <th className="p-2 w-16 bg-neutral-900 sticky left-0 z-30">Time</th>
                                                             {mockCalendarData.rooms.map((room) => (
-                                                                <th key={room.name} className="p-3 text-center border-l border-neutral-800">
+                                                                <th key={room.name} className="p-2 text-center border-l border-neutral-800 whitespace-normal leading-tight">
                                                                     {room.name}
                                                                 </th>
                                                             ))}
@@ -2543,7 +2710,7 @@ This room does not have private bathrooms. The closest toilets are down the hall
                                                     <tbody className="divide-y divide-gray-100 font-medium text-xs">
                                                         {mockCalendarData.timeSlots.map((slot) => (
                                                             <tr key={slot} className="hover:bg-neutral-50/50 transition-colors">
-                                                                <td className="p-3 font-mono font-bold text-neutral-800 tracking-tight bg-white sticky left-0 z-10 border-r border-neutral-100">
+                                                                <td className="p-2 font-mono font-bold text-neutral-800 tracking-tight bg-white sticky left-0 z-10 border-r border-neutral-100">
                                                                     {slot}
                                                                 </td>
                                                                 {mockCalendarData.rooms.map((room) => {
@@ -2553,7 +2720,7 @@ This room does not have private bathrooms. The closest toilets are down the hall
                                                                     const isCurrentlySelected = selectedSlots.includes(compositeSlotKey);
 
                                                                     return (
-                                                                        <td key={room.name} className="p-1 text-center border-l border-gray-100 min-w-[120px]">
+                                                                        <td key={room.name} className="p-1 text-center border-l border-gray-100">
                                                                             {!isBlocked ? (
                                                                                 <button
                                                                                     type="button"
@@ -2591,45 +2758,22 @@ This room does not have private bathrooms. The closest toilets are down the hall
                                             </button>
                                         </div>
                                     </div>
-                                ) : (
-                                    <div className="pt-4 border-t border-neutral-200 text-center sm:text-left">
-                                        <p className="text-xs text-neutral-800 font-bold uppercase tracking-wide">Tell us about your event</p>
-                                        <p className="text-[11px] text-neutral-400 font-medium mt-0.5">
-                                            Complete the details below to see space recommendation availability.
-                                        </p>
-                                    </div>
-                                )}
+                                </div>
                             </div>
-                        )}
-                    </div>
                 </section>
 
                 {showFullForm && (
                     <div id="rest-of-form-marker" className="space-y-12 animate-in fade-in duration-300">
-                        {isCalendarOption(formData.bookingIntent) ? (
-                            <>
-                                {renderAffiliationSection()}
-                                {renderEventDetailsSection()}
-                                {renderTimesAndRunsheetSection()}
-                                {renderAvAndEquipmentSection()}
-                                {renderCateringSection()}
-                                {renderRiskAssessmentSection()}
-                                {renderContactDetailsSection()}
-                            </>
-                        ) : (
-                            <>
-                                {renderEventDetailsSection()}
-                                {renderTimesAndRunsheetSection()}
-                                {renderAffiliationSection()}
-                                {renderAvAndEquipmentSection()}
-                                {renderCateringSection()}
-                                {renderRiskAssessmentSection()}
-                                {renderContactDetailsSection()}
-                            </>
-                        )}
+                        {renderAffiliationSection()}
+                        {renderEventDetailsSection()}
+                        {renderTimesAndRunsheetSection()}
+                        {renderAvAndEquipmentSection()}
+                        {renderCateringSection()}
+                        {renderRiskAssessmentSection()}
+                        {renderContactDetailsSection()}
 
                         {/* SECTION: TICKETING SETUP */}
-                        <section className="bg-white p-8 border border-gray-200 rounded-sm shadow-sm space-y-6">
+                        {ticketingEnabled && <section className="bg-white p-8 border border-gray-200 rounded-sm shadow-sm space-y-6">
                             <h3 className="text-lg font-extrabold tracking-tight uppercase text-black border-b border-neutral-100 pb-2">
                                 Ticketing & Public Directory
                             </h3>
@@ -2835,7 +2979,7 @@ This room does not have private bathrooms. The closest toilets are down the hall
                                     </div>
                                 )}
                             </div>
-                        </section>
+                        </section>}
 
                         {/* SECTION: EVENT SUPPORT & FOCUS */}
                         <section className="bg-white p-8 border border-gray-200 rounded-sm shadow-sm space-y-6">
@@ -2873,7 +3017,7 @@ This room does not have private bathrooms. The closest toilets are down the hall
                                         Would you like to book a casual staff member for event support?
                                     </label>
                                     <p className="text-[11px] text-neutral-500">
-                                        Casual staff members are available at $50/hr (3-hour minimum block) to assist with room setup, AV, and guest check-in.
+                                        Casual staff members are available at $50 per hour. The minimum is 3 hours, or 4 hours on a weekend. They can assist with room setup, AV, and guest check-in.
                                     </p>
                                     <div className="flex gap-4 max-w-xs pt-1">
                                         {['Yes', 'No'].map((choice) => (
@@ -3345,11 +3489,27 @@ This room does not have private bathrooms. The closest toilets are down the hall
                                 Submit Booking Hold Request
                             </button>
                         ) : (
-                            <a href="/login?next=/booking" className="block w-full bg-black text-white font-extrabold py-5 text-sm uppercase tracking-widest rounded-sm text-center">Sign in to see the quote and submit</a>
+                            <button type="button" onClick={() => { setOpenFormAfterSignIn(false); setSignInOpen(true); }} className="block w-full bg-black text-white font-extrabold py-5 text-sm uppercase tracking-widest rounded-sm text-center">Sign in to see the quote and submit</button>
                         )}
                     </div>
                 )}
             </form>
+            {signInOpen && (
+                <div
+                    className="fixed inset-0 z-[80] bg-black/50 flex items-start justify-center overflow-y-auto px-4 py-10"
+                    onClick={() => setSignInOpen(false)}
+                >
+                    <div
+                        className="w-full max-w-lg"
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="signin-title"
+                        onClick={(event) => event.stopPropagation()}
+                    >
+                        <SignInPanel onSuccess={finishSignIn} onClose={() => setSignInOpen(false)} />
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

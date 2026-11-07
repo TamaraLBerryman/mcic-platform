@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { addDoc, collection, deleteDoc, doc, getDoc, onSnapshot, setDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { firebaseAuth, sendMagicLink, watchAuth } from '../lib/clientAuth';
+import { firebaseAuth, watchAuth } from '../lib/clientAuth';
 import { allows, ACCESS_GROUPS } from '../lib/access';
 import { useAccess } from '../../components/useAccess';
 import Gate from '../../components/Gate';
@@ -269,6 +269,9 @@ function AdminDashboardPage() {
     const [publishedLayout, setPublishedLayout] = useState(DEFAULT_DESK_LAYOUT);
     const [layoutMessage, setLayoutMessage] = useState('');
     const [layoutBusy, setLayoutBusy] = useState(false);
+    const [ticketing, setTicketing] = useState(true);
+    const [ticketingBusy, setTicketingBusy] = useState(false);
+    const [ticketingMessage, setTicketingMessage] = useState('');
 
     const [applications, setApplications] = useState([]);
     const [registrations, setRegistrations] = useState([]);
@@ -425,8 +428,52 @@ function AdminDashboardPage() {
     };
 
     useEffect(() => {
+        let cancelled = false;
+        fetch('/api/site')
+            .then((response) => response.json())
+            .then((data) => {
+                if (!cancelled && data.success) setTicketing(data.ticketing !== false);
+            })
+            .catch(() => {});
+        return () => {
+            cancelled = true;
+        };
+    }, []);
+
+    const toggleTicketing = async () => {
+        const user = firebaseAuth().currentUser;
+        if (!user) {
+            setTicketingMessage('Sign in with an admin email to change ticketing.');
+            return;
+        }
+        setTicketingBusy(true);
+        setTicketingMessage('');
+        try {
+            const token = await user.getIdToken();
+            const response = await fetch('/api/site', {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ticketing: !ticketing })
+            });
+            const data = await response.json();
+            if (!data.success) {
+                setTicketingMessage(data.error || 'Ticketing could not be changed.');
+                return;
+            }
+            setTicketing(data.ticketing !== false);
+            setTicketingMessage(data.ticketing === false
+                ? 'Ticketing is off. The booking form no longer asks for tickets, and Attend our Events is off the menu.'
+                : 'Ticketing is back on.');
+        } catch (error) {
+            setTicketingMessage(error.message || 'Ticketing could not be changed.');
+        } finally {
+            setTicketingBusy(false);
+        }
+    };
+
+    useEffect(() => {
         if (!accessReady) return;
-        const levels = { reporting: 'admin', coworking: 'admin', inventory: 'admin', database: 'founders', casuals: 'admin', access: 'admin' };
+        const levels = { reporting: 'admin', coworking: 'admin', inventory: 'admin', database: 'founders', casuals: 'admin', access: 'admin', pages: 'admin' };
         if (!allows(access, levels[activeTab] || 'admin')) setActiveTab('database');
     }, [accessReady, access, activeTab]);
 
@@ -478,12 +525,7 @@ function AdminDashboardPage() {
             return;
         }
         setAccessPeople(data.people || []);
-        try {
-            await sendMagicLink(accessEmail);
-            setAccessNotice(`Saved. A sign-in link was emailed to ${accessEmail}.`);
-        } catch (error) {
-            setAccessNotice(`Saved. The sign-in email was not sent: ${error.message}`);
-        }
+        setAccessNotice(`Saved ${accessEmail}. They sign in with that email and a password they choose.`);
         setAccessEmail('');
     };
 
@@ -1017,10 +1059,28 @@ function AdminDashboardPage() {
     return (
         <main className="min-h-screen bg-[#F9F9F9] text-black font-sans antialiased selection:bg-[#EAD64D]">
             <div className="max-w-7xl mx-auto px-6 sm:px-12 py-10 space-y-8">
-                <header className="bg-white p-6 sm:p-8 border border-gray-200 rounded-sm shadow-xs">
+                <header className="bg-white p-6 sm:p-8 border border-gray-200 rounded-sm shadow-xs space-y-4">
                     <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight text-black">
                         MCIC Admin Dashboard
                     </h1>
+                    {access.admin && (
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-3 pt-2">
+                            <button
+                                type="button"
+                                onClick={toggleTicketing}
+                                disabled={ticketingBusy}
+                                className="px-4 py-3 text-xs font-bold uppercase tracking-wider bg-black text-[#EAD64D] rounded-sm disabled:opacity-50"
+                            >
+                                {ticketing ? 'Turn off ticketing' : 'Turn ticketing back on'}
+                            </button>
+                            <p className="text-sm text-gray-600">
+                                {ticketing
+                                    ? 'Ticket setup is on the booking form, and Attend our Events is in the menu.'
+                                    : 'Ticket setup is hidden, and Attend our Events is off the menu.'}
+                            </p>
+                        </div>
+                    )}
+                    {ticketingMessage && <p className="text-sm font-semibold">{ticketingMessage}</p>}
                 </header>
 
                 <div className="flex flex-wrap gap-2 border-b border-gray-200 pb-3">
@@ -1030,7 +1090,8 @@ function AdminDashboardPage() {
                         { id: 'inventory', label: 'Inventory', level: 'admin' },
                         { id: 'database', label: 'Database', level: 'founders' },
                         { id: 'casuals', label: 'Casual staff', level: 'admin' },
-                        { id: 'access', label: 'Access', level: 'admin' }
+                        { id: 'access', label: 'Access', level: 'admin' },
+                        { id: 'pages', label: 'All pages', level: 'admin' }
                     ].filter((tab) => allows(access, tab.level)).map((tab) => (
                         <button
                             key={tab.id}
@@ -1046,11 +1107,98 @@ function AdminDashboardPage() {
                     ))}
                 </div>
 
+                {activeTab === 'pages' && (
+                    <section className="bg-white border border-gray-200 rounded-sm p-6 space-y-6">
+                        <div>
+                            <h2 className="text-xl font-extrabold uppercase">All pages</h2>
+                            <p className="text-sm text-gray-600">Every page on the site, so nothing is only reachable if you remember the address.</p>
+                        </div>
+                        {[
+                            {
+                                title: 'Public',
+                                pages: [
+                                    ['/', 'Home'],
+                                    ['/booking', 'Book an event space'],
+                                    ['/events', 'Attend our events'],
+                                    ['/events/SLUG', 'One event'],
+                                    ['/coworking', 'Startup access and coworking'],
+                                    ['/coworking/desk/KEY', 'Hot desk check-in'],
+                                    ['/coworking/desk/KEY/print', 'Hot desk QR print'],
+                                    ['/boards/spaces', 'Spaces today'],
+                                    ['/inventory', 'Inventory'],
+                                    ['/borrow/ITEM', 'Borrow an item'],
+                                    ['/OnTheDay', 'On the day'],
+                                    ['/contact', 'Contact'],
+                                    ['/doorbell', 'Lobby doorbell'],
+                                    ['/ticket/CODE', 'Guest ticket']
+                                ]
+                            },
+                            {
+                                title: 'Any signed-in account',
+                                pages: [
+                                    ['/my-bookings', 'My bookings'],
+                                    ['/my-bookings/ID', 'One booking'],
+                                    ['/login', 'Sign in']
+                                ]
+                            },
+                            {
+                                title: 'Founders general staff and Admin',
+                                pages: [
+                                    ['/casuals', 'Book casual staff'],
+                                    ['/events/list', 'List an off-site event'],
+                                    ['/boards', 'Event countdown'],
+                                    ['/casuals/approve', 'Approve casual hours'],
+                                    ['/admin', 'Admin, Database tab']
+                                ]
+                            },
+                            {
+                                title: 'Casual staff and Admin',
+                                pages: [
+                                    ['/casuals/available', 'Shift availability'],
+                                    ['/casuals/hours', 'My shifts']
+                                ]
+                            },
+                            {
+                                title: 'Founders, casuals, and Admin',
+                                pages: [
+                                    ['/kitchen', 'Kitchen search'],
+                                    ['/lockers', 'Lockers'],
+                                    ['/timesheets', 'Timesheets'],
+                                    ['/inventory/add', 'Add an inventory item'],
+                                    ['/events/SLUG/door', 'Door check-in, also open to that event’s organiser']
+                                ]
+                            },
+                            {
+                                title: 'Admin',
+                                pages: [
+                                    ['/admin', 'Reporting, coworking, inventory, casuals, access, and this list'],
+                                    ['/admin/approve', 'Approve a booking'],
+                                    ['/admin/changes', 'Review a booking change'],
+                                    ['/admin/listings', 'Review an off-site listing'],
+                                    ['/admin/runsheet', 'Old runsheet address, opens this dashboard'],
+                                    ['/events/SLUG/guests', 'Guest list, also open to the booker']
+                                ]
+                            }
+                        ].map((group) => (
+                            <div key={group.title} className="space-y-2">
+                                <h3 className="text-xs font-black uppercase tracking-wider">{group.title}</h3>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                    {group.pages.map(([href, label]) => (
+                                        <a key={href + label} href={href} className="border border-gray-200 p-3 text-sm hover:border-black">
+                                            <span className="block font-bold">{label}</span>
+                                            <span className="text-xs text-gray-500">{href}</span>
+                                        </a>
+                                    ))}
+                                </div>
+                            </div>
+                        ))}
+                    </section>
+                )}
                 {activeTab === 'access' && (
                     <section className="bg-white border border-gray-200 rounded-sm p-6 space-y-4">
                         <div>
                             <h2 className="text-xl font-extrabold uppercase">Access</h2>
-                            <p className="text-sm text-gray-600">Add an email to Admin, Founders general staff, or Casual staff. They get a sign-in link. Anyone else can create their own account from the sign-in page and is treated as Others.</p>
+                            <p className="text-sm text-gray-600">Add an email to Admin, Founders general staff, or Casual staff. They sign in with that email and a password they choose. Anyone else can create their own account from the sign-in page and is treated as Others.</p>
                         </div>
                         {accessNotice && <p className="text-sm font-semibold">{accessNotice}</p>}
                         <form onSubmit={saveAccess} className="flex flex-col sm:flex-row gap-2">
@@ -1058,7 +1206,7 @@ function AdminDashboardPage() {
                             <select value={accessGroup} onChange={(event) => setAccessGroup(event.target.value)} className="p-2 border border-gray-200 rounded-sm text-sm">
                                 {ACCESS_GROUPS.map((group) => <option key={group.id} value={group.id}>{group.label}</option>)}
                             </select>
-                            <button type="submit" className="px-3 py-2 text-[10px] font-bold uppercase tracking-wider bg-black text-[#EAD64D] rounded-sm">Add and email sign-in link</button>
+                            <button type="submit" className="px-3 py-2 text-[10px] font-bold uppercase tracking-wider bg-black text-[#EAD64D] rounded-sm">Add</button>
                         </form>
                         <div className="space-y-2 text-sm">
                             {accessPeople.length === 0 && <p className="text-gray-500">No one has been added yet. Emails in the server admin list still have admin access.</p>}
@@ -1071,7 +1219,7 @@ function AdminDashboardPage() {
                         </div>
                         <div className="space-y-2 text-sm border-t border-gray-200 pt-4">
                             <h3 className="font-extrabold uppercase">Signed-in accounts</h3>
-                            <p className="text-gray-600">These are people who have opened a sign-in link. The login itself stays in Firebase Authentication. Others appear here after they create their own account.</p>
+                            <p className="text-gray-600">These are people who have signed in with email and password. The login itself stays in Firebase Authentication. Others appear here after they create their own account.</p>
                             {accessAccounts.length === 0 && <p className="text-gray-500">No one has signed in yet.</p>}
                             {accessAccounts.map((account) => (
                                 <p key={account.email} className="border border-gray-200 p-3">

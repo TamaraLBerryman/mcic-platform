@@ -5,12 +5,13 @@
 export const MAX_SERIES_OCCURRENCES = 52;
 
 export const BOOKABLE_SPACES = [
+    'MCIC Ground - Entire Space',
     'MCIC Ground - Event Space',
     'MCIC Ground - Design Space',
-    'MCIC Ground - Entire Space',
-    'MCIC Ground - Colonnade',
     'MCIC Level 1 - Founders Place',
-    'MCIC Level 1 - Group Study'
+    'MCIC Level 1 - Group Study',
+    'MCIC Ground - Colonnade',
+    'MCIC Ground - AI Makerspace - COMING SOON'
 ];
 
 export function isSiteVenue(space) {

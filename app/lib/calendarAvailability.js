@@ -7,7 +7,8 @@ const ROOMS = [
     'MCIC Ground - Design Space',
     'MCIC Level 1 - Founders Place',
     'MCIC Level 1 - Group Study',
-    'MCIC Ground - Colonnade'
+    'MCIC Ground - Colonnade',
+    'MCIC Ground - AI Makerspace - COMING SOON'
 ];
 
 export const MAX_AVAILABILITY_DATES = 52;
