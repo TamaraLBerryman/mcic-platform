@@ -1,4 +1,5 @@
-import { setTicketing, setTourVideo, siteSettings } from '../../lib/siteSettings';
+import { setPageHidden, setTicketing, setTourVideo, siteSettings } from '../../lib/siteSettings';
+import { canHidePage } from '../../lib/sitePages';
 import { emailFromRequest, hasAdminAccess } from '../../lib/verifyUser';
 
 export async function GET() {
@@ -17,11 +18,17 @@ export async function POST(request) {
             return Response.json({ success: false, error: 'Sign in with an admin email to change ticketing.' }, { status: 403 });
         }
         const body = await request.json();
-        if (!('ticketing' in body) && !('tourVideoUrl' in body)) {
+        if (!('ticketing' in body) && !('tourVideoUrl' in body) && !('path' in body)) {
             return Response.json({ success: false, error: 'Nothing to update.' }, { status: 400 });
         }
         if ('ticketing' in body) await setTicketing(body.ticketing);
         if ('tourVideoUrl' in body) await setTourVideo(body.tourVideoUrl, body.tourVideoPath);
+        if ('path' in body) {
+            if (!canHidePage(body.path)) {
+                return Response.json({ success: false, error: 'That page stays available.' }, { status: 400 });
+            }
+            await setPageHidden(body.path, body.hidden !== false);
+        }
         return Response.json({ success: true, ...(await siteSettings()) });
     } catch (error) {
         return Response.json({ success: false, error: error.message || 'Site settings could not be saved.' }, { status: error.status || 500 });

@@ -7,24 +7,50 @@ import Link from 'next/link';
 import EventFAQs from '@/components/EventFAQs'; // <--- Import FAQ component
 import SignInPanel from '@/components/SignInPanel';
 import { db } from '../app/lib/firebase'; // <--- Use relative path to app/lib/firebase
-import { collection, getDocs } from 'firebase/firestore';
-import { calculateQuote, ROOM_INCLUSIONS } from '../app/lib/pricing'; // <--- Use relative path to app/lib/pricing
-import { OUTSIDE_WORK_HOURS_LABEL, WORK_HOURS_LABEL } from '../app/lib/workingHours';
-import { blankExtraReminder, buildDefaultReminders, mergeReminderDrafts, normalizeEmailReminders } from '../app/lib/eventReminders';
+import { collection, doc, getDocs, onSnapshot } from 'firebase/firestore';
+import { calculateQuote, hirePriceText, ROOM_INCLUSIONS } from '../app/lib/pricing'; // <--- Use relative path to app/lib/pricing
+import { blankExtraReminder, buildDefaultReminders, mergeReminderDrafts } from '../app/lib/eventReminders';
 import { CASUAL_STAFF_LIST, MAX_CASUAL_QUANTITY, casualQuantityFromInput, casualShiftQuantity, emptyCasualShift } from '../app/lib/casualStaff';
+import { requiredCasualShiftsForHolds } from '../app/lib/workingHours';
 import { useAccess } from './useAccess';
+import { authFetch } from '../app/lib/clientAuth';
 import {
     MAX_SERIES_OCCURRENCES,
     bookingWindowForDate,
     buildSeriesDates,
     formatBookingDate,
     isFoundersBooker,
+    isRepeatingPattern,
     isUnswStaff,
     localDateString,
     lockoutMessage,
     lockoutSummary,
     partitionSeriesDates
 } from '../app/lib/bookingRules';
+
+function applyRequiredCasualShifts(rows, required) {
+    const current = Array.isArray(rows) && rows.length ? rows : [emptyCasualShift()];
+    const extras = current.filter((row) => !row.forced && (row.shiftStart || row.shiftEnd || row.tasks || row.preferredStaff));
+    if (!required.length) {
+        const kept = current.filter((row) => !row.forced);
+        return kept.length ? kept : [emptyCasualShift()];
+    }
+    const forced = required.map((shift) => {
+        const existing = current.find((row) => row.forced && row.forceKey === shift.forceKey);
+        return {
+            preferredStaff: existing?.preferredStaff || '',
+            quantity: existing?.quantity || 1,
+            shiftStart: shift.shiftStart,
+            shiftEnd: shift.shiftEnd,
+            tasks: existing?.tasks || shift.tasks,
+            date: shift.date,
+            forced: true,
+            forceKey: shift.forceKey,
+            kind: shift.kind
+        };
+    });
+    return [...forced, ...extras];
+}
 
 const generate24HoursTimeSlots = () => {
     const slots = [];
@@ -34,6 +60,48 @@ const generate24HoursTimeSlots = () => {
     }
     return slots;
 };
+
+function slotEdgeLabel(times, slot, holdName) {
+    if (!times?.length || !times.includes(slot)) return null;
+    const ordered = [...times].sort();
+    let edge = '';
+    if (slot === ordered[0]) edge = 'Bump in';
+    else if (ordered.length > 1 && slot === ordered[ordered.length - 1]) edge = 'Bump out';
+    else return '';
+    return holdName ? `${edge} (${holdName})` : edge;
+}
+
+function minutesFromTime(time) {
+    const [hours, mins] = String(time || '00:00').split(':').map(Number);
+    return (hours * 60) + mins;
+}
+
+function timeFromMinutes(total) {
+    const minutes = ((total % (24 * 60)) + (24 * 60)) % (24 * 60);
+    return `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
+}
+
+function guestTimesForWindow(bumpIn, bumpOut) {
+    const start = minutesFromTime(bumpIn);
+    let end = minutesFromTime(bumpOut);
+    if (end <= start) end += 24 * 60;
+    const length = end - start;
+    if (length > 60) {
+        return { eventStart: timeFromMinutes(start + 30), eventEnd: timeFromMinutes(end - 30) };
+    }
+    if (length > 30) {
+        return { eventStart: timeFromMinutes(start + 30), eventEnd: bumpOut };
+    }
+    return { eventStart: bumpIn, eventEnd: bumpOut };
+}
+
+function continuousSlotRange(allSlots, fromSlot, toSlot) {
+    const startIndex = allSlots.indexOf(fromSlot);
+    const endIndex = allSlots.indexOf(toSlot);
+    if (startIndex < 0 || endIndex < 0) return null;
+    const [from, to] = startIndex <= endIndex ? [startIndex, endIndex] : [endIndex, startIndex];
+    return allSlots.slice(from, to + 1);
+}
 
 const SHARED_EQUIPMENT_MASTER_FALLBACK = [
     { key: 'handheldMics', label: 'Handheld Microphones', category: 'Shared AV', totalHubStock: 4 },
@@ -67,11 +135,58 @@ const CALENDAR_ROOMS = [
     { name: 'AI Makerspace', space: 'MCIC Ground - AI Makerspace - COMING SOON' }
 ];
 
+const COLONNADE_SPACES = ['MCIC Ground - Event Space', 'MCIC Ground - Design Space', 'MCIC Ground - Entire Space'];
+
 const addMinutesToTime = (time, minutes) => {
     const [hours, mins] = time.split(':').map(Number);
     const total = (hours * 60) + mins + minutes;
     return `${String(Math.floor(total / 60) % 24).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
 };
+
+const WORKSHOP_RUNSHEET = [
+    { time: '', layout: 'Workshop Style/Group Tables', description: 'Organiser access & setup' },
+    { time: '', layout: 'Workshop Style/Group Tables', description: 'Session 1' },
+    { time: '', layout: 'Workshop Style/Group Tables', description: 'Catering Break' },
+    { time: '', layout: 'Workshop Style/Group Tables', description: 'Session 2' },
+    { time: '', layout: 'Workshop Style/Group Tables', description: 'Bump-out packdown' }
+];
+
+function copyScheduleRows(rows) {
+    return rows.map(row => ({ ...row }));
+}
+
+function defaultScheduleRows(type) {
+    if (type === 'tour') {
+        return [{ time: '', layout: 'No specific layout required (e.g. for a tour or walkthrough)', description: 'Cohort facility walkthrough and site overview.' }];
+    }
+    if (type === 'delegation') {
+        return [
+            { time: '', layout: 'Boardroom Style', description: 'Organiser arrives to setup' },
+            { time: '', layout: 'Boardroom Style', description: 'Delegation arrival, welcome & tea, coffee available' },
+            { time: '', layout: 'Boardroom Style', description: 'Formalities' },
+            { time: '', layout: 'Boardroom Style', description: 'Guests Depart' },
+            { time: '', layout: 'Boardroom Style', description: 'Organiser cleanup and lock-up' }
+        ];
+    }
+    if (type === 'lecture') {
+        return [
+            { time: '', layout: 'Lecture/Theatre Style', description: 'Arrive & setup room' },
+            { time: '', layout: 'Lecture/Theatre Style', description: 'AV Check & panel arrive' },
+            { time: '', layout: 'Lecture/Theatre Style', description: 'Guests arrive' },
+            { time: '', layout: 'Lecture/Theatre Style', description: 'Panel discussion and Q&A' },
+            { time: '', layout: 'Clear Open Floor', description: 'Catering & Networking' },
+            { time: '', layout: 'Clear Open Floor', description: 'Event ends / guests depart' },
+            { time: '', layout: 'Clear Open Floor', description: 'Packup and lock doors' }
+        ];
+    }
+    return copyScheduleRows(WORKSHOP_RUNSHEET);
+}
+
+function inclusionsForSpace(space) {
+    const name = String(space || '');
+    if (name.includes('Colonnade') || name.includes('AI Makerspace')) return [];
+    return ROOM_INCLUSIONS[space] || [];
+}
 
 function plainSpecText(value) {
     return String(value || '').replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
@@ -127,9 +242,11 @@ export default function BookingForm() {
     const [conductError, setConductError] = useState(false);
     const signatureCanvasRef = useRef(null);
     const signatureDrawing = useRef(false);
-    const [selectedSlots, setSelectedSlots] = useState([]);
+    const [bookingHolds, setBookingHolds] = useState([]);
+    const [activeHoldIndex, setActiveHoldIndex] = useState(0);
     const [wantsMultipleHolds, setWantsMultipleHolds] = useState(false);
-    const [extraHolds, setExtraHolds] = useState([]);
+    const [inventoryExpanded, setInventoryExpanded] = useState(false);
+    const [timingNote, setTimingNote] = useState('');
     const [recurrence, setRecurrence] = useState({
         pattern: 'none',
         interval: 1,
@@ -142,7 +259,7 @@ export default function BookingForm() {
     const [slotWarning, setSlotWarning] = useState('');
     const [ticketingEnabled, setTicketingEnabled] = useState(true);
     const selectionAnchorRef = useRef(null);
-    const [activeAccordion, setActiveAccordion] = useState(null);
+    const scheduleEditMarked = useRef(false);
     const [layoutMode, setLayoutMode] = useState('workshop');
 
     // DYNAMIC FIREBASE INVENTORY DATABASE STATE
@@ -183,11 +300,16 @@ export default function BookingForm() {
         fetchFirestoreInventory();
     }, []);
 
-    const [runsheetRows, setRunsheetRows] = useState([
-        { time: '', layout: 'Workshop Style/Group Tables', description: 'Organiser access & setup' }
-    ]);
+    const [runsheetRows, setRunsheetRows] = useState(() => copyScheduleRows(WORKSHOP_RUNSHEET));
+    const [savedSchedule, setSavedSchedule] = useState(() => ({
+        template: 'workshop',
+        rows: copyScheduleRows(WORKSHOP_RUNSHEET)
+    }));
+    const [scheduleHistory, setScheduleHistory] = useState([]);
+    const [savedRsa, setSavedRsa] = useState(null);
 
     const [liveBusySlots, setLiveBusySlots] = useState({});
+    const [busyByDate, setBusyByDate] = useState({});
     const [calendarNotice, setCalendarNotice] = useState('');
 
     const isSlotBlockedByCalendar = (roomName, timeSlot) => {
@@ -204,7 +326,7 @@ export default function BookingForm() {
         isDelegation: false,
         isHighRisk: false,
         riskDetails: '',
-        involvesControversialTopics: false,
+        involvesControversialTopics: null,
         securityDetails: '',
         eventName: '',
         attendees: 0,
@@ -225,7 +347,7 @@ export default function BookingForm() {
 
         useRegistrationPortal: false,
         hasOwnRegistrationPortal: false,
-        sameAsMain: true,
+        sameAsMain: null,
         mainContact: { name: '', email: '', phone: '' },
         onDayContact: { name: '', email: '', phone: '' },
         space: 'MCIC Ground - Event Space',
@@ -238,21 +360,18 @@ export default function BookingForm() {
         // GENERAL HIRER SUPPORT QUESTIONS
         isInnovationOrEntrepreneurship: null,
         wantsCasualStaff: null,
-        needsJudgeHelp: null,
+        anythingElse: '',
         isWeekend: false,
-        servicewarePreference: '',
         foundersSupplies: {
-            needWoolworthsOrder: false,
-            needDanMurphysOrder: false,
-            needPlates: false,
-            needNapkins: false,
-            needTongs: false,
-            needCutlery: false,
-            needIce: false
+            woolworthsOrder: null,
+            woolworths: '',
+            danMurphysOrder: null,
+            danMurphys: ''
         },
 
         // FOUNDERS INTERNAL COORDINATION QUESTIONS
         tamaraPresence: 'Not at all',
+        tamaraDetails: '',
         needsFoundersCasualStaff: 'No',
         casualStaffDetails: [emptyCasualShift()],
 
@@ -284,6 +403,9 @@ export default function BookingForm() {
         },
         catering: null,
         alcohol: null,
+        rsaChoice: '',
+        rsaFileName: '',
+        rsaFileData: '',
 
         // PAYMENT & INVOICING / SIGNATURE FIELDS
         paymentMethod: '',
@@ -315,11 +437,11 @@ export default function BookingForm() {
     });
 
     useEffect(() => {
-        const serializedString = runsheetRows
+        const serializedString = savedSchedule.rows
             .map((row, index) => `Row ${index + 1} -> Time: ${row.time || 'N/A'} | Layout: ${row.layout} | Description: ${row.description}`)
             .join('\n');
         setFormData(prev => ({ ...prev, runsheetObjectives: serializedString }));
-    }, [runsheetRows]);
+    }, [savedSchedule]);
 
     useEffect(() => {
         const rawQuote = calculateQuote(formData, [], equipmentList, {});
@@ -505,7 +627,6 @@ This room does not have private bathrooms. The closest toilets are in the main G
             roomNumber: 'Ground Floor Outdoor Colonnade',
             imgs: [],
             description: `The covered outdoor Colonnade running along the Ground Floor of the Hilmer Building. Ideal for outdoor registration, pop-up exhibitions, catering setups, or stand-alone open air networking. It can be booked on its own or alongside an Event Space or Design Space booking.<br /><br />
-<strong>Other Equipment & AV (items are shared between all bookable rooms, availability is dependent on requirements of other bookings):</strong><br /><br />
 <strong>Bathrooms:</strong><br />
 This room does not have private bathrooms. The closest toilets are in the main Ground Floor foyer and are shared publicly with students, staff, and the rest of the building.
 <br /><br />
@@ -517,7 +638,6 @@ This room does not have private bathrooms. The closest toilets are in the main G
             roomNumber: 'Room G17',
             imgs: [],
             description: `Our AI Makerspace is a place to test and refine AI technologies. It includes workstations and a supercomputer for AI research and development.<br /><br />
-<strong>Other Equipment & AV (items are shared between all bookable rooms, availability is dependent on requirements of other bookings):</strong><br /><br />
 <strong>Bathrooms:</strong><br />
 This room does not have private bathrooms. The closest toilets are in the main Ground Floor foyer and are shared publicly with students, staff, and the rest of the building.
 <br /><br />
@@ -528,6 +648,7 @@ This room does not have private bathrooms. The closest toilets are in the main G
     };
 
     const [selectedCalendarDate, setSelectedCalendarDate] = useState(new Date());
+    const [slotHover, setSlotHover] = useState(null);
     const [emailReminders, setEmailReminders] = useState(() => buildDefaultReminders({
         founders: true,
         eventDate: localDateString(new Date()),
@@ -582,15 +703,18 @@ This room does not have private bathrooms. The closest toilets are in the main G
                 if (cancelled) return;
                 if (data.busySlots) {
                     setLiveBusySlots(data.busySlots);
+                    setBusyByDate(prev => ({ ...prev, [dateStr]: data.busySlots }));
                     setCalendarNotice('');
                 } else {
                     setLiveBusySlots({});
+                    setBusyByDate(prev => ({ ...prev, [dateStr]: null }));
                     setCalendarNotice('Live availability could not be loaded, so booked times may not appear.');
                 }
             })
             .catch(() => {
                 if (cancelled) return;
                 setLiveBusySlots({});
+                setBusyByDate(prev => ({ ...prev, [dateStr]: null }));
                 setCalendarNotice('Live availability could not be loaded, so booked times may not appear.');
             });
 
@@ -598,6 +722,33 @@ This room does not have private bathrooms. The closest toilets are in the main G
             cancelled = true;
         };
     }, [selectedCalendarDate, formData.userType]);
+
+    useEffect(() => {
+        const dates = [...new Set(bookingHolds.map(hold => hold.date).filter(Boolean))];
+        let cancelled = false;
+        dates.forEach(date => {
+            if (Object.prototype.hasOwnProperty.call(busyByDate, date)) return;
+            fetch(`/api/calendar/availability?date=${date}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (cancelled) return;
+                    setBusyByDate(prev => (
+                        Object.prototype.hasOwnProperty.call(prev, date)
+                            ? prev
+                            : { ...prev, [date]: data.busySlots || null }
+                    ));
+                })
+                .catch(() => {
+                    if (cancelled) return;
+                    setBusyByDate(prev => (
+                        Object.prototype.hasOwnProperty.call(prev, date) ? prev : { ...prev, [date]: null }
+                    ));
+                });
+        });
+        return () => {
+            cancelled = true;
+        };
+    }, [bookingHolds, busyByDate]);
     const [currentWeekStart, setCurrentWeekStart] = useState(() => {
         const today = new Date();
         const dayOffset = today.getDay() === 0 ? 6 : today.getDay() - 1;
@@ -607,21 +758,95 @@ This room does not have private bathrooms. The closest toilets are in the main G
     });
 
     const effectiveDepartment = departmentType === 'UNSW Founders' ? 'UNSW Founders' : formData.department;
+
+    useEffect(() => {
+        if (!access.signedIn) return;
+        if (access.userType) {
+            setDepartmentType(access.departmentType === 'Other' ? 'Other' : (access.userType === 'Internal to UNSW' ? 'UNSW Founders' : 'Other'));
+        }
+        setFormData(prev => ({
+            ...prev,
+            ...(access.userType ? {
+                userType: access.userType,
+                department: access.department || '',
+                unswDivision: access.unswDivision || '',
+                companyName: access.companyName || ''
+            } : {}),
+            mainContact: {
+                name: access.name || '',
+                email: access.email || '',
+                phone: access.phone || ''
+            }
+        }));
+    }, [access.signedIn, access.email, access.name, access.phone, access.userType, access.departmentType, access.department, access.unswDivision, access.companyName]);
+
+    useEffect(() => {
+        if (!access.signedIn || !access.email || !db) {
+            setSavedRsa(null);
+            return undefined;
+        }
+        return onSnapshot(doc(db, 'rsaCards', access.email.toLowerCase()), (snapshot) => {
+            setSavedRsa(snapshot.exists() ? snapshot.data() : null);
+        }, () => setSavedRsa(null));
+    }, [access.signedIn, access.email]);
     const foundersBooking = isFoundersBooker(formData.userType, effectiveDepartment);
+    const requiredCasual = foundersBooking ? [] : requiredCasualShiftsForHolds(bookingHolds);
+    const requiredCasualKey = JSON.stringify(requiredCasual);
+    useEffect(() => {
+        setFormData((prev) => {
+            const nextRows = applyRequiredCasualShifts(prev.casualStaffDetails, requiredCasual);
+            const hadForced = (prev.casualStaffDetails || []).some((row) => row.forced);
+            let wants = prev.wantsCasualStaff;
+            if (requiredCasual.length) wants = 'Yes';
+            else if (hadForced && nextRows.every((row) => !row.shiftStart && !row.tasks)) wants = null;
+            if (wants === prev.wantsCasualStaff && JSON.stringify(nextRows) === JSON.stringify(prev.casualStaffDetails || [])) return prev;
+            return { ...prev, wantsCasualStaff: wants, casualStaffDetails: nextRows };
+        });
+    }, [requiredCasualKey]);
+    const questionClass = 'text-xs font-bold text-neutral-900';
+    const answerClass = 'text-xs text-neutral-800';
+    const yesNoChoices = (value, onPick) => (
+        <div className="flex flex-wrap gap-x-6 gap-y-2">
+            {['Yes', 'No'].map((choice) => (
+                <label key={choice} className="flex items-center gap-2 cursor-pointer select-none">
+                    <input
+                        type="checkbox"
+                        className="w-4 h-4 accent-black rounded-sm"
+                        checked={value === choice}
+                        onChange={() => onPick(choice)}
+                    />
+                    <span className={answerClass}>{choice}</span>
+                </label>
+            ))}
+        </div>
+    );
+    const rsaOnFile = Boolean(savedRsa && (savedRsa.fileName || savedRsa.fileData) && (!savedRsa.expiryDate || savedRsa.expiryDate >= localDateString(new Date())));
     const lockoutApplies = !isUnswStaff(formData.userType);
     const selectedDateStr = localDateString(selectedCalendarDate);
     const selectedLock = lockoutApplies ? bookingWindowForDate(selectedDateStr) : { locked: false };
     const timeRangeLabel = formData.bumpIn && formData.bumpOut ? `${formData.bumpIn}–${formData.bumpOut}` : '';
+    const selectedSlots = useMemo(() => {
+        const hold = bookingHolds[0];
+        if (!hold) return [];
+        return hold.times.map(time => `${hold.roomName}|${hold.dayKey}|${time}`);
+    }, [bookingHolds]);
+
+    const seriesOccurrenceCount = Math.min(MAX_SERIES_OCCURRENCES, Math.max(1, Number(recurrence.occurrences) || 1));
+    const seriesEndSentence = recurrence.endType === 'on'
+        ? `${recurrence.endDate ? `Repeats until ${formatBookingDate(recurrence.endDate, true)}` : 'Repeats until the end date'}, and stops at ${MAX_SERIES_OCCURRENCES} occurrences if that is sooner. Dates that are already booked or held are left out.`
+        : `Repeats for ${seriesOccurrenceCount} occurrence${seriesOccurrenceCount === 1 ? '' : 's'}. Dates that are already booked or held are left out.`;
 
     const seriesPlan = useMemo(() => {
-        if (!foundersBooking || recurrence.pattern !== 'weekly' || selectedSlots.length === 0) return null;
+        if (!foundersBooking || !isRepeatingPattern(recurrence.pattern) || selectedSlots.length === 0) return null;
         const dates = buildSeriesDates(selectedDateStr, recurrence);
         const end = recurrence.endType === 'on'
             ? { type: 'on', date: recurrence.endDate }
             : { type: 'after', occurrences: Math.min(MAX_SERIES_OCCURRENCES, Math.max(1, Number(recurrence.occurrences) || 1)) };
         const base = {
-            pattern: 'weekly',
-            interval: Math.min(MAX_SERIES_OCCURRENCES, Math.max(1, Number(recurrence.interval) || 1)),
+            pattern: recurrence.pattern,
+            interval: recurrence.pattern === 'weekly'
+                ? Math.min(MAX_SERIES_OCCURRENCES, Math.max(1, Number(recurrence.interval) || 1))
+                : 1,
             end,
             dates
         };
@@ -629,7 +854,7 @@ This room does not have private bathrooms. The closest toilets are in the main G
             return { ...base, dates: [], bookedDates: [], skippedDates: [], known: true, invalidEnd: true };
         }
         if (seriesAvailability.status !== 'ready' || !seriesAvailability.byDate) {
-            return { ...base, bookedDates: [], skippedDates: [], known: false };
+            return { ...base, bookedDates: [], skippedDates: [], known: false, calendarLoaded: false };
         }
         const split = partitionSeriesDates(
             dates,
@@ -638,7 +863,7 @@ This room does not have private bathrooms. The closest toilets are in the main G
             selectedSlots.map(key => key.split('|').pop()),
             timeRangeLabel
         );
-        return { ...base, ...split, known: true };
+        return { ...base, ...split, known: true, calendarLoaded: seriesAvailability.calendarLoaded !== false };
     }, [
         foundersBooking,
         recurrence,
@@ -650,7 +875,7 @@ This room does not have private bathrooms. The closest toilets are in the main G
     ]);
 
     useEffect(() => {
-        if (!foundersBooking || recurrence.pattern !== 'weekly' || selectedSlots.length === 0) {
+        if (!foundersBooking || !isRepeatingPattern(recurrence.pattern) || selectedSlots.length === 0) {
             setSeriesAvailability(previous => (
                 previous.status === 'idle' && previous.byDate === null ? previous : { status: 'idle', byDate: null }
             ));
@@ -677,7 +902,7 @@ This room does not have private bathrooms. The closest toilets are in the main G
                     setSeriesAvailability({ status: 'error', byDate: null });
                     return;
                 }
-                setSeriesAvailability({ status: 'ready', byDate: data.byDate });
+                setSeriesAvailability({ status: 'ready', byDate: data.byDate, calendarLoaded: data.calendarLoaded !== false });
             })
             .catch(() => {
                 if (cancelled) return;
@@ -708,19 +933,17 @@ This room does not have private bathrooms. The closest toilets are in the main G
             setLockoutNotice('');
             return;
         }
-        setSelectedSlots([]);
-        selectionAnchorRef.current = null;
+        if (!wantsMultipleHolds) {
+            setBookingHolds(prev => (prev.length ? [] : prev));
+            selectionAnchorRef.current = null;
+        }
         setSlotWarning('');
         setLockoutNotice(lockoutMessage(info));
-    }, [lockoutApplies, selectedDateStr]);
+    }, [lockoutApplies, selectedDateStr, wantsMultipleHolds]);
 
     const mockCalendarData = {
         timeSlots: generate24HoursTimeSlots(),
         rooms: CALENDAR_ROOMS
-    };
-
-    const toggleAccordion = (id) => {
-        setActiveAccordion(prev => prev === id ? null : id);
     };
 
     const updateCasualStaffDetail = (index, field, value) => {
@@ -860,118 +1083,259 @@ This room does not have private bathrooms. The closest toilets are in the main G
         setFormData(prev => ({ ...prev, signature: '' }));
     };
 
-    const handleDeptTypeChange = (type) => {
-        setDepartmentType(type);
-        if (type === 'UNSW Founders') {
-            setFormData({ ...formData, department: 'UNSW Founders', unswDivision: '' });
-        } else {
-            setFormData({ ...formData, department: '', unswDivision: '' });
-        }
-    };
-
     const updateSpaceSelection = (spaceName) => {
         setShowroomSpace(spaceName);
         photoStripRef.current?.scrollTo({ left: 0 });
-        const supportsColonnadeAddon = ['MCIC Ground - Event Space', 'MCIC Ground - Design Space', 'MCIC Ground - Entire Space'].includes(spaceName);
+    };
 
-        setFormData(prev => ({
-            ...prev,
-            space: spaceName,
-            includeColonnadeAddon: supportsColonnadeAddon ? prev.includeColonnadeAddon : false
-        }));
+    useEffect(() => {
+        if (bookingHolds.length === 0) {
+            setShowFullForm(false);
+            return;
+        }
+        const hold = bookingHolds[0];
+        const colonnadeOk = COLONNADE_SPACES.includes(hold.space) && Boolean(hold.includeColonnade);
+        const bookedSpaces = bookingHolds.map((item) => item.space);
+        setShowroomSpace(prev => (prev === hold.space ? prev : hold.space));
+        setFormData(prev => {
+            const includeColonnadeAddon = colonnadeOk;
+            const sameSpaces = Array.isArray(prev.bookedSpaces)
+                && prev.bookedSpaces.length === bookedSpaces.length
+                && prev.bookedSpaces.every((space, index) => space === bookedSpaces[index]);
+            if (
+                prev.space === hold.space
+                && sameSpaces
+                && prev.bumpIn === hold.bumpIn
+                && prev.bumpOut === hold.bumpOut
+                && prev.eventStart === hold.eventStart
+                && prev.eventEnd === hold.eventEnd
+                && prev.includeColonnadeAddon === includeColonnadeAddon
+            ) return prev;
+            return {
+                ...prev,
+                space: hold.space,
+                bookedSpaces,
+                includeColonnadeAddon,
+                bumpIn: hold.bumpIn,
+                bumpOut: hold.bumpOut,
+                eventStart: hold.eventStart,
+                eventEnd: hold.eventEnd
+            };
+        });
+    }, [bookingHolds]);
+
+    const rememberSchedule = () => {
+        setScheduleHistory(prev => [...prev, {
+            rows: runsheetRows.map(row => ({ ...row })),
+            layoutMode
+        }].slice(-40));
+    };
+
+    const markScheduleEdit = () => {
+        if (scheduleEditMarked.current) return;
+        scheduleEditMarked.current = true;
+        rememberSchedule();
     };
 
     const updateRunsheetRow = (index, field, value) => {
-        const updatedRows = [...runsheetRows];
-        updatedRows[index][field] = value;
-        setRunsheetRows(updatedRows);
+        setRunsheetRows(runsheetRows.map((row, rowIndex) => (
+            rowIndex === index ? { ...row, [field]: value } : row
+        )));
     };
 
     const addRunsheetRow = () => {
+        rememberSchedule();
         setRunsheetRows([...runsheetRows, { time: '', layout: 'Workshop Style/Group Tables', description: '' }]);
     };
 
     const removeRunsheetRow = (index) => {
-        if (runsheetRows.length > 1) {
-            setRunsheetRows(runsheetRows.filter((_, i) => i !== index));
-        }
+        if (runsheetRows.length <= 1) return;
+        rememberSchedule();
+        setRunsheetRows(runsheetRows.filter((_, rowIndex) => rowIndex !== index));
     };
 
+    const undoSchedule = () => {
+        setScheduleHistory(prev => {
+            const last = prev[prev.length - 1];
+            if (!last) return prev;
+            setRunsheetRows(last.rows.map(row => ({ ...row })));
+            setLayoutMode(last.layoutMode);
+            return prev.slice(0, -1);
+        });
+    };
+
+    const saveSchedule = () => {
+        setSavedSchedule({
+            template: layoutMode,
+            rows: copyScheduleRows(runsheetRows)
+        });
+    };
+
+    const scheduleIsSaved = layoutMode === savedSchedule.template
+        && JSON.stringify(runsheetRows) === JSON.stringify(savedSchedule.rows);
+
     const applyEventTemplate = (type) => {
+        if (type === layoutMode) return;
+        rememberSchedule();
         setLayoutMode(type);
+        const savedRows = savedSchedule.template === type ? copyScheduleRows(savedSchedule.rows) : null;
         if (type === 'tour') {
             setFormData(prev => ({
                 ...prev,
                 eventDescription: "Facility walkthrough and tour overview look at the space tools."
             }));
-            setRunsheetRows([
-                { time: '', layout: 'No specific layout required (e.g. for a tour or walkthrough)', description: 'Cohort facility walkthrough and site overview.' }
-            ]);
         } else if (type === 'delegation') {
             setFormData(prev => ({
                 ...prev,
                 isDelegation: true,
                 eventDescription: "Official delegation visit with boardroom discussion and facility walkthrough."
             }));
-            setRunsheetRows([
-                { time: '', layout: 'Boardroom Style', description: 'Organiser arrives to setup' },
-                { time: '', layout: 'Boardroom Style', description: 'Delegation arrival, welcome & tea, coffee available' },
-                { time: '', layout: 'Boardroom Style', description: 'Formalities' },
-                { time: '', layout: 'Boardroom Style', description: 'Guests Depart' },
-                { time: '', layout: 'Boardroom Style', description: 'Organiser cleanup and lock-up' }
-            ]);
         } else if (type === 'workshop') {
             setFormData(prev => ({
                 ...prev,
                 isDelegation: false,
                 eventDescription: "Standard collaborative day workshop containing split breakout groups."
             }));
-            setRunsheetRows([
-                { time: '', layout: 'Workshop Style/Group Tables', description: 'Organiser access & setup' },
-                { time: '', layout: 'Workshop Style/Group Tables', description: 'Session 1' },
-                { time: '', layout: 'Workshop Style/Group Tables', description: 'Catering Break' },
-                { time: '', layout: 'Workshop Style/Group Tables', description: 'Session 2' },
-                { time: '', layout: 'Workshop Style/Group Tables', description: 'Bump-out packdown' }
-            ]);
         } else if (type === 'lecture') {
             setFormData(prev => ({
                 ...prev,
                 isDelegation: false,
                 eventDescription: "Evening panel discussion sequence with networking drinks component."
             }));
-            setRunsheetRows([
-                { time: '', layout: 'Lecture/Theatre Style', description: 'Arrive & setup room' },
-                { time: '', layout: 'Lecture/Theatre Style', description: 'AV Check & panel arrive' },
-                { time: '', layout: 'Lecture/Theatre Style', description: 'Guests arrive' },
-                { time: '', layout: 'Lecture/Theatre Style', description: 'Panel discussion and Q&A' },
-                { time: '', layout: 'Clear Open Floor', description: 'Catering & Networking' },
-                { time: '', layout: 'Clear Open Floor', description: 'Event ends / guests depart' },
-                { time: '', layout: 'Clear Open Floor', description: 'Packup and lock doors' }
-            ]);
         }
+        setRunsheetRows(savedRows || defaultScheduleRows(type));
     };
 
     const handleFormSubmit = async (e) => {
         e.preventDefault();
 
-        const showCateringPolicy = formData.catering === 'Yes' || formData.alcohol === 'Yes';
-        if (showCateringPolicy && !cateringAcknowledged) {
+        const stopFor = (message, id) => {
+            alert(message);
+            const section = document.getElementById(id);
+            if (section) section.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        };
+        const answered = (value) => value === 'Yes' || value === 'No';
+
+        if (!formData.eventName.trim()) {
+            stopFor('Enter the event name.', 'event-details-block');
+            return;
+        }
+        if (!Number(formData.attendees)) {
+            stopFor('Enter the expected number of attendees.', 'event-details-block');
+            return;
+        }
+        if (!formData.eventDescription.trim()) {
+            stopFor('Enter the event description.', 'event-details-block');
+            return;
+        }
+        if (!answered(formData.catering)) {
+            stopFor('Answer yes or no to serving food and drinks.', 'catering-block');
+            return;
+        }
+        if (!answered(formData.alcohol)) {
+            stopFor('Answer yes or no to serving alcohol.', 'catering-block');
+            return;
+        }
+        if (access.founders && formData.catering === 'Yes') {
+            if (!answered(formData.foundersSupplies.woolworthsOrder)) {
+                stopFor('Answer yes or no to a Woolworths or caterer order.', 'catering-block');
+                return;
+            }
+            if (formData.foundersSupplies.woolworthsOrder === 'Yes' && !formData.foundersSupplies.woolworths.trim()) {
+                stopFor('Specify the food and soft drink order.', 'catering-block');
+                return;
+            }
+        }
+        if (access.founders && formData.alcohol === 'Yes') {
+            if (!answered(formData.foundersSupplies.danMurphysOrder)) {
+                stopFor('Answer yes or no to a Dan Murphy\'s order.', 'catering-block');
+                return;
+            }
+            if (formData.foundersSupplies.danMurphysOrder === 'Yes' && !formData.foundersSupplies.danMurphys.trim()) {
+                stopFor('Specify the Dan Murphy\'s order.', 'catering-block');
+                return;
+            }
+        }
+
+        const usingSavedRsa = formData.alcohol === 'Yes' && rsaOnFile && formData.rsaChoice !== 'staff';
+        if (formData.alcohol === 'Yes' && !usingSavedRsa && formData.rsaChoice !== 'upload' && formData.rsaChoice !== 'staff') {
+            alert('Choose whether you will upload an RSA or would like a staff member with an RSA organised.');
+            const section = document.getElementById('alcohol-rsa-block');
+            if (section) section.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            return;
+        }
+        if (formData.alcohol === 'Yes' && !usingSavedRsa && formData.rsaChoice === 'upload' && !formData.rsaFileData) {
+            alert('Upload a copy of the RSA competency card, or ask for a staff member with an RSA.');
+            const section = document.getElementById('alcohol-rsa-block');
+            if (section) section.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            return;
+        }
+
+        if (!access.founders && formData.catering === 'Yes' && !cateringAcknowledged) {
             setCateringError(true);
             const section = document.getElementById('catering-policy-block');
             if (section) section.scrollIntoView({ behavior: 'smooth', block: 'center' });
             return;
         }
 
-        if (!conductAcknowledged) {
-            setConductError(true);
-            const section = document.getElementById('conduct-policy-block');
+        if (formData.involvesControversialTopics !== true && formData.involvesControversialTopics !== false) {
+            alert('Answer yes or no to the safety and risk question.');
+            const section = document.getElementById('risk-assessment-block');
             if (section) section.scrollIntoView({ behavior: 'smooth', block: 'center' });
             return;
         }
 
-        if (formData.isHighRisk && !formData.riskDetails.trim()) {
-            alert('Please explain your safety and risk control measures in the safety section.');
-            const section = document.getElementById('risk-assessment-block');
+        if (formData.sameAsMain !== true && formData.sameAsMain !== false) {
+            stopFor('Choose whether you are the on the day contact, or the contact is someone else.', 'contact-details-block');
+            return;
+        }
+        if (formData.sameAsMain === false) {
+            const day = formData.onDayContact;
+            if (!day.name.trim() || !day.email.trim() || !day.phone.trim()) {
+                stopFor('Enter the on-day contact name, email, and mobile.', 'contact-details-block');
+                return;
+            }
+        }
+
+        if (access.founders && !formData.tamaraDetails.trim()) {
+            stopFor('Add the details for Tamara.', 'staffing-block');
+            return;
+        }
+        if (!answered(formData.wantsCasualStaff)) {
+            stopFor('Answer yes or no to booking a casual staff member.', 'staffing-block');
+            return;
+        }
+        if (formData.wantsCasualStaff === 'Yes' && formData.casualStaffDetails.some(row => !row.shiftStart || !row.shiftEnd || !String(row.tasks || '').trim() || !casualShiftQuantity(row))) {
+            stopFor('Complete each casual staff shift: how many, start, end, and tasks.', 'staffing-block');
+            return;
+        }
+
+        if (!access.founders && !answered(formData.isInnovationOrEntrepreneurship)) {
+            stopFor('Answer yes or no to innovation and entrepreneurship.', 'billing-block');
+            return;
+        }
+        if (!access.founders && formData.paymentMethod !== 'Journal Transfer' && formData.paymentMethod !== 'Invoice') {
+            stopFor('Choose Journal Transfer or Invoice.', 'billing-block');
+            return;
+        }
+        if (!access.founders && formData.paymentMethod === 'Invoice' && (!formData.abn.trim() || !formData.apEmail.trim() || !formData.billingAddress.trim())) {
+            stopFor('Enter the ABN, accounts email, and billing address.', 'billing-block');
+            return;
+        }
+
+        if (!formData.anythingElse.trim()) {
+            stopFor('Answer “Is there anything else we should know?”.', 'anything-else-block');
+            return;
+        }
+
+        if (!access.founders && !formData.signerFullName.trim()) {
+            stopFor('Enter the signer’s full name.', 'signature-block');
+            return;
+        }
+
+        if (!access.founders && !conductAcknowledged) {
+            setConductError(true);
+            const section = document.getElementById('conduct-policy-block');
             if (section) section.scrollIntoView({ behavior: 'smooth', block: 'center' });
             return;
         }
@@ -983,15 +1347,15 @@ This room does not have private bathrooms. The closest toilets are in the main G
             return;
         }
 
-        if (!formData.signature) {
+        if (!access.founders && !formData.signature) {
             alert('Please sign the declaration before submitting.');
             const section = document.getElementById('signature-block');
             if (section) section.scrollIntoView({ behavior: 'smooth', block: 'center' });
             return;
         }
 
-        if (!formData.mainContact.email.trim()) {
-            alert('Enter the organiser email before submitting.');
+        if (!access.email.trim()) {
+            alert('Sign in before submitting.');
             return;
         }
 
@@ -1000,36 +1364,34 @@ This room does not have private bathrooms. The closest toilets are in the main G
             return;
         }
 
-        const targetIsoDateString = localDateString(selectedCalendarDate);
+        const primary = bookingHolds[0];
+        const targetIsoDateString = primary?.date || localDateString(selectedCalendarDate);
         if (lockoutApplies && bookingWindowForDate(targetIsoDateString).locked) {
             alert(lockoutMessage(bookingWindowForDate(targetIsoDateString)));
             return;
         }
 
-        const primaryHold = {
-            space: formData.space,
-            bumpInDate: targetIsoDateString,
-            bumpIn: formData.bumpIn || '09:00',
-            eventStart: formData.eventStart || formData.bumpIn || '09:30',
-            eventEnd: formData.eventEnd || formData.bumpOut || '16:30',
-            bumpOut: formData.bumpOut || '17:00'
-        };
+        const holdPayload = (hold) => ({
+            space: hold.space,
+            bumpInDate: hold.date,
+            bumpIn: hold.bumpIn,
+            eventStart: hold.eventStart,
+            eventEnd: hold.eventEnd,
+            bumpOut: hold.bumpOut,
+            includeColonnadeAddon: Boolean(hold.includeColonnade)
+        });
         if (wantsMultipleHolds) {
-            if (extraHolds.length < 1) {
-                alert('Add at least one extra hold, or turn off multiple booking holds.');
+            if (bookingHolds.length < 2) {
+                alert('Select at least one more hold on the calendar, or turn off multiple booking holds.');
                 return;
             }
-            for (const hold of extraHolds) {
-                if (!hold.bumpInDate || !hold.bumpIn || !hold.eventStart || !hold.eventEnd || !hold.bumpOut || !hold.space) {
-                    alert('Each extra hold needs a space, date, and all four times.');
-                    return;
-                }
+            for (const hold of bookingHolds) {
                 if (!(hold.bumpIn <= hold.eventStart && hold.eventStart <= hold.eventEnd && hold.eventEnd <= hold.bumpOut)) {
-                    alert('Each hold needs bump-in, start, end, and bump-out in that order.');
+                    alert('Each hold needs guest arrival and departure inside the calendar times.');
                     return;
                 }
-                if (lockoutApplies && bookingWindowForDate(hold.bumpInDate).locked) {
-                    alert(lockoutMessage(bookingWindowForDate(hold.bumpInDate)));
+                if (lockoutApplies && bookingWindowForDate(hold.date).locked) {
+                    alert(lockoutMessage(bookingWindowForDate(hold.date)));
                     return;
                 }
             }
@@ -1040,12 +1402,12 @@ This room does not have private bathrooms. The closest toilets are in the main G
             return;
         }
 
-        if (seriesPlan?.pattern === 'weekly' && !seriesPlan.known) {
+        if (seriesPlan && isRepeatingPattern(seriesPlan.pattern) && (!seriesPlan.known || seriesPlan.calendarLoaded === false)) {
             alert('Live availability could not be loaded, so booked times may not appear. Future dates are not shown as available, and this repeating booking cannot be confirmed.');
             return;
         }
 
-        if (seriesPlan?.pattern === 'weekly' && seriesPlan.bookedDates.length === 0) {
+        if (seriesPlan && isRepeatingPattern(seriesPlan.pattern) && seriesPlan.bookedDates.length === 0) {
             alert('Every date in this series is already booked. Change the repeat pattern or the end date.');
             return;
         }
@@ -1053,9 +1415,9 @@ This room does not have private bathrooms. The closest toilets are in the main G
         setCateringError(false);
         setConductError(false);
 
-        const recurrencePayload = seriesPlan?.pattern === 'weekly'
+        const recurrencePayload = seriesPlan && isRepeatingPattern(seriesPlan.pattern)
             ? {
-                pattern: 'weekly',
+                pattern: seriesPlan.pattern,
                 interval: seriesPlan.interval,
                 end: seriesPlan.end,
                 bookedDates: seriesPlan.bookedDates,
@@ -1081,53 +1443,39 @@ This room does not have private bathrooms. The closest toilets are in the main G
             department: formData.department || departmentType,
             isInnovationOrEntrepreneurship: formData.isInnovationOrEntrepreneurship,
             wantsCasualStaff: formData.wantsCasualStaff,
-            needsJudgeHelp: formData.needsJudgeHelp,
+            anythingElse: formData.anythingElse,
             tamaraPresence: formData.tamaraPresence,
+            tamaraDetails: access.founders ? formData.tamaraDetails : '',
             needsFoundersCasualStaff: formData.needsFoundersCasualStaff,
             casualStaffDetails: (formData.casualStaffDetails || []).map(row => ({
                 ...row,
                 quantity: casualShiftQuantity(row) || 1,
                 preferredStaff: foundersBooking ? row.preferredStaff : ''
             })),
-            servicewarePreference: formData.servicewarePreference,
-            foundersSupplies: formData.foundersSupplies,
+            foundersStaff: Boolean(access.founders),
+            foundersSupplies: access.founders ? {
+                woolworthsOrder: formData.catering === 'Yes' ? formData.foundersSupplies.woolworthsOrder : null,
+                woolworths: formData.catering === 'Yes' && formData.foundersSupplies.woolworthsOrder === 'Yes' ? formData.foundersSupplies.woolworths : '',
+                danMurphysOrder: formData.alcohol === 'Yes' ? formData.foundersSupplies.danMurphysOrder : null,
+                danMurphys: formData.alcohol === 'Yes' && formData.foundersSupplies.danMurphysOrder === 'Yes' ? formData.foundersSupplies.danMurphys : ''
+            } : { woolworthsOrder: null, woolworths: '', danMurphysOrder: null, danMurphys: '' },
             catering: formData.catering || "No",
             alcohol: formData.alcohol || "No",
+            rsaChoice: formData.alcohol !== 'Yes' ? '' : formData.rsaChoice === 'staff' ? 'staff' : (rsaOnFile ? 'onfile' : formData.rsaChoice),
+            rsaFileName: formData.alcohol === 'Yes' && formData.rsaChoice === 'upload' && !rsaOnFile ? formData.rsaFileName : '',
+            rsaFileData: formData.alcohol === 'Yes' && formData.rsaChoice === 'upload' && !rsaOnFile ? formData.rsaFileData : '',
             isHighRisk: formData.isHighRisk,
             riskDetails: formData.isHighRisk ? formData.riskDetails : '',
             involvesControversialTopics: formData.involvesControversialTopics,
             securityDetails: formData.involvesControversialTopics ? formData.securityDetails : '',
-            postToPublicDirectory: ticketingEnabled ? formData.postToPublicDirectory : false,
-            ticketing: ticketingEnabled ? {
-                method: formData.ticketingMethod,
-                externalTicketUrl: formData.ticketingMethod === 'external' ? formData.externalTicketUrl : '',
-                ticketBannerName: formData.ticketBannerName,
-                maxTicketCapacity: formData.maxTicketCapacity,
-                ticketTiers: formData.ticketingMethod === 'internal' ? formData.ticketTiers : []
-            } : { method: 'none', externalTicketUrl: '', ticketBannerName: '', maxTicketCapacity: 0, ticketTiers: [] },
-            emailReminders: ticketingEnabled && formData.ticketingMethod === 'internal'
-                ? normalizeEmailReminders({
-                    enabled: formData.emailRemindersEnabled,
-                    reminders: emailReminders.map(reminder => ({
-                        id: reminder.id,
-                        kind: reminder.kind,
-                        subject: reminder.subject,
-                        body: reminder.body,
-                        sendAt: reminder.sendAt,
-                        manuallyEdited: Boolean(
-                            reminder.manuallyEdited
-                            || reminderLocksRef.current[reminder.id]?.subject
-                            || reminderLocksRef.current[reminder.id]?.body
-                            || reminderLocksRef.current[reminder.id]?.sendAt
-                        )
-                    }))
-                })
-                : { enabled: false, reminders: [] },
+            postToPublicDirectory: false,
+            ticketing: { method: 'none', externalTicketUrl: '', ticketBannerName: '', maxTicketCapacity: 0, ticketTiers: [] },
+            emailReminders: { enabled: false, reminders: [] },
             conductAcknowledged,
             status: 'PENDING',
             createdAt: new Date().toISOString(),
             bumpInDate: targetIsoDateString,
-            tentativeHolds: wantsMultipleHolds ? [primaryHold, ...extraHolds].slice(0, 3) : [],
+            tentativeHolds: wantsMultipleHolds ? bookingHolds.slice(0, 3).map(holdPayload) : [],
             recurrence: recurrencePayload,
             isWeekend: formData.isWeekend,
             selectedSlots,
@@ -1137,15 +1485,15 @@ This room does not have private bathrooms. The closest toilets are in the main G
             eventEnd: formData.eventEnd || formData.bumpOut || "16:30",
             runsheetObjectives: formData.runsheetObjectives,
             mainContact: {
-                name: formData.mainContact.name || "Guest Applicant",
-                email: formData.mainContact.email,
-                phone: formData.mainContact.phone || ""
+                name: access.name || formData.mainContact.name || '',
+                email: access.email,
+                phone: access.phone || formData.mainContact.phone || ''
             },
             onDayContact: formData.sameAsMain
                 ? {
-                    name: formData.mainContact.name || "Guest Applicant",
-                    email: formData.mainContact.email,
-                    phone: formData.mainContact.phone || ""
+                    name: access.name || formData.mainContact.name || '',
+                    email: access.email,
+                    phone: access.phone || formData.mainContact.phone || ''
                 }
                 : {
                     name: formData.onDayContact.name || "",
@@ -1168,7 +1516,7 @@ This room does not have private bathrooms. The closest toilets are in the main G
         };
 
         try {
-            const apiResponse = await fetch('/api/bookings', {
+            const apiResponse = await authFetch('/api/bookings', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
@@ -1177,8 +1525,12 @@ This room does not have private bathrooms. The closest toilets are in the main G
             const res = await apiResponse.json();
 
             if (res.success) {
+                if (ticketingEnabled && res.bookingId) {
+                    window.location.href = `/booking/tickets?id=${res.bookingId}`;
+                    return;
+                }
                 const calendarNote = res.calendarError ? ` Calendar hold could not be created: ${res.calendarError}` : '';
-                alert(`Booking request saved as pending. Sign in at My bookings with ${formData.mainContact.email} to request a change or cancellation.${calendarNote}`);
+                alert(`Booking request saved as pending. Sign in at My bookings with ${access.email} to request a change or cancellation.${calendarNote}`);
             } else {
                 alert(`⚠️ Error submitting booking: ${res.error}`);
             }
@@ -1193,6 +1545,7 @@ This room does not have private bathrooms. The closest toilets are in the main G
     };
 
     const revealBookingForm = () => {
+        if (bookingHolds.length === 0) return;
         setShowFullForm(true);
         setTimeout(() => {
             const targetBlock = document.getElementById('rest-of-form-marker');
@@ -1201,6 +1554,7 @@ This room does not have private bathrooms. The closest toilets are in the main G
     };
 
     const triggerRevealAllQuestions = () => {
+        if (bookingHolds.length === 0) return;
         if (!access.signedIn) {
             setOpenFormAfterSignIn(true);
             setSignInOpen(true);
@@ -1233,7 +1587,7 @@ This room does not have private bathrooms. The closest toilets are in the main G
     }, [signInOpen]);
 
     useEffect(() => {
-        if (!access.signedIn || typeof window === 'undefined') return;
+        if (!access.signedIn || bookingHolds.length === 0 || typeof window === 'undefined') return;
         const params = new URLSearchParams(window.location.search);
         if (params.get('form') !== '1') return;
         setShowFullForm(true);
@@ -1241,7 +1595,7 @@ This room does not have private bathrooms. The closest toilets are in the main G
             document.getElementById('rest-of-form-marker')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }, 150);
         return () => clearTimeout(timer);
-    }, [access.signedIn]);
+    }, [access.signedIn, bookingHolds.length]);
 
     const getDynamicWeekDays = (startDate) => {
         return Array.from({ length: 7 }, (_, i) => {
@@ -1275,9 +1629,12 @@ This room does not have private bathrooms. The closest toilets are in the main G
     const chooseCalendarDay = (date) => {
         const info = bookingWindowForDate(localDateString(date));
         setSelectedCalendarDate(date);
-        setSelectedSlots([]);
-        selectionAnchorRef.current = null;
         setSlotWarning('');
+        if (!wantsMultipleHolds) {
+            setBookingHolds([]);
+            setActiveHoldIndex(0);
+            selectionAnchorRef.current = null;
+        }
         if (lockoutApplies && info.locked) {
             setLockoutNotice(lockoutMessage(info));
         } else {
@@ -1303,14 +1660,23 @@ This room does not have private bathrooms. The closest toilets are in the main G
 
     const handleSlotClick = (event, room, slot) => {
         if (lockoutApplies && bookingWindowForDate(localDateString(selectedCalendarDate)).locked) return;
+        const date = localDateString(selectedCalendarDate);
         const dayKey = formatDayKey(selectedCalendarDate);
         const allSlots = generate24HoursTimeSlots();
-        const prefix = `${room.name}|${dayKey}|`;
-        const clickedKey = `${prefix}${slot}`;
-        const sameRoom = selectedSlots.filter(key => key.startsWith(prefix));
-        const existingTimes = sameRoom.map(key => key.slice(prefix.length)).sort();
+        const ownerIndex = bookingHolds.findIndex(hold => hold.date === date && hold.roomName === room.name && hold.times.includes(slot));
+        let index = ownerIndex >= 0 ? ownerIndex : (wantsMultipleHolds ? Math.min(activeHoldIndex, bookingHolds.length) : 0);
+        if (!wantsMultipleHolds) index = 0;
+        if (wantsMultipleHolds && ownerIndex < 0 && index >= bookingHolds.length && bookingHolds.length >= 3) {
+            setSlotWarning('You already have three holds. Choose Hold 1, 2 or 3 to change one.');
+            return;
+        }
+        if (index >= bookingHolds.length) index = bookingHolds.length;
+
+        const hold = bookingHolds[index];
+        const sameWindow = hold && hold.date === date && hold.roomName === room.name;
+        const existingTimes = sameWindow ? [...hold.times].sort() : [];
         const anchor = selectionAnchorRef.current;
-        const anchorMatches = anchor && anchor.room === room.name && anchor.dayKey === dayKey;
+        const anchorMatches = anchor && anchor.holdIndex === index && anchor.room === room.name && anchor.date === date;
 
         const rangeBetween = (fromSlot, toSlot) => {
             const startIndex = allSlots.indexOf(fromSlot);
@@ -1324,8 +1690,8 @@ This room does not have private bathrooms. The closest toilets are in the main G
 
         let nextSlots = null;
 
-        if (existingTimes.length === 0 || !selectedSlots.every(key => key.startsWith(prefix))) {
-            selectionAnchorRef.current = { room: room.name, dayKey, slot };
+        if (existingTimes.length === 0) {
+            selectionAnchorRef.current = { holdIndex: index, room: room.name, date, slot };
             nextSlots = [slot];
         } else if (event.shiftKey && anchorMatches) {
             nextSlots = rangeBetween(anchor.slot, slot);
@@ -1333,13 +1699,13 @@ This room does not have private bathrooms. The closest toilets are in the main G
             selectionAnchorRef.current = null;
             nextSlots = [];
         } else if (existingTimes.includes(slot)) {
-            selectionAnchorRef.current = { room: room.name, dayKey, slot };
+            selectionAnchorRef.current = { holdIndex: index, room: room.name, date, slot };
             nextSlots = [slot];
         } else {
             const from = slot < existingTimes[0] ? slot : existingTimes[0];
             const to = slot > existingTimes[existingTimes.length - 1] ? slot : existingTimes[existingTimes.length - 1];
             nextSlots = rangeBetween(from, to);
-            if (!anchorMatches) selectionAnchorRef.current = { room: room.name, dayKey, slot: existingTimes[0] };
+            if (!anchorMatches) selectionAnchorRef.current = { holdIndex: index, room: room.name, date, slot: existingTimes[0] };
         }
 
         if (nextSlots === null) {
@@ -1347,38 +1713,203 @@ This room does not have private bathrooms. The closest toilets are in the main G
             return;
         }
 
-        setSlotWarning('');
-        setSelectedSlots(nextSlots.map(time => `${prefix}${time}`));
-
-        if (nextSlots.length > 0) {
-            const ordered = [...nextSlots].sort();
-            const bumpIn = ordered[0];
-            const bumpOut = addMinutesToTime(ordered[ordered.length - 1], 30);
-            setFormData(prev => ({
-                ...prev,
-                space: room.space,
-                bumpIn,
-                bumpOut,
-                eventStart: bumpIn,
-                eventEnd: bumpOut
-            }));
-            setShowroomSpace(room.space);
+        const overlapsAnotherHold = bookingHolds.some((other, otherIndex) => (
+            otherIndex !== index
+            && other.date === date
+            && other.roomName === room.name
+            && nextSlots.some(time => other.times.includes(time))
+        ));
+        if (overlapsAnotherHold) {
+            setSlotWarning('That time is already in another hold.');
+            return;
         }
+
+        setSlotWarning('');
+        setActiveHoldIndex(index);
+        if (nextSlots.length === 0) {
+            setBookingHolds(prev => prev.filter((_, itemIndex) => itemIndex !== index));
+            return;
+        }
+
+        const ordered = [...nextSlots].sort();
+        const bumpIn = ordered[0];
+        const bumpOut = addMinutesToTime(ordered[ordered.length - 1], 30);
+        const windowChanged = !hold || !sameWindow || hold.bumpIn !== bumpIn || hold.bumpOut !== bumpOut;
+        const guestTimes = windowChanged
+            ? guestTimesForWindow(bumpIn, bumpOut)
+            : { eventStart: hold.eventStart, eventEnd: hold.eventEnd };
+        const nextHold = {
+            date,
+            dayKey,
+            roomName: room.name,
+            space: room.space,
+            times: ordered,
+            bumpIn,
+            bumpOut,
+            eventStart: guestTimes.eventStart,
+            eventEnd: guestTimes.eventEnd,
+            includeColonnade: Boolean(sameWindow && hold?.includeColonnade && COLONNADE_SPACES.includes(room.space))
+        };
+        setBookingHolds(prev => {
+            const next = [...prev];
+            next[index] = nextHold;
+            return next.slice(0, 3);
+        });
     };
 
-    const isColonnadeAddonEligible = ['MCIC Ground - Event Space', 'MCIC Ground - Design Space', 'MCIC Ground - Entire Space'].includes(formData.space);
+    const hoverPreview = (() => {
+        if (!slotHover) return null;
+        const date = localDateString(selectedCalendarDate);
+        const room = CALENDAR_ROOMS.find(item => item.name === slotHover.roomName);
+        if (!room) return null;
+        const allSlots = generate24HoursTimeSlots();
+        const index = wantsMultipleHolds ? Math.min(activeHoldIndex, bookingHolds.length) : 0;
+        const hold = bookingHolds[index];
+        const sameWindow = hold && hold.date === date && hold.roomName === room.name;
+        const existing = sameWindow ? [...hold.times].sort() : [];
+        const target = slotHover.slot;
+        if (!existing.length || (existing.length === 1 && existing[0] === target)) {
+            return { roomName: room.name, times: [target], holdNumber: index + 1 };
+        }
+        const from = target < existing[0] ? target : existing[0];
+        const to = target > existing[existing.length - 1] ? target : existing[existing.length - 1];
+        const range = continuousSlotRange(allSlots, from, to);
+        if (!range || range.some(time => isSlotBlockedByCalendar(room.space, time))) return null;
+        return { roomName: room.name, times: range, holdNumber: index + 1 };
+    })();
+
+    const inclusionGroups = bookingHolds.reduce((groups, hold, index) => {
+        const found = groups.find(group => group.space === hold.space);
+        if (found) found.holds.push({ hold, index });
+        else groups.push({ space: hold.space, holds: [{ hold, index }] });
+        return groups;
+    }, []);
+
+    const colonnadeStatus = (hold) => {
+        if (!hold?.includeColonnade) return 'off';
+        if (!Object.prototype.hasOwnProperty.call(busyByDate, hold.date)) return 'checking';
+        const busy = busyByDate[hold.date];
+        if (!busy) return 'unknown';
+        const ranges = busy['MCIC Ground - Colonnade'] || [];
+        const booked = hold.times.some(time => ranges.some(range => time >= range.start && time < range.end));
+        return booked ? 'booked' : 'free';
+    };
+
+    const toggleHoldColonnade = (index) => {
+        setBookingHolds(prev => prev.map((hold, itemIndex) => (
+            itemIndex === index ? { ...hold, includeColonnade: !hold.includeColonnade } : hold
+        )));
+    };
+
+    const updateHoldGuestTime = (index, field, value) => {
+        setBookingHolds(prev => prev.map((hold, itemIndex) => {
+            if (itemIndex !== index) return hold;
+            const next = { ...hold, [field]: value };
+            if (!(next.bumpIn <= next.eventStart && next.eventStart <= next.eventEnd && next.eventEnd <= next.bumpOut)) {
+                setTimingNote('Guest arrival and departure need to stay inside the times selected on the calendar.');
+                return hold;
+            }
+            setTimingNote('');
+            return next;
+        }));
+    };
+
+    const renderRoomInclusions = (space, heading) => {
+        const inclusions = inclusionsForSpace(space);
+        return (
+            <div className="bg-white border border-gray-200 rounded-sm shadow-sm p-5 space-y-3">
+                <p className="text-sm text-neutral-700">
+                    {heading} <strong className="text-black">{space}</strong>
+                </p>
+                {inclusions.length > 0 && (
+                    <div className="bg-neutral-50 border border-neutral-200 p-5 rounded-sm space-y-3">
+                        <div className="flex items-center gap-2">
+                            <span className="bg-emerald-600 text-white font-mono text-[10px] font-bold uppercase px-2 py-0.5 rounded-sm">Included</span>
+                            <h4 className="font-bold text-sm text-neutral-900">Standard Room Inclusions</h4>
+                        </div>
+                        <p className="text-xs text-gray-500">
+                            These features are pre-installed in {space} and included automatically:
+                        </p>
+                        <ul className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs font-medium text-neutral-800 pt-1">
+                            {inclusions.map((item) => (
+                                <li key={item} className="flex items-center gap-2 bg-white px-3 py-2 border border-neutral-200 rounded-sm">
+                                    <span className="text-emerald-600 font-bold">✓</span>
+                                    {item}
+                                </li>
+                            ))}
+                        </ul>
+                    </div>
+                )}
+            </div>
+        );
+    };
 
     const renderEventDetailsSection = () => (
-        <section key="event-details-block" className="bg-white p-8 border border-gray-200 rounded-sm shadow-sm space-y-6">
-            <h3 className="text-lg font-extrabold tracking-tight uppercase text-black border-b border-neutral-100 pb-2">Event Details</h3>
-
-            <div className="p-4 bg-neutral-50 border border-neutral-200 rounded-sm space-y-1">
-                <div className="flex items-center gap-2 font-bold text-neutral-900 text-xs uppercase">
-                    <span>💡 Planning Tip</span>
-                </div>
-                <p className="text-xs text-gray-600 leading-relaxed font-normal">
-                    Don’t worry if you haven’t finalized your exact event schedule or details yet! Just include your best estimates for now—we can refine everything together prior to confirming your booking hold.
+        <section id="event-details-block" key="event-details-block" className="bg-white p-8 border border-gray-200 rounded-sm shadow-sm space-y-6">
+            <div className="space-y-1 border-b border-neutral-100 pb-2">
+                <h3 className="text-lg font-extrabold tracking-tight uppercase text-black">Event Details</h3>
+                <p className="text-sm text-neutral-600 leading-relaxed">
+                    Don&apos;t worry if you haven&apos;t finalised the details yet, just complete to the best of your ability and you can edit later.
                 </p>
+            </div>
+
+            <div className="space-y-4">
+                <div>
+                    <p className="text-[11px] font-black uppercase tracking-wider text-gray-500">Booking times</p>
+                    <p className="text-[11px] text-neutral-600 mt-1">Please book 30 minutes to 1 hour for bump-in and bump-out. Bump-in and bump-out come from the calendar. Adjust the selected timeslots in the calendar above to change them. Adjust the Guest Arrival and Departure times below.</p>
+                </div>
+                {(bookingHolds.length ? bookingHolds : [null]).map((hold, index) => (
+                    <div key={hold ? `${hold.date}-${hold.roomName}-${index}` : 'empty-times'} className="p-4 bg-neutral-50 border border-gray-200 rounded-sm space-y-3">
+                        {wantsMultipleHolds && hold && (
+                            <p className="text-xs font-black uppercase tracking-wider text-neutral-900">Hold {index + 1}</p>
+                        )}
+                        {!hold ? (
+                            <p className="text-xs font-bold uppercase tracking-wider text-neutral-700">Choose a room and time on the calendar.</p>
+                        ) : (
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                <div className="space-y-1">
+                                    <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Bump-In Time (Access)</label>
+                                    <input
+                                        type="time"
+                                        readOnly
+                                        value={hold.bumpIn}
+                                        onFocus={() => setTimingNote('Change bump-in and bump-out by adjusting the timeslots on the calendar.')}
+                                        className="w-full p-2 border border-gray-200 text-xs font-semibold rounded-sm bg-neutral-100 text-black outline-none cursor-not-allowed"
+                                    />
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Event Starts (Guest Arrival)</label>
+                                    <input
+                                        type="time"
+                                        value={hold.eventStart}
+                                        onChange={(event) => updateHoldGuestTime(index, 'eventStart', event.target.value)}
+                                        className="w-full p-2 border border-gray-200 text-xs font-semibold rounded-sm bg-white text-black outline-none focus:border-neutral-400"
+                                    />
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Event Ends (Guest Departure)</label>
+                                    <input
+                                        type="time"
+                                        value={hold.eventEnd}
+                                        onChange={(event) => updateHoldGuestTime(index, 'eventEnd', event.target.value)}
+                                        className="w-full p-2 border border-gray-200 text-xs font-semibold rounded-sm bg-white text-black outline-none focus:border-neutral-400"
+                                    />
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Bump-Out (Lock-up)</label>
+                                    <input
+                                        type="time"
+                                        readOnly
+                                        value={hold.bumpOut}
+                                        onFocus={() => setTimingNote('Change bump-in and bump-out by adjusting the timeslots on the calendar.')}
+                                        className="w-full p-2 border border-gray-200 text-xs font-semibold rounded-sm bg-neutral-100 text-black outline-none cursor-not-allowed"
+                                    />
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                ))}
+                {timingNote && <p className="text-xs font-bold text-amber-800">{timingNote}</p>}
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -1392,174 +1923,6 @@ This room does not have private bathrooms. The closest toilets are in the main G
                 </div>
             </div>
 
-            {/* SPACE SELECTOR & STANDALONE + ADD-ON COLONNADE LOGIC */}
-            <div className="p-5 bg-neutral-50 border border-gray-200 rounded-sm space-y-4">
-                <label className="text-[11px] font-black uppercase tracking-wider text-gray-500 block">Select Primary Room or Venue Space</label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                    {Object.keys(venueShowroom).map((spaceName) => (
-                        <button
-                            key={spaceName}
-                            type="button"
-                            onClick={() => updateSpaceSelection(spaceName)}
-                            className={`p-3 text-left border rounded-sm transition-all ${formData.space === spaceName
-                                ? 'bg-black text-white border-black font-bold shadow-xs'
-                                : 'bg-white text-neutral-700 border-gray-200 hover:border-black'
-                                }`}
-                        >
-                            <div className="text-xs uppercase font-extrabold">{spaceName.split(' - ')[1] || spaceName}</div>
-                            <div className={`text-[10px] mt-0.5 ${formData.space === spaceName ? 'text-neutral-300' : 'text-gray-400'}`}>{spaceName}</div>
-                        </button>
-                    ))}
-                </div>
-
-                {/* DEDICATED ADD-ON COLONNADE CHECKBOX WHEN EVENT/DESIGN/ENTIRE SPACE IS SELECTED */}
-                {isColonnadeAddonEligible && (
-                    <div className="pt-3 border-t border-gray-200">
-                        <label className="flex items-start gap-3 p-3 bg-amber-50 border border-amber-200 rounded-sm cursor-pointer select-none">
-                            <input
-                                type="checkbox"
-                                checked={formData.includeColonnadeAddon}
-                                onChange={(e) => setFormData(prev => ({ ...prev, includeColonnadeAddon: e.target.checked }))}
-                                className="w-4 h-4 accent-black mt-0.5"
-                            />
-                            <div>
-                                <span className="text-xs font-bold uppercase tracking-wide text-neutral-900 block">
-                                    Book Outdoor Colonnade as Add-on 🌿
-                                </span>
-                                <span className="text-[11px] text-neutral-600 block mt-0.5">
-                                    Reserve the covered outdoor walkway area directly outside for guest check-in, catering tables, or breakout space.
-                                </span>
-                            </div>
-                        </label>
-                    </div>
-                )}
-
-                <div className="pt-2">
-                    <label className="text-[11px] font-black uppercase tracking-wider text-gray-500 block mb-2">Booking times (Please book 30 minutes to 1 hour for bump-in and bump-out)</label>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <div className="space-y-1">
-                            <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Bump-In Time (Access)</label>
-                            <input type="time" value={formData.bumpIn} onChange={e => setFormData({ ...formData, bumpIn: e.target.value })} className="w-full p-2 border border-gray-200 text-xs font-semibold rounded-sm bg-white text-black outline-none focus:border-neutral-400" />
-                        </div>
-                        <div className="space-y-1">
-                            <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Event Starts (Guest Arrival)</label>
-                            <input type="time" value={formData.eventStart} onChange={e => setFormData({ ...formData, eventStart: e.target.value })} className="w-full p-2 border border-gray-200 text-xs font-semibold rounded-sm bg-white text-black outline-none focus:border-neutral-400" />
-                        </div>
-                        <div className="space-y-1">
-                            <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Event Ends (Guest Departure)</label>
-                            <input type="time" value={formData.eventEnd} onChange={e => setFormData({ ...formData, eventEnd: e.target.value })} className="w-full p-2 border border-gray-200 text-xs font-semibold rounded-sm bg-white text-black outline-none focus:border-neutral-400" />
-                        </div>
-                        <div className="space-y-1">
-                            <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Bump-Out (Lock-up)</label>
-                            <input type="time" value={formData.bumpOut} onChange={e => setFormData({ ...formData, bumpOut: e.target.value })} className="w-full p-2 border border-gray-200 text-xs font-semibold rounded-sm bg-white text-black outline-none focus:border-neutral-400" />
-                        </div>
-                    </div>
-                </div>
-
-                <label className="flex items-start gap-3 p-3 bg-white border border-gray-200 rounded-sm cursor-pointer select-none">
-                    <input
-                        type="checkbox"
-                        checked={wantsMultipleHolds}
-                        onChange={(event) => {
-                            const on = event.target.checked;
-                            setWantsMultipleHolds(on);
-                            if (on) {
-                                setRecurrence(prev => ({ ...prev, pattern: 'none' }));
-                                setExtraHolds(current => current.length ? current : [{
-                                    space: formData.space,
-                                    bumpInDate: '',
-                                    bumpIn: formData.bumpIn || '09:00',
-                                    eventStart: formData.eventStart || '09:30',
-                                    eventEnd: formData.eventEnd || '16:30',
-                                    bumpOut: formData.bumpOut || '17:00'
-                                }]);
-                            }
-                        }}
-                        className="w-4 h-4 accent-black mt-0.5"
-                    />
-                    <span>
-                        <span className="text-xs font-bold uppercase tracking-wide text-neutral-900 block">I would like to put in multiple booking holds</span>
-                        <span className="text-[11px] text-neutral-600 block mt-0.5">The date and times above are hold 1. You can add up to two more tentative holds for the same event. All of them are sent for approval or rejection.</span>
-                    </span>
-                </label>
-
-                {wantsMultipleHolds && (
-                    <div className="space-y-4">
-                        {extraHolds.map((hold, index) => (
-                            <div key={index} className="p-4 bg-white border border-gray-200 rounded-sm space-y-3">
-                                <div className="flex items-center justify-between gap-3">
-                                    <p className="text-xs font-black uppercase tracking-wider">Hold {index + 2}</p>
-                                    <button
-                                        type="button"
-                                        onClick={() => setExtraHolds(current => current.filter((_, itemIndex) => itemIndex !== index))}
-                                        className="text-[10px] font-bold uppercase tracking-wider text-neutral-500"
-                                    >
-                                        Remove
-                                    </button>
-                                </div>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                    <label className="space-y-1">
-                                        <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Space</span>
-                                        <select
-                                            value={hold.space}
-                                            onChange={(event) => setExtraHolds(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, space: event.target.value } : item))}
-                                            className="w-full p-2 border border-gray-200 text-xs font-semibold rounded-sm bg-white"
-                                        >
-                                            {Object.keys(venueShowroom).map(spaceName => (
-                                                <option key={spaceName} value={spaceName}>{spaceName}</option>
-                                            ))}
-                                        </select>
-                                    </label>
-                                    <label className="space-y-1">
-                                        <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Date</span>
-                                        <input
-                                            type="date"
-                                            value={hold.bumpInDate}
-                                            onChange={(event) => setExtraHolds(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, bumpInDate: event.target.value } : item))}
-                                            className="w-full p-2 border border-gray-200 text-xs font-semibold rounded-sm bg-white"
-                                        />
-                                    </label>
-                                </div>
-                                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                                    {[
-                                        ['bumpIn', 'Bump-in'],
-                                        ['eventStart', 'Event starts'],
-                                        ['eventEnd', 'Event ends'],
-                                        ['bumpOut', 'Bump-out']
-                                    ].map(([field, label]) => (
-                                        <label key={field} className="space-y-1">
-                                            <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">{label}</span>
-                                            <input
-                                                type="time"
-                                                value={hold[field]}
-                                                onChange={(event) => setExtraHolds(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, [field]: event.target.value } : item))}
-                                                className="w-full p-2 border border-gray-200 text-xs font-semibold rounded-sm bg-white"
-                                            />
-                                        </label>
-                                    ))}
-                                </div>
-                            </div>
-                        ))}
-                        {extraHolds.length < 2 && (
-                            <button
-                                type="button"
-                                onClick={() => setExtraHolds(current => [...current, {
-                                    space: formData.space,
-                                    bumpInDate: '',
-                                    bumpIn: formData.bumpIn || '09:00',
-                                    eventStart: formData.eventStart || '09:30',
-                                    eventEnd: formData.eventEnd || '16:30',
-                                    bumpOut: formData.bumpOut || '17:00'
-                                }])}
-                                className="text-xs font-bold uppercase tracking-wider border border-black px-3 py-2 rounded-sm"
-                            >
-                                Add another hold
-                            </button>
-                        )}
-                    </div>
-                )}
-            </div>
-
             <div className="space-y-2 pt-2">
                 <label className="text-xs font-bold uppercase tracking-wider text-gray-500 block">Event Description</label>
                 <textarea
@@ -1571,114 +1934,15 @@ This room does not have private bathrooms. The closest toilets are in the main G
         </section>
     );
 
-    const renderAffiliationSection = () => (
-        <section key="affiliation-block" className="bg-white p-8 border border-gray-200 rounded-sm shadow-sm space-y-6">
-            <h3 className="text-lg font-extrabold tracking-tight uppercase text-black border-b border-neutral-100 pb-2">
-                Affiliation
-            </h3>
-            <div className="space-y-4">
-                <label className="text-xs font-bold uppercase tracking-wider text-gray-500 block">Select University Relationship</label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {['Internal to UNSW', 'External to UNSW'].map(type => (
-                        <button
-                            key={type} type="button"
-                            onClick={() => setFormData({ ...formData, userType: type })}
-                            className={`p-4 font-bold text-sm tracking-wide transition-all duration-150 text-center border rounded-sm hover:scale-[1.01] active:scale-[0.99] ${formData.userType === type
-                                ? 'bg-white border-black text-black shadow-sm'
-                                : 'bg-white border-gray-200 text-neutral-700 hover:bg-neutral-50'
-                                }`}
-                        >
-                            {type}
-                        </button>
-                    ))}
-                </div>
-            </div>
-
-            {formData.userType === 'External to UNSW' && (
-                <div className="pt-4 space-y-2 border-t border-gray-100 animate-in slide-in-from-top-2 duration-200">
-                    <label className="text-xs font-bold uppercase tracking-wider text-gray-500 block">Company / Organisation Name</label>
-                    <input
-                        type="text"
-                        required={formData.userType === 'External to UNSW'}
-                        placeholder="e.g. Acme Corporation Pty Ltd"
-                        value={formData.companyName}
-                        onChange={(e) => setFormData({ ...formData, companyName: e.target.value })}
-                        className="w-full p-3 border border-gray-300 bg-white text-sm font-medium rounded-sm outline-none focus:border-neutral-500 text-black placeholder-gray-400"
-                    />
-                </div>
-            )}
-
-            {formData.userType === 'Internal to UNSW' && (
-                <div className="space-y-6 pt-4 border-t border-gray-100 animate-in fade-in duration-200">
-                    <div className="space-y-3">
-                        <label className="text-xs font-bold uppercase tracking-wider text-gray-500 block">Specific Department</label>
-                        <div className="grid grid-cols-2 gap-4">
-                            {['UNSW Founders', 'Other Faculty or Division'].map(type => (
-                                <button
-                                    key={type} type="button"
-                                    onClick={() => handleDeptTypeChange(type === 'UNSW Founders' ? 'UNSW Founders' : 'Other')}
-                                    className={`p-3 text-xs font-bold uppercase tracking-wider text-center border rounded-sm transition-all duration-150 hover:scale-[1.01] active:scale-[0.99] ${(type === 'UNSW Founders' && departmentType === 'UNSW Founders') || (type !== 'UNSW Founders' && departmentType === 'Other')
-                                        ? 'bg-black text-white border-black shadow-sm'
-                                        : 'bg-white border-gray-200 text-neutral-700 hover:bg-neutral-50'
-                                        }`}
-                                >
-                                    {type}
-                                </button>
-                            ))}
-                        </div>
-
-                        {departmentType === 'Other' && (
-                            <div className="pt-4 space-y-4 border-t border-gray-100 mt-3 bg-neutral-50/50 p-4 rounded-sm animate-in slide-in-from-top-2 duration-200">
-                                <div className="space-y-2">
-                                    <label className="text-[11px] font-black uppercase tracking-wider text-gray-500 block">UNSW Faculty / Division</label>
-                                    <div className="relative">
-                                        <select
-                                            value={formData.unswDivision}
-                                            onChange={(e) => setFormData({ ...formData, unswDivision: e.target.value })}
-                                            className="w-full p-3 bg-white border border-gray-200 text-sm font-semibold rounded-sm outline-none appearance-none cursor-pointer focus:border-neutral-400 text-black"
-                                            style={{ backgroundImage: 'url("data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'24\' height=\'24\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'gray\' stroke-width=\'2\'><polyline points=\'6 9 12 15 18 9\'></polyline></svg>")', backgroundPosition: 'right 15px center', backgroundRepeat: 'no-repeat' }}
-                                        >
-                                            <option value="" disabled>Please select a division</option>
-                                            <option value="UNSW Art, Design & Architecture">UNSW Art, Design & Architecture</option>
-                                            <option value="UNSW Business School">UNSW Business School</option>
-                                            <option value="UNSW Canberra">UNSW Canberra</option>
-                                            <option value="UNSW Divisions">UNSW Divisions</option>
-                                            <option value="UNSW Engineering">UNSW Engineering</option>
-                                            <option value="UNSW Law">UNSW Law</option>
-                                            <option value="UNSW Medicine">UNSW Medicine</option>
-                                            <option value="UNSW Science">UNSW Science</option>
-                                        </select>
-                                    </div>
-                                </div>
-
-                                <div className="space-y-2">
-                                    <label className="text-[11px] font-black uppercase tracking-wider text-gray-500 block">Specific Unit / School / Department Name</label>
-                                    <input
-                                        type="text"
-                                        required={departmentType === 'Other'}
-                                        placeholder="e.g. School of Computer Science, Graduate Research School"
-                                        value={formData.department}
-                                        onChange={(e) => setFormData({ ...formData, department: e.target.value })}
-                                        className="w-full p-3 border border-gray-300 bg-white text-sm font-medium rounded-sm outline-none focus:border-neutral-500 text-black placeholder-gray-400"
-                                    />
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                </div>
-            )}
-        </section>
-    );
-
     const renderTimesAndRunsheetSection = () => (
         <section key="times-runsheet-block" className="bg-white p-8 border border-gray-200 rounded-sm shadow-sm space-y-6">
             <h3 className="text-lg font-extrabold tracking-tight uppercase text-black border-b border-neutral-100 pb-2">
-                Schedule & Runsheet Setup
+                Schedule
             </h3>
 
             <div className="space-y-3">
                 <label className="text-xs font-bold tracking-wider text-gray-500 block">
-                    Quick Preset Event Templates:
+                    Quick Preset Templates:
                 </label>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     <button type="button" onClick={() => applyEventTemplate('workshop')} className={`p-2.5 text-xs font-bold uppercase rounded-sm border ${layoutMode === 'workshop' ? 'bg-black text-white border-black' : 'bg-neutral-50 border-gray-200 text-neutral-700 hover:bg-neutral-100'}`}>
@@ -1719,14 +1983,22 @@ This room does not have private bathrooms. The closest toilets are in the main G
                                             type="text"
                                             placeholder="e.g. 17:00 - 17:15"
                                             value={row.time}
-                                            onChange={(e) => updateRunsheetRow(index, 'time', e.target.value)}
+                                            onFocus={markScheduleEdit}
+                                            onBlur={() => { scheduleEditMarked.current = false; }}
+                                            onChange={(e) => {
+                                                markScheduleEdit();
+                                                updateRunsheetRow(index, 'time', e.target.value);
+                                            }}
                                             className="w-full p-2 border border-gray-200 rounded-sm text-xs font-medium bg-white text-black outline-none focus:border-neutral-400"
                                         />
                                     </td>
                                     <td className="p-2">
                                         <select
                                             value={row.layout}
-                                            onChange={(e) => updateRunsheetRow(index, 'layout', e.target.value)}
+                                            onChange={(e) => {
+                                                rememberSchedule();
+                                                updateRunsheetRow(index, 'layout', e.target.value);
+                                            }}
                                             className="w-full p-2 border border-gray-200 rounded-sm text-xs font-semibold bg-white text-black outline-none cursor-pointer focus:border-neutral-400"
                                         >
                                             <option>Boardroom Style</option>
@@ -1742,7 +2014,12 @@ This room does not have private bathrooms. The closest toilets are in the main G
                                             type="text"
                                             placeholder={row.layout === 'Other (Please explain in description)' ? "Explain custom layout details..." : "e.g. 10 tables setup for groups of 8..."}
                                             value={row.description}
-                                            onChange={(e) => updateRunsheetRow(index, 'description', e.target.value)}
+                                            onFocus={markScheduleEdit}
+                                            onBlur={() => { scheduleEditMarked.current = false; }}
+                                            onChange={(e) => {
+                                                markScheduleEdit();
+                                                updateRunsheetRow(index, 'description', e.target.value);
+                                            }}
                                             className="w-full p-2 border border-gray-200 rounded-sm text-xs font-medium bg-white text-black outline-none focus:border-neutral-400"
                                         />
                                     </td>
@@ -1762,14 +2039,34 @@ This room does not have private bathrooms. The closest toilets are in the main G
                     </table>
                 </div>
 
-                <div className="flex justify-end pt-1">
-                    <button
-                        type="button"
-                        onClick={addRunsheetRow}
-                        className="bg-neutral-900 text-white font-bold text-[10px] uppercase tracking-wider px-4 py-2 rounded-sm hover:bg-black transition-all duration-150 hover:scale-[1.02] active:scale-[0.98] shadow-2xs"
-                    >
-                        + Add Row
-                    </button>
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-1">
+                    <p className="text-[11px] text-neutral-600">
+                        {scheduleIsSaved ? 'This schedule is saved.' : 'Not saved yet. The last schedule you saved is the one kept.'}
+                    </p>
+                    <div className="flex flex-wrap justify-end gap-2">
+                        <button
+                            type="button"
+                            onClick={undoSchedule}
+                            disabled={scheduleHistory.length === 0}
+                            className={`font-bold text-[10px] uppercase tracking-wider px-4 py-2 rounded-sm border ${scheduleHistory.length === 0 ? 'border-gray-200 text-gray-300 cursor-not-allowed' : 'border-black text-black hover:bg-neutral-100'}`}
+                        >
+                            Undo
+                        </button>
+                        <button
+                            type="button"
+                            onClick={saveSchedule}
+                            className="bg-[#EAD64D] text-black font-bold text-[10px] uppercase tracking-wider px-4 py-2 rounded-sm hover:bg-black hover:text-white"
+                        >
+                            Save schedule
+                        </button>
+                        <button
+                            type="button"
+                            onClick={addRunsheetRow}
+                            className="bg-neutral-900 text-white font-bold text-[10px] uppercase tracking-wider px-4 py-2 rounded-sm hover:bg-black transition-all duration-150 hover:scale-[1.02] active:scale-[0.98] shadow-2xs"
+                        >
+                            + Add Row
+                        </button>
+                    </div>
                 </div>
             </div>
         </section>
@@ -1782,13 +2079,15 @@ This room does not have private bathrooms. The closest toilets are in the main G
 
             const itemPrice = typeof item.costPerDay === 'number' ? item.costPerDay : parseFloat(item.costPerDay) || 0;
             const hasCost = itemPrice > 0;
+            const bookedSpaces = Array.isArray(formData.bookedSpaces) && formData.bookedSpaces.length
+                ? formData.bookedSpaces
+                : [formData.space].filter(Boolean);
+            const freeSpaces = Array.isArray(item.freeInclusionSpaces) ? item.freeInclusionSpaces : [];
+            const includedFree = bookedSpaces.length > 0 && bookedSpaces.every((space) => freeSpaces.includes(space));
 
             let itemPriceDisplay = 'Included ($0)';
-
             if (!isFoundersInternal && hasCost) {
-                itemPriceDisplay = `$${itemPrice.toFixed(2)} / day`;
-            } else if (hasCost && item.isFoundersStaffOnly) {
-                itemPriceDisplay = `$${itemPrice.toFixed(2)} / day`;
+                itemPriceDisplay = includedFree ? 'Included free' : hirePriceText(itemPrice, item.costAppliesTo);
             }
 
             return {
@@ -1805,58 +2104,27 @@ This room does not have private bathrooms. The closest toilets are in the main G
 
         return (
             <section key="av-equipment-block" className="bg-white p-8 border border-gray-200 rounded-sm shadow-sm space-y-8">
-                <div>
-                    <h3 className="text-lg font-extrabold tracking-tight uppercase text-black border-b border-neutral-100 pb-2">
-                        Audio Visual & Equipment
-                    </h3>
-                    <p className="text-xs text-gray-500 mt-2">
-                        Selected Venue: <strong className="text-black">{formData.space || 'MCIC Ground - Event Space'}</strong>
-                        {formData.includeColonnadeAddon && <span className="text-amber-600 font-bold ml-1">(+ Colonnade Add-on)</span>}
-                    </p>
+                <div className="flex items-end justify-between gap-4 border-b border-neutral-100 pb-2">
+                    <h3 className="text-lg font-extrabold tracking-tight uppercase text-black">Asset Inventory</h3>
+                    {!isLoadingEquipment && sharedEquipmentMaster.length > 6 && (
+                        <button
+                            type="button"
+                            onClick={() => setInventoryExpanded(open => !open)}
+                            className="shrink-0 text-[10px] font-black uppercase tracking-wider border border-black px-3 py-2 rounded-sm"
+                            aria-expanded={inventoryExpanded}
+                        >
+                            {inventoryExpanded ? 'Minimise' : 'Expand'}
+                        </button>
+                    )}
                 </div>
 
-                {/* STANDARD INCLUSIONS BANNER */}
-                <div className="bg-neutral-50 border border-neutral-200 p-5 rounded-sm space-y-3">
-                    <div className="flex items-center gap-2">
-                        <span className="bg-emerald-600 text-white font-mono text-[10px] font-bold uppercase px-2 py-0.5 rounded-sm">
-                            Included
-                        </span>
-                        <h4 className="font-bold text-sm text-neutral-900">Standard Room Inclusions</h4>
-                    </div>
-                    <p className="text-xs text-gray-500">
-                        These features are pre-installed in {formData.space || 'this space'} and included automatically:
-                    </p>
-
-                    <ul className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs font-medium text-neutral-800 pt-1">
-                        {(ROOM_INCLUSIONS[formData.space] || ROOM_INCLUSIONS['MCIC Ground - Event Space']).map((item, idx) => (
-                            <li key={idx} className="flex items-center gap-2 bg-white px-3 py-2 border border-neutral-200 rounded-sm">
-                                <span className="text-emerald-600 font-bold">✓</span>
-                                {item}
-                            </li>
-                        ))}
-                    </ul>
-                </div>
-
-                {/* SHARED INVENTORY GRID WITH THUMBNAIL PREVIEWS */}
                 <div className="space-y-4">
-                    <div className="border-b border-gray-100 pb-2 flex justify-between items-end">
-                        <div>
-                            <h4 className="font-bold text-sm text-black uppercase">Shared Hub Equipment & Asset Inventory</h4>
-                            <p className="text-xs text-gray-500">
-                                Shared across all venues. Rates adapt automatically based on your affiliation selection. Click item title to view full details.
-                            </p>
-                        </div>
-                        <span className="font-mono text-[10px] bg-amber-100 text-amber-900 px-2 py-0.5 font-bold uppercase rounded-sm">
-                            Live Inventory Active
-                        </span>
-                    </div>
-
                     {isLoadingEquipment ? (
                         <div className="p-8 text-center text-xs text-gray-400 font-mono">
                             Loading live inventory database catalog from Firestore...
                         </div>
                     ) : (
-                        <div className="border border-gray-200 divide-y divide-gray-100 rounded-sm overflow-hidden shadow-xs">
+                        <div className={`border border-gray-200 divide-y divide-gray-100 rounded-sm shadow-xs ${inventoryExpanded ? '' : 'max-h-[43rem] overflow-y-auto'}`}>
                             {sharedEquipmentMaster.map((item) => {
                                 const reservedInSlot = 0;
                                 const availableStock = Math.max(0, item.totalHubStock - reservedInSlot);
@@ -1956,76 +2224,194 @@ This room does not have private bathrooms. The closest toilets are in the main G
     };
 
     const renderCateringSection = () => (
-        <section key="catering-block" className="bg-white p-8 border border-gray-200 rounded-sm shadow-sm space-y-6">
+        <section id="catering-block" key="catering-block" className="bg-white p-8 border border-gray-200 rounded-sm shadow-sm space-y-6">
             <h3 className="text-lg font-extrabold tracking-tight uppercase text-black border-b border-neutral-100 pb-2">
                 Catering
             </h3>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 p-4 bg-neutral-50/50 rounded-sm border border-gray-100">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                 <div className="space-y-2">
-                    <p className="text-xs font-bold text-neutral-700">Will you be serving food and drinks?</p>
-                    <div className="flex gap-2">
-                        {['Yes', 'No'].map(choice => (
-                            <button
-                                key={choice} type="button"
-                                onClick={() => setFormData({ ...formData, catering: choice })}
-                                className={`flex-1 py-2 text-xs font-bold uppercase rounded-sm border transition-colors ${formData.catering === choice ? 'bg-black text-white border-black' : 'bg-white border-gray-200 text-neutral-600 hover:bg-neutral-100'}`}
-                            >
-                                {choice}
-                            </button>
-                        ))}
-                    </div>
+                    <p className={questionClass}>Will you be serving food and drinks?</p>
+                    {yesNoChoices(formData.catering, (choice) => setFormData({ ...formData, catering: choice }))}
                 </div>
                 <div className="space-y-2">
-                    <p className="text-xs font-bold text-neutral-700">Will you be serving alcohol?</p>
-                    <div className="flex gap-2">
-                        {['Yes', 'No'].map(choice => (
-                            <button
-                                key={choice} type="button"
-                                onClick={() => setFormData({ ...formData, alcohol: choice })}
-                                className={`flex-1 py-2 text-xs font-bold uppercase rounded-sm border transition-colors ${formData.alcohol === choice ? 'bg-black text-white border-black' : 'bg-white border-gray-200 text-neutral-600 hover:bg-neutral-100'}`}
-                            >
-                                {choice}
-                            </button>
-                        ))}
-                    </div>
+                    <p className={questionClass}>Will you be serving alcohol?</p>
+                    {yesNoChoices(formData.alcohol, (choice) => setFormData({
+                        ...formData,
+                        alcohol: choice,
+                        rsaChoice: choice === 'Yes' ? formData.rsaChoice : '',
+                        rsaFileName: choice === 'Yes' ? formData.rsaFileName : '',
+                        rsaFileData: choice === 'Yes' ? formData.rsaFileData : ''
+                    }))}
                 </div>
             </div>
 
-            {(formData.catering === 'Yes' || formData.alcohol === 'Yes') && (
-                <div
-                    id="catering-policy-block"
-                    className={`border p-4 rounded-sm space-y-4 text-xs font-medium leading-relaxed shadow-sm transition-colors duration-200 ${cateringError
-                        ? 'border-red-300 bg-red-50/60 text-red-900'
-                        : 'border-amber-200 bg-amber-50/40 text-neutral-800'
-                        }`}
-                >
-                    <div className="flex items-center gap-2 font-bold text-black uppercase tracking-wide">
-                        <span>💡</span> Self-Catering Policy
-                    </div>
-                    <p>
-                        Anyone using our spaces will need to organise their own catering and serviceware.
-                    </p>
-
-                    <div className="pt-3 border-t border-dashed border-neutral-200/80">
-                        <label className="flex items-start gap-3 cursor-pointer select-none">
-                            <input
-                                type="checkbox"
-                                className="w-4 h-4 rounded-sm border-gray-300 accent-black mt-0.5"
-                                checked={cateringAcknowledged}
-                                onChange={(e) => {
-                                    setCateringAcknowledged(e.target.checked);
-                                    if (e.target.checked) setCateringError(false);
-                                }}
-                            />
-                            <div className="flex flex-col">
-                                <span className="text-xs font-bold uppercase tracking-tight text-black">
-                                    I acknowledge this is a self-catering space
-                                </span>
+            {formData.alcohol === 'Yes' && (
+                <div id="alcohol-rsa-block" className="space-y-3">
+                    {rsaOnFile && formData.rsaChoice !== 'staff' ? (
+                        <div className="space-y-2">
+                            <p className="text-xs text-neutral-700">
+                                {savedRsa.expiryDate
+                                    ? `Your RSA is on file until ${formatBookingDate(savedRsa.expiryDate)}.`
+                                    : 'Your RSA is on file. An admin will add the expiry date.'}
+                            </p>
+                            <button
+                                type="button"
+                                onClick={() => setFormData(prev => ({ ...prev, rsaChoice: 'staff' }))}
+                                className="text-xs font-bold underline"
+                            >
+                                Ask for a staff member with an RSA instead
+                            </button>
+                        </div>
+                    ) : (
+                        <>
+                            <p className={questionClass}>A valid NSW RSA competency card is required.</p>
+                            <div className="flex flex-col gap-2">
+                                <label className="flex items-center gap-2 cursor-pointer select-none">
+                                    <input
+                                        type="checkbox"
+                                        className="w-4 h-4 accent-black rounded-sm"
+                                        checked={formData.rsaChoice === 'upload'}
+                                        onChange={() => setFormData(prev => ({ ...prev, rsaChoice: 'upload' }))}
+                                    />
+                                    <span className={answerClass}>Upload my RSA</span>
+                                </label>
+                                <label className="flex items-center gap-2 cursor-pointer select-none">
+                                    <input
+                                        type="checkbox"
+                                        className="w-4 h-4 accent-black rounded-sm"
+                                        checked={formData.rsaChoice === 'staff'}
+                                        onChange={() => setFormData(prev => ({ ...prev, rsaChoice: 'staff', rsaFileName: '', rsaFileData: '' }))}
+                                    />
+                                    <span className={answerClass}>Organise a staff member with an RSA</span>
+                                </label>
                             </div>
-                        </label>
-                    </div>
+                            {formData.rsaChoice === 'upload' && (
+                                <label className="block space-y-2">
+                                    <span className="text-xs font-bold text-neutral-700">RSA competency card</span>
+                                    <input
+                                        type="file"
+                                        accept="image/*,.pdf,application/pdf"
+                                        onChange={(event) => {
+                                            const file = event.target.files?.[0];
+                                            if (!file) return;
+                                            if (file.size > 500 * 1024) {
+                                                alert('That file is too large. Upload a photo or PDF under 500KB.');
+                                                event.target.value = '';
+                                                return;
+                                            }
+                                            const reader = new FileReader();
+                                            reader.onload = () => {
+                                                setFormData(prev => ({
+                                                    ...prev,
+                                                    rsaFileName: file.name,
+                                                    rsaFileData: typeof reader.result === 'string' ? reader.result : ''
+                                                }));
+                                            };
+                                            reader.readAsDataURL(file);
+                                        }}
+                                        className="block w-full text-xs text-neutral-700 file:mr-3 file:py-2 file:px-3 file:border file:border-gray-200 file:rounded-sm file:bg-white file:text-xs file:font-bold file:uppercase"
+                                    />
+                                    {formData.rsaFileName && <span className="text-xs text-neutral-600 block">Uploaded: {formData.rsaFileName}</span>}
+                                </label>
+                            )}
+                        </>
+                    )}
                 </div>
+            )}
+
+            {access.founders && (formData.catering === 'Yes' || formData.alcohol === 'Yes') && (
+                <div className="space-y-4">
+                    {formData.catering === 'Yes' && (
+                        <div className="space-y-2">
+                            <p className={questionClass}>Do you need Tamara to order food, soft drinks etc. from Woolworths or caterer, please specify.</p>
+                            {yesNoChoices(formData.foundersSupplies.woolworthsOrder, (choice) => setFormData(prev => ({
+                                ...prev,
+                                foundersSupplies: {
+                                    ...prev.foundersSupplies,
+                                    woolworthsOrder: choice,
+                                    woolworths: choice === 'Yes' ? prev.foundersSupplies.woolworths : ''
+                                }
+                            })))}
+                            {formData.foundersSupplies.woolworthsOrder === 'Yes' && (
+                                <textarea
+                                    rows={2}
+                                    value={formData.foundersSupplies.woolworths}
+                                    onChange={(e) => setFormData(prev => ({
+                                        ...prev,
+                                        foundersSupplies: { ...prev.foundersSupplies, woolworths: e.target.value }
+                                    }))}
+                                    placeholder="Please specify"
+                                    className="w-full p-2.5 border border-gray-200 bg-white text-xs text-black rounded-sm outline-none focus:border-black"
+                                />
+                            )}
+                        </div>
+                    )}
+                    {formData.alcohol === 'Yes' && (
+                        <div className="space-y-2">
+                            <p className={questionClass}>Do you need Tamara to order beer or wine from Dan Murphy's. Please specify if you have specific requests.</p>
+                            {yesNoChoices(formData.foundersSupplies.danMurphysOrder, (choice) => setFormData(prev => ({
+                                ...prev,
+                                foundersSupplies: {
+                                    ...prev.foundersSupplies,
+                                    danMurphysOrder: choice,
+                                    danMurphys: choice === 'Yes' ? prev.foundersSupplies.danMurphys : ''
+                                }
+                            })))}
+                            {formData.foundersSupplies.danMurphysOrder === 'Yes' && (
+                                <textarea
+                                    rows={2}
+                                    value={formData.foundersSupplies.danMurphys}
+                                    onChange={(e) => setFormData(prev => ({
+                                        ...prev,
+                                        foundersSupplies: { ...prev.foundersSupplies, danMurphys: e.target.value }
+                                    }))}
+                                    placeholder="Please specify if you have specific requests"
+                                    className="w-full p-2.5 border border-gray-200 bg-white text-xs text-black rounded-sm outline-none focus:border-black"
+                                />
+                            )}
+                        </div>
+                    )}
+                    <p className="text-xs text-neutral-600">Book any other serviceware from the inventory.</p>
+                </div>
+            )}
+
+            {!access.founders && formData.catering === 'Yes' && (
+            <div
+                id="catering-policy-block"
+                className={`border p-4 rounded-sm space-y-4 text-xs font-medium leading-relaxed shadow-sm transition-colors duration-200 ${cateringError
+                    ? 'border-red-300 bg-red-50/60 text-red-900'
+                    : 'border-amber-200 bg-amber-50/40 text-neutral-800'
+                    }`}
+            >
+                <div className="flex items-center gap-2 font-bold text-black uppercase tracking-wide">
+                    <span>💡</span> Self-Catering Policy
+                </div>
+                <p>
+                    Anyone using our spaces will need to organise their own catering and serviceware. With the exception of items hired in this booking form.
+                </p>
+
+                <div className="pt-3 border-t border-dashed border-neutral-200/80">
+                    <label className="flex items-start gap-3 cursor-pointer select-none">
+                        <input
+                            type="checkbox"
+                            required
+                            className="w-4 h-4 rounded-sm border-gray-300 accent-black mt-0.5"
+                            checked={cateringAcknowledged}
+                            onChange={(e) => {
+                                setCateringAcknowledged(e.target.checked);
+                                if (e.target.checked) setCateringError(false);
+                            }}
+                        />
+                        <div className="flex flex-col">
+                            <span className="text-xs font-bold uppercase tracking-tight text-black">
+                                I acknowledge this is a self-catering space *
+                            </span>
+                            {cateringError && <span className="text-xs font-bold text-red-700">Tick this box before submitting.</span>}
+                        </div>
+                    </label>
+                </div>
+            </div>
             )}
         </section>
     );
@@ -2036,63 +2422,32 @@ This room does not have private bathrooms. The closest toilets are in the main G
             </h3>
 
             <div className="space-y-4">
-                <label className="flex items-start gap-3 p-4 bg-neutral-50 border border-neutral-200 rounded-sm cursor-pointer select-none">
-                    <input
-                        type="checkbox"
-                        checked={formData.isHighRisk}
-                        onChange={(e) => setFormData(prev => ({ ...prev, isHighRisk: e.target.checked }))}
-                        className="w-4 h-4 accent-black mt-0.5 rounded-sm"
-                    />
-                    <div>
-                        <span className="text-xs font-bold uppercase tracking-wider text-black block">
-                            Event Involves High-Risk Activities or Special Machinery ⚠️
-                        </span>
-                        <span className="text-xs text-gray-500 mt-1 block leading-relaxed">
-                            Includes live machinery demos, soldering, open flames, physical hazards, chemicals, or specialized fabrication equipment.
-                        </span>
+                <div className="space-y-2">
+                    <p className={questionClass}>Controversial Topics & Security Notification *</p>
+                    <p className="text-xs text-neutral-600 leading-relaxed">This event involves controversial topics, sensitive political discussions, potentially dangerous activities, or high-profile guest speakers that may require security presence, crowd management or additional risk assessments.</p>
+                    <div className="flex flex-wrap gap-x-6 gap-y-2">
+                        {[['Yes', true], ['No', false]].map(([label, value]) => (
+                            <label key={label} className="flex items-center gap-2 cursor-pointer select-none">
+                                <input
+                                    type="checkbox"
+                                    className="w-4 h-4 accent-black rounded-sm"
+                                    checked={formData.involvesControversialTopics === value}
+                                    onChange={() => setFormData(prev => ({
+                                        ...prev,
+                                        involvesControversialTopics: value,
+                                        securityDetails: value ? prev.securityDetails : ''
+                                    }))}
+                                />
+                                <span className={answerClass}>{label}</span>
+                            </label>
+                        ))}
                     </div>
-                </label>
-
-                {formData.isHighRisk && (
-                    <div className="p-4 bg-amber-50/50 border border-amber-200 rounded-sm space-y-2 animate-in fade-in">
-                        <label className="text-xs font-bold uppercase tracking-wider text-amber-900 block">
-                            Safety Protocols & Risk Management Plan *
-                        </label>
-                        <textarea
-                            rows={3}
-                            placeholder="Detail safety measures, qualified personnel supervision, protective equipment, or risk controls..."
-                            value={formData.riskDetails}
-                            onChange={(e) => setFormData(prev => ({ ...prev, riskDetails: e.target.value }))}
-                            className="w-full p-3 border border-amber-300 bg-white text-xs text-black font-medium rounded-sm outline-none focus:border-amber-500"
-                        />
-                    </div>
-                )}
-
-                <label className="flex items-start gap-3 p-4 bg-neutral-50 border border-neutral-200 rounded-sm cursor-pointer select-none">
-                    <input
-                        type="checkbox"
-                        checked={formData.involvesControversialTopics}
-                        onChange={(e) => setFormData(prev => ({
-                            ...prev,
-                            involvesControversialTopics: e.target.checked,
-                            securityDetails: e.target.checked ? prev.securityDetails : ''
-                        }))}
-                        className="w-4 h-4 accent-black mt-0.5 rounded-sm"
-                    />
-                    <div>
-                        <span className="text-xs font-bold uppercase tracking-wider text-black block">
-                            Controversial Topics & Security Notification
-                        </span>
-                        <span className="text-xs text-gray-600 mt-1 block leading-relaxed">
-                            Does this event involve controversial topics, sensitive political discussions, or high-profile guest speakers that may require security presence or crowd management?
-                        </span>
-                    </div>
-                </label>
+                </div>
 
                 {formData.involvesControversialTopics && (
                     <div id="security-notification-block" className="p-4 bg-red-50/60 border border-red-200 rounded-sm space-y-2 animate-in fade-in">
                         <label className="text-xs font-bold uppercase tracking-wider text-red-900 block">
-                            If yes, please provide details for UNSW Security Services notification. *
+                            Please provide details. *
                         </label>
                         <textarea
                             rows={3}
@@ -2109,80 +2464,47 @@ This room does not have private bathrooms. The closest toilets are in the main G
     );
 
     const renderContactDetailsSection = () => (
-        <section key="contact-details-block" className="bg-white p-8 border border-gray-200 rounded-sm shadow-sm space-y-6">
+        <section id="contact-details-block" key="contact-details-block" className="bg-white p-8 border border-gray-200 rounded-sm shadow-sm space-y-6">
             <h3 className="text-lg font-extrabold tracking-tight uppercase text-black border-b border-neutral-100 pb-2">
                 Contact & Responsible Person
             </h3>
 
             <div className="space-y-4">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-gray-500">Main Event Organiser</h4>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="space-y-1">
-                        <label className="text-[10px] font-bold uppercase text-gray-500">Full Name *</label>
-                        <input
-                            type="text"
-                            required
-                            placeholder="e.g. Jane Doe"
-                            value={formData.mainContact.name}
-                            onChange={(e) => setFormData(prev => ({
-                                ...prev,
-                                mainContact: { ...prev.mainContact, name: e.target.value }
-                            }))}
-                            className="w-full p-2.5 border border-gray-200 bg-white text-xs font-medium rounded-sm text-black outline-none focus:border-black"
-                        />
-                    </div>
-                    <div className="space-y-1">
-                        <label className="text-[10px] font-bold uppercase text-gray-500">Email Address *</label>
-                        <input
-                            type="email"
-                            required
-                            placeholder="e.g. j.doe@unsw.edu.au"
-                            value={formData.mainContact.email}
-                            onChange={(e) => setFormData(prev => ({
-                                ...prev,
-                                mainContact: { ...prev.mainContact, email: e.target.value }
-                            }))}
-                            className="w-full p-2.5 border border-gray-200 bg-white text-xs font-medium rounded-sm text-black outline-none focus:border-black"
-                        />
-                    </div>
-                    <div className="space-y-1">
-                        <label className="text-[10px] font-bold uppercase text-gray-500">Mobile Phone *</label>
-                        <input
-                            type="tel"
-                            required
-                            placeholder="e.g. 0400 000 000"
-                            value={formData.mainContact.phone}
-                            onChange={(e) => setFormData(prev => ({
-                                ...prev,
-                                mainContact: { ...prev.mainContact, phone: e.target.value }
-                            }))}
-                            className="w-full p-2.5 border border-gray-200 bg-white text-xs font-medium rounded-sm text-black outline-none focus:border-black"
-                        />
-                    </div>
-                </div>
-
-                <div className="pt-2">
+                <p className={questionClass}>On the day contact *</p>
+                <div className="flex flex-col gap-2">
                     <label className="flex items-center gap-2 cursor-pointer select-none">
                         <input
                             type="checkbox"
-                            checked={formData.sameAsMain}
-                            onChange={(e) => setFormData(prev => ({ ...prev, sameAsMain: e.target.checked }))}
                             className="w-4 h-4 accent-black rounded-sm"
+                            checked={formData.sameAsMain === true}
+                            onChange={() => setFormData(prev => ({ ...prev, sameAsMain: true }))}
                         />
-                        <span className="text-xs font-bold uppercase tracking-wider text-neutral-800">
-                            On-Day Event Contact is the same as Main Organiser
-                        </span>
+                        <span className={answerClass}>I am the on the day contact</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer select-none">
+                        <input
+                            type="checkbox"
+                            className="w-4 h-4 accent-black rounded-sm"
+                            checked={formData.sameAsMain === false}
+                            onChange={() => setFormData(prev => ({
+                                ...prev,
+                                sameAsMain: false,
+                                onDayContact: prev.sameAsMain === true ? { name: '', email: '', phone: '' } : prev.onDayContact
+                            }))}
+                        />
+                        <span className={answerClass}>They are different</span>
                     </label>
                 </div>
 
-                {!formData.sameAsMain && (
+                {formData.sameAsMain === false && (
                     <div className="pt-4 border-t border-gray-100 space-y-4 animate-in fade-in">
-                        <h4 className="text-xs font-bold uppercase tracking-wider text-gray-500">On-Day Emergency Contact</h4>
+                        <h4 className="text-xs font-bold uppercase tracking-wider text-gray-500">On-Day Contact</h4>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                             <div className="space-y-1">
                                 <label className="text-[10px] font-bold uppercase text-gray-500">On-Day Contact Name</label>
                                 <input
                                     type="text"
+                                    required
                                     placeholder="e.g. Alex Smith"
                                     value={formData.onDayContact.name}
                                     onChange={(e) => setFormData(prev => ({
@@ -2196,7 +2518,8 @@ This room does not have private bathrooms. The closest toilets are in the main G
                                 <label className="text-[10px] font-bold uppercase text-gray-500">On-Day Contact Email</label>
                                 <input
                                     type="email"
-                                    placeholder="e.g. alex.smith@unsw.edu.au"
+                                    required
+                                    placeholder="@unsw.edu.au"
                                     value={formData.onDayContact.email}
                                     onChange={(e) => setFormData(prev => ({
                                         ...prev,
@@ -2209,6 +2532,7 @@ This room does not have private bathrooms. The closest toilets are in the main G
                                 <label className="text-[10px] font-bold uppercase text-gray-500">On-Day Contact Mobile Phone</label>
                                 <input
                                     type="tel"
+                                    required
                                     placeholder="e.g. 0411 111 111"
                                     value={formData.onDayContact.phone}
                                     onChange={(e) => setFormData(prev => ({
@@ -2473,6 +2797,10 @@ This room does not have private bathrooms. The closest toilets are in the main G
                                                     <span className="text-neutral-600">Available</span>
                                                 </div>
                                                 <div className="flex items-center gap-1.5">
+                                                    <span className="w-2.5 h-2.5 bg-[#EAD64D] border border-yellow-600 rounded-sm block" />
+                                                    <span className="text-neutral-600">Held</span>
+                                                </div>
+                                                <div className="flex items-center gap-1.5">
                                                     <span className="w-2.5 h-2.5 bg-rose-100 border border-rose-300 rounded-sm block" />
                                                     <span className="text-neutral-600">Unavailable</span>
                                                 </div>
@@ -2539,155 +2867,16 @@ This room does not have private bathrooms. The closest toilets are in the main G
 
                                         <div className="p-3.5 bg-neutral-900 text-white font-bold rounded-xs text-xs">
                                             Select all time slots you would like to book. Selecting start and end times automatically selects all in between.
-                                            <br />Note: You can only book one room at a time.
+                                            <br />{wantsMultipleHolds
+                                                ? 'Choose Hold 1, 2 or 3, then select that window. Each hold is one room and one continuous time.'
+                                                : 'Note: You can only book one room at a time.'}
                                         </div>
-                                        {selectedSlots.length > 0 && (
+                                        {!wantsMultipleHolds && selectedSlots.length > 0 && (
                                             <p className="text-xs font-bold text-neutral-800">
                                                 {selectedSlots.length} adjacent {selectedSlots.length === 1 ? 'slot' : 'slots'} selected, {formData.bumpIn} to {formData.bumpOut}.
                                             </p>
                                         )}
 
-                                        {foundersBooking && selectedSlots.length > 0 && (
-                                            <div className="p-4 bg-white border border-neutral-200 rounded-sm space-y-4">
-                                                <div className="space-y-2">
-                                                    <label className="text-xs font-bold uppercase tracking-wider text-gray-500 block">Repeat</label>
-                                                    <div className="grid grid-cols-2 gap-3">
-                                                        {[
-                                                            { id: 'none', label: 'Does not repeat' },
-                                                            { id: 'weekly', label: 'Weekly' }
-                                                        ].map(option => (
-                                                            <button
-                                                                key={option.id}
-                                                                type="button"
-                                                                onClick={() => {
-                                                                    setRecurrence(prev => ({ ...prev, pattern: option.id }));
-                                                                    if (option.id === 'weekly') setWantsMultipleHolds(false);
-                                                                }}
-                                                                className={`p-3 text-xs font-bold uppercase tracking-wider text-center border rounded-sm transition-all ${recurrence.pattern === option.id
-                                                                    ? 'bg-black text-white border-black shadow-sm'
-                                                                    : 'bg-white border-gray-200 text-neutral-700 hover:bg-neutral-50'
-                                                                    }`}
-                                                            >
-                                                                {option.label}
-                                                            </button>
-                                                        ))}
-                                                    </div>
-                                                </div>
-
-                                                {recurrence.pattern === 'weekly' && (
-                                                    <>
-                                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                                            <div className="space-y-2">
-                                                                <label className="text-xs font-bold uppercase tracking-wider text-gray-500 block">Every</label>
-                                                                <div className="flex items-center gap-2">
-                                                                    <input
-                                                                        type="number"
-                                                                        min={1}
-                                                                        max={MAX_SERIES_OCCURRENCES}
-                                                                        value={recurrence.interval}
-                                                                        onChange={(e) => setRecurrence(prev => ({
-                                                                            ...prev,
-                                                                            interval: Math.min(MAX_SERIES_OCCURRENCES, Math.max(1, Number(e.target.value) || 1))
-                                                                        }))}
-                                                                        className="w-20 p-2 border border-gray-300 bg-white text-sm font-medium rounded-sm text-black outline-none"
-                                                                    />
-                                                                    <span className="text-xs font-medium text-neutral-700">{Number(recurrence.interval) === 1 ? 'week' : 'weeks'}</span>
-                                                                </div>
-                                                            </div>
-                                                            <div className="space-y-2">
-                                                                <label className="text-xs font-bold uppercase tracking-wider text-gray-500 block">Ends</label>
-                                                                <div className="grid grid-cols-2 gap-2">
-                                                                    <button
-                                                                        type="button"
-                                                                        onClick={() => setRecurrence(prev => ({ ...prev, endType: 'on' }))}
-                                                                        className={`p-2 text-[11px] font-bold uppercase tracking-wider border rounded-sm ${recurrence.endType === 'on' ? 'bg-black text-white border-black' : 'bg-white border-gray-200 text-neutral-700'}`}
-                                                                    >
-                                                                        On a date
-                                                                    </button>
-                                                                    <button
-                                                                        type="button"
-                                                                        onClick={() => setRecurrence(prev => ({ ...prev, endType: 'after' }))}
-                                                                        className={`p-2 text-[11px] font-bold uppercase tracking-wider border rounded-sm ${recurrence.endType === 'after' ? 'bg-black text-white border-black' : 'bg-white border-gray-200 text-neutral-700'}`}
-                                                                    >
-                                                                        After
-                                                                    </button>
-                                                                </div>
-                                                                {recurrence.endType === 'on' ? (
-                                                                    <input
-                                                                        type="date"
-                                                                        value={recurrence.endDate}
-                                                                        min={selectedDateStr}
-                                                                        onChange={(e) => setRecurrence(prev => ({ ...prev, endDate: e.target.value }))}
-                                                                        className="w-full p-2 border border-gray-300 bg-white text-sm font-medium rounded-sm text-black outline-none"
-                                                                    />
-                                                                ) : (
-                                                                    <div className="flex items-center gap-2">
-                                                                        <input
-                                                                            type="number"
-                                                                            min={1}
-                                                                            max={MAX_SERIES_OCCURRENCES}
-                                                                            value={recurrence.occurrences}
-                                                                            onChange={(e) => setRecurrence(prev => ({
-                                                                                ...prev,
-                                                                                occurrences: Math.min(MAX_SERIES_OCCURRENCES, Math.max(1, Number(e.target.value) || 1))
-                                                                            }))}
-                                                                            className="w-20 p-2 border border-gray-300 bg-white text-sm font-medium rounded-sm text-black outline-none"
-                                                                        />
-                                                                        <span className="text-xs font-medium text-neutral-700">occurrences</span>
-                                                                    </div>
-                                                                )}
-                                                            </div>
-                                                        </div>
-                                                        <p className="text-[11px] font-medium text-neutral-500">
-                                                            Same weekday and time. A series stops at 52 occurrences. Dates that are already booked are left out.
-                                                        </p>
-                                                        {seriesPlan?.invalidEnd && (
-                                                            <p className="text-xs font-bold text-red-700">Choose an end date on or after the start date.</p>
-                                                        )}
-                                                        {!seriesPlan?.invalidEnd && (seriesAvailability.status === 'loading' || seriesAvailability.status === 'idle') && (
-                                                            <p className="text-xs font-bold text-neutral-600">Checking each date against the room calendar…</p>
-                                                        )}
-                                                        {!seriesPlan?.invalidEnd && seriesAvailability.status === 'error' && (
-                                                            <div className="space-y-1">                                                                <ul className="space-y-1">
-                                                                    {(seriesPlan?.dates || []).map(date => (
-                                                                        <li key={date} className="text-xs text-neutral-600">
-                                                                            {formatBookingDate(date, true)} — availability could not be checked
-                                                                        </li>
-                                                                    ))}
-                                                                </ul>
-                                                            </div>
-                                                        )}
-                                                        {seriesPlan?.known && !seriesPlan.invalidEnd && seriesPlan.skippedDates.length > 0 && (
-                                                            <div className="space-y-1">
-                                                                <p className="text-xs font-bold text-rose-800">These dates are already booked and will be left out</p>
-                                                                <ul className="space-y-1">
-                                                                    {seriesPlan.skippedDates.map(item => (
-                                                                        <li key={item.date} className="text-xs text-rose-900">
-                                                                            {formatBookingDate(item.date, true)} — {item.reason}
-                                                                        </li>
-                                                                    ))}
-                                                                </ul>
-                                                            </div>
-                                                        )}
-                                                        {seriesPlan?.known && !seriesPlan.invalidEnd && seriesPlan.bookedDates.length > 0 && (
-                                                            <div className="space-y-1">
-                                                                <p className="text-xs font-bold text-neutral-800">These dates will be booked</p>
-                                                                <ul className="space-y-1">
-                                                                    {seriesPlan.bookedDates.map(date => (
-                                                                        <li key={date} className="text-xs text-neutral-700">
-                                                                            {formatBookingDate(date, true)}, {timeRangeLabel}
-                                                                        </li>
-                                                                    ))}
-                                                                </ul>
-                                                            </div>
-                                                        )}
-                                                        {seriesPlan?.known && seriesPlan.dates.length >= MAX_SERIES_OCCURRENCES && (
-                                                            <p className="text-[11px] font-bold text-neutral-500">Capped at 52 occurrences.</p>
-                                                        )}
-                                                    </>
-                                                )}
-                                            </div>
-                                        )}
 
                                         {selectedLock.locked ? (
                                             <div className="p-4 bg-rose-50 border border-rose-200 rounded-sm">
@@ -2695,7 +2884,7 @@ This room does not have private bathrooms. The closest toilets are in the main G
                                             </div>
                                         ) : (
                                         <div className="border border-gray-200 rounded-sm bg-white shadow-sm overflow-hidden">
-                                            <div className="overflow-x-auto overflow-y-auto max-h-[480px]">
+                                            <div className="overflow-x-auto overflow-y-auto max-h-[480px]" onMouseLeave={() => setSlotHover(null)}>
                                                 <table className="w-full table-fixed text-left border-collapse">
                                                     <thead>
                                                         <tr className="bg-neutral-900 text-white text-[10px] font-black uppercase tracking-wider border-b border-neutral-800 sticky top-0 z-20">
@@ -2714,26 +2903,59 @@ This room does not have private bathrooms. The closest toilets are in the main G
                                                                     {slot}
                                                                 </td>
                                                                 {mockCalendarData.rooms.map((room) => {
-                                                                    const dayKeyString = formatDayKey(selectedCalendarDate);
+                                                                    const viewedDate = localDateString(selectedCalendarDate);
                                                                     const isBlocked = isSlotBlockedByCalendar(room.space, slot);
-                                                                    const compositeSlotKey = `${room.name}|${dayKeyString}|${slot}`;
-                                                                    const isCurrentlySelected = selectedSlots.includes(compositeSlotKey);
+                                                                    const holdIndex = bookingHolds.findIndex(hold => hold.date === viewedDate && hold.roomName === room.name && hold.times.includes(slot));
+                                                                    const colonnadeHoldIndexes = room.name === 'Colonnade'
+                                                                        ? bookingHolds.flatMap((hold, index) => (
+                                                                            hold.includeColonnade && hold.date === viewedDate && hold.times.includes(slot) ? [index] : []
+                                                                        ))
+                                                                        : [];
+                                                                    const isCurrentlySelected = holdIndex >= 0;
+                                                                    const isColonnadeAddon = colonnadeHoldIndexes.length > 0 && !isBlocked;
+                                                                    const selectedTimes = isCurrentlySelected ? bookingHolds[holdIndex].times : [];
+                                                                    const addonHold = !isCurrentlySelected && colonnadeHoldIndexes.length === 1 ? bookingHolds[colonnadeHoldIndexes[0]] : null;
+                                                                    let holdName = '';
+                                                                    if (wantsMultipleHolds) {
+                                                                        if (colonnadeHoldIndexes.length > 1) holdName = `Hold ${colonnadeHoldIndexes.map(index => index + 1).join('+')}`;
+                                                                        else if (isCurrentlySelected) holdName = `Hold ${holdIndex + 1}`;
+                                                                        else if (colonnadeHoldIndexes.length === 1) holdName = `Hold ${colonnadeHoldIndexes[0] + 1}`;
+                                                                    }
+                                                                    const selectedEdge = slotEdgeLabel(selectedTimes.length ? selectedTimes : (addonHold?.times || []), slot, holdName);
+                                                                    const previewTimes = hoverPreview?.roomName === room.name ? hoverPreview.times : null;
+                                                                    const inPreview = Boolean(previewTimes?.includes(slot));
+                                                                    const previewHoldName = wantsMultipleHolds && hoverPreview ? `Hold ${hoverPreview.holdNumber}` : '';
+                                                                    const previewEdge = inPreview ? slotEdgeLabel(previewTimes, slot, previewHoldName) : null;
+                                                                    const selectedLabel = holdName;
+                                                                    const committedLabel = selectedEdge || selectedLabel;
+                                                                    const label = inPreview
+                                                                        ? (previewEdge || (isCurrentlySelected && (wantsMultipleHolds || colonnadeHoldIndexes.length) ? selectedLabel : ''))
+                                                                        : (isCurrentlySelected || isColonnadeAddon ? committedLabel : 'Select');
 
                                                                     return (
                                                                         <td key={room.name} className="p-1 text-center border-l border-gray-100">
                                                                             {!isBlocked ? (
                                                                                 <button
                                                                                     type="button"
-                                                                                    onClick={(clickEvent) => handleSlotClick(clickEvent, room, slot)}
-                                                                                    className={`w-full py-2 text-[9px] font-black uppercase tracking-wider font-sans border rounded-sm transition-all ${isCurrentlySelected
-                                                                                        ? "bg-black border-black text-white shadow-inner"
-                                                                                        : "bg-emerald-50 border-emerald-200 text-emerald-800 hover:bg-emerald-100/70"
+                                                                                    onMouseEnter={() => setSlotHover({ roomName: room.name, slot })}
+                                                                                    onClick={(clickEvent) => {
+                                                                                        if (isColonnadeAddon && !isCurrentlySelected) return;
+                                                                                        handleSlotClick(clickEvent, room, slot);
+                                                                                    }}
+                                                                                    className={`w-full min-h-[2.25rem] py-1 px-0.5 text-[7px] font-black uppercase tracking-tight leading-tight font-sans border rounded-sm transition-colors whitespace-normal ${isCurrentlySelected || isColonnadeAddon
+                                                                                        ? 'bg-[#EAD64D] border-yellow-600 text-black shadow-inner'
+                                                                                        : inPreview
+                                                                                            ? 'bg-[#F6E98A] border-yellow-600 text-black'
+                                                                                            : 'bg-emerald-50 border-emerald-200 text-emerald-800 hover:bg-emerald-200'
                                                                                         }`}
                                                                                 >
-                                                                                    {isCurrentlySelected ? "✓ Selected" : "Select"}
+                                                                                    {label || '\u00a0'}
                                                                                 </button>
                                                                             ) : (
-                                                                                <div className="py-2 text-[9px] font-black uppercase tracking-wider font-sans border rounded-sm bg-rose-50 border-rose-200 text-rose-800 opacity-60 cursor-not-allowed">
+                                                                                <div
+                                                                                    onMouseEnter={() => setSlotHover(null)}
+                                                                                    className="py-2 text-[9px] font-black uppercase tracking-wider font-sans border rounded-sm bg-rose-50 border-rose-200 text-rose-800 opacity-60 cursor-not-allowed"
+                                                                                >
                                                                                     Booked
                                                                                 </div>
                                                                             )}
@@ -2748,11 +2970,254 @@ This room does not have private bathrooms. The closest toilets are in the main G
                                         </div>
                                         )}
 
-                                        <div className="pt-4 border-t border-neutral-200/60 text-center">
+                                        <div className="space-y-3">
+                                            <div className="flex flex-col md:flex-row gap-3">
+                                            <label className="flex flex-1 items-start gap-3 p-3 bg-white border border-gray-200 rounded-sm cursor-pointer select-none">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={wantsMultipleHolds}
+                                                    onChange={(event) => {
+                                                        const on = event.target.checked;
+                                                        setWantsMultipleHolds(on);
+                                                        if (on) {
+                                                            setRecurrence(prev => ({ ...prev, pattern: 'none', interval: 1 }));
+                                                            setActiveHoldIndex(bookingHolds.length < 3 ? bookingHolds.length : 0);
+                                                        } else {
+                                                            setBookingHolds(prev => prev.slice(0, 1));
+                                                            setActiveHoldIndex(0);
+                                                        }
+                                                    }}
+                                                    className="w-4 h-4 accent-black mt-0.5"
+                                                />
+                                                <span>
+                                                    <span className="text-xs font-bold uppercase tracking-wide text-neutral-900 block">I would like to book multiple holds</span>
+                                                    <span className="text-[11px] text-neutral-600 block mt-0.5">Select up to two more dates/times on the calendar to hold multiple dates/times for the same event. These dates/times will only be held for one week to allow you time to confirm which one of the booking holds will go ahead for this event. They are labelled Hold 1, Hold 2 and Hold 3.</span>
+                                                </span>
+                                            </label>
+                                            {foundersBooking && (
+                                                <label className="flex flex-1 items-start gap-3 p-3 bg-white border border-gray-200 rounded-sm cursor-pointer select-none">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={isRepeatingPattern(recurrence.pattern)}
+                                                        onChange={(event) => {
+                                                            if (event.target.checked) {
+                                                                setWantsMultipleHolds(false);
+                                                                setBookingHolds(prev => prev.slice(0, 1));
+                                                                setActiveHoldIndex(0);
+                                                                setRecurrence(prev => ({ ...prev, pattern: 'weekly', interval: 1 }));
+                                                                return;
+                                                            }
+                                                            setRecurrence(prev => ({ ...prev, pattern: 'none', interval: 1 }));
+                                                        }}
+                                                        className="w-4 h-4 accent-black mt-0.5"
+                                                    />
+                                                    <span>
+                                                        <span className="text-xs font-bold uppercase tracking-wide text-neutral-900 block">Does this event repeat?</span>
+                                                        <span className="text-[11px] text-neutral-600 block mt-0.5">Weekly, fortnightly, or monthly. A booking can be multiple holds or a repeat, not both.</span>
+                                                    </span>
+                                                </label>
+                                            )}
+                                            </div>
+                                            {wantsMultipleHolds && (
+                                                <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                                                    {[0, 1, 2].map((index) => {
+                                                        const hold = bookingHolds[index];
+                                                        const editable = index <= bookingHolds.length;
+                                                        const active = index === Math.min(activeHoldIndex, bookingHolds.length);
+                                                        return (
+                                                            <button
+                                                                key={index}
+                                                                type="button"
+                                                                disabled={!editable}
+                                                                onClick={() => setActiveHoldIndex(Math.min(index, bookingHolds.length))}
+                                                                className={`p-3 text-left border rounded-sm ${active ? 'border-black ring-2 ring-black' : 'border-gray-200'} ${editable ? 'bg-white' : 'bg-neutral-50 opacity-60'}`}
+                                                            >
+                                                                <span className="block text-[10px] font-black uppercase tracking-wider">Hold {index + 1}</span>
+                                                                <span className="block text-[11px] font-medium text-neutral-700 mt-1">
+                                                                    {hold
+                                                                        ? `${hold.roomName} · ${formatBookingDate(hold.date, true)} · ${hold.bumpIn}–${hold.bumpOut}`
+                                                                        : 'Select on the calendar'}
+                                                                </span>
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </div>
+                                            )}
+                                            {foundersBooking && isRepeatingPattern(recurrence.pattern) && (
+                                                <div className="p-4 bg-white border border-neutral-200 rounded-sm space-y-4">
+                                                    <div className="space-y-2">
+                                                        <label className="text-xs font-bold uppercase tracking-wider text-gray-500 block">Repeat</label>
+                                                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                                            {[
+                                                                { id: 'weekly', label: 'Weekly' },
+                                                                { id: 'fortnightly', label: 'Fortnightly' },
+                                                                { id: 'monthly', label: 'Monthly' }
+                                                            ].map(option => (
+                                                                <button
+                                                                    key={option.id}
+                                                                    type="button"
+                                                                    onClick={() => setRecurrence(prev => ({ ...prev, pattern: option.id, interval: 1 }))}
+                                                                    className={`p-3 text-xs font-bold uppercase tracking-wider text-center border rounded-sm transition-all ${recurrence.pattern === option.id
+                                                                        ? 'bg-black text-white border-black shadow-sm'
+                                                                        : 'bg-white border-gray-200 text-neutral-700 hover:bg-neutral-50'
+                                                                        }`}
+                                                                >
+                                                                    {option.label}
+                                                                </button>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                    <div className="space-y-2">
+                                                        <label className="text-xs font-bold uppercase tracking-wider text-gray-500 block">Ends</label>
+                                                        <div className="grid grid-cols-2 gap-2 max-w-sm">
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setRecurrence(prev => ({ ...prev, endType: 'on' }))}
+                                                                className={`p-2 text-[11px] font-bold uppercase tracking-wider border rounded-sm ${recurrence.endType === 'on' ? 'bg-black text-white border-black' : 'bg-white border-gray-200 text-neutral-700'}`}
+                                                            >
+                                                                On a date
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setRecurrence(prev => ({ ...prev, endType: 'after' }))}
+                                                                className={`p-2 text-[11px] font-bold uppercase tracking-wider border rounded-sm ${recurrence.endType === 'after' ? 'bg-black text-white border-black' : 'bg-white border-gray-200 text-neutral-700'}`}
+                                                            >
+                                                                After
+                                                            </button>
+                                                        </div>
+                                                        {recurrence.endType === 'on' ? (
+                                                            <input
+                                                                type="date"
+                                                                value={recurrence.endDate}
+                                                                min={selectedDateStr}
+                                                                onChange={(e) => setRecurrence(prev => ({ ...prev, endDate: e.target.value }))}
+                                                                className="w-full max-w-sm p-2 border border-gray-300 bg-white text-sm font-medium rounded-sm text-black outline-none"
+                                                            />
+                                                        ) : (
+                                                            <div className="flex items-center gap-2">
+                                                                <input
+                                                                    type="number"
+                                                                    min={1}
+                                                                    max={MAX_SERIES_OCCURRENCES}
+                                                                    value={recurrence.occurrences}
+                                                                    onChange={(e) => setRecurrence(prev => ({
+                                                                        ...prev,
+                                                                        occurrences: Math.min(MAX_SERIES_OCCURRENCES, Math.max(1, Number(e.target.value) || 1))
+                                                                    }))}
+                                                                    className="w-20 p-2 border border-gray-300 bg-white text-sm font-medium rounded-sm text-black outline-none"
+                                                                />
+                                                                <span className="text-xs font-medium text-neutral-700">occurrences</span>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                    <p className="text-[11px] font-medium text-neutral-500">
+                                                        {recurrence.pattern === 'monthly'
+                                                            ? `Same week of the month, same day, and the same time. A month without that week is left out. ${seriesEndSentence}`
+                                                            : `Same weekday and time. ${seriesEndSentence}`}
+                                                    </p>
+                                                    {seriesPlan?.skippedDates?.length > 0 && (
+                                                        <ul className="space-y-1">
+                                                            {seriesPlan.skippedDates.map(item => (
+                                                                <li key={item.date} className="text-xs text-rose-900">
+                                                                    {formatBookingDate(item.date, true)} — {item.reason}
+                                                                </li>
+                                                            ))}
+                                                        </ul>
+                                                    )}
+                                                    {seriesPlan?.known && seriesPlan.calendarLoaded === false && (
+                                                        <p className="text-xs font-bold text-amber-800">The room calendar could not be loaded, so only holds already saved are listed. This repeat cannot be confirmed until the calendar loads.</p>
+                                                    )}
+                                                    {seriesPlan?.invalidEnd && (
+                                                        <p className="text-xs font-bold text-red-700">Choose an end date on or after the start date.</p>
+                                                    )}
+                                                    {!seriesPlan?.invalidEnd && selectedSlots.length > 0 && (seriesAvailability.status === 'loading' || seriesAvailability.status === 'idle') && (
+                                                        <p className="text-xs font-bold text-neutral-600">Checking each date against the room calendar…</p>
+                                                    )}
+                                                    {!seriesPlan?.invalidEnd && seriesAvailability.status === 'error' && (
+                                                        <ul className="space-y-1">
+                                                            {(seriesPlan?.dates || []).map(date => (
+                                                                <li key={date} className="text-xs text-neutral-600">
+                                                                    {formatBookingDate(date, true)} — availability could not be checked
+                                                                </li>
+                                                            ))}
+                                                        </ul>
+                                                    )}
+                                                    {seriesPlan?.known && !seriesPlan.invalidEnd && seriesPlan.bookedDates.length > 0 && (
+                                                        <div className="space-y-1">
+                                                            <p className="text-xs font-bold text-neutral-800">These dates will be booked</p>
+                                                            <ul className="space-y-1">
+                                                                {seriesPlan.bookedDates.map(date => (
+                                                                    <li key={date} className="text-xs text-neutral-700">
+                                                                        {formatBookingDate(date, true)}, {timeRangeLabel}
+                                                                    </li>
+                                                                ))}
+                                                            </ul>
+                                                        </div>
+                                                    )}
+                                                    {seriesPlan?.known && seriesPlan.dates.length >= MAX_SERIES_OCCURRENCES && (
+                                                        <p className="text-[11px] font-bold text-neutral-500">Later dates are left out because a series stops at {MAX_SERIES_OCCURRENCES} occurrences.</p>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {inclusionGroups.length > 0 && (
+                                            <div className="space-y-3">
+                                                {inclusionGroups.map(group => {
+                                                    const names = group.holds.map(item => `Hold ${item.index + 1}`);
+                                                    const listed = names.length === 1
+                                                        ? names[0]
+                                                        : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+                                                    const heading = bookingHolds.length === 1 ? 'Selected Venue:' : `${listed}:`;
+                                                    return (
+                                                        <div key={group.space} className="space-y-3">
+                                                            {renderRoomInclusions(group.space, heading)}
+                                                            {group.holds.filter(item => COLONNADE_SPACES.includes(item.hold.space)).map(item => {
+                                                                const status = colonnadeStatus(item.hold);
+                                                                return (
+                                                                    <div key={item.index} className="space-y-2">
+                                                                        <label className="flex items-start gap-3 p-3 bg-amber-50 border border-amber-200 rounded-sm cursor-pointer select-none">
+                                                                            <input
+                                                                                type="checkbox"
+                                                                                checked={Boolean(item.hold.includeColonnade)}
+                                                                                onChange={() => toggleHoldColonnade(item.index)}
+                                                                                className="w-4 h-4 accent-black mt-0.5"
+                                                                            />
+                                                                            <span>
+                                                                                <span className="text-xs font-bold uppercase tracking-wide text-neutral-900 block">
+                                                                                    Also book the Outdoor Colonnade{bookingHolds.length > 1 ? ` for Hold ${item.index + 1}` : ''}
+                                                                                </span>
+                                                                                <span className="text-[11px] text-neutral-600 block mt-0.5">Reserve the covered walkway area directly outside for guest check-in, catering etc.</span>
+                                                                            </span>
+                                                                        </label>
+                                                                        {status === 'booked' && (
+                                                                            <p className="text-xs font-bold text-rose-800">
+                                                                                The Colonnade is booked at that time, but the inside space is still available. If you want information on what is booked at the Colonnade to see if it will be disruptive, continue to book the space so it is held and then contact mcic@unsw.edu.au.
+                                                                            </p>
+                                                                        )}
+                                                                        {status === 'unknown' && (
+                                                                            <p className="text-xs font-bold text-amber-800">
+                                                                                Live availability could not be loaded, so it is not clear whether the Colonnade is free at that time. The inside space can still be booked.
+                                                                            </p>
+                                                                        )}
+                                                                    </div>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        )}
+
+                                        <div className="pt-4 border-t border-neutral-200/60 text-center space-y-2">
+                                            {bookingHolds.length === 0 && (
+                                                <p className="text-xs font-bold text-neutral-700">Select a room and time on the calendar before continuing.</p>
+                                            )}
                                             <button
                                                 type="button"
                                                 onClick={triggerRevealAllQuestions}
-                                                className="w-full bg-[#EAD64D] text-black text-center font-black py-4 text-xs uppercase tracking-widest rounded-sm hover:bg-black hover:text-white transition-all duration-200 cursor-pointer"
+                                                disabled={bookingHolds.length === 0}
+                                                className={`w-full text-center font-black py-4 text-xs uppercase tracking-widest rounded-sm transition-all duration-200 ${bookingHolds.length === 0 ? 'bg-neutral-200 text-neutral-500 cursor-not-allowed' : 'bg-[#EAD64D] text-black hover:bg-black hover:text-white cursor-pointer'}`}
                                             >
                                                 Continue to Booking Form ↓
                                             </button>
@@ -2764,284 +3229,70 @@ This room does not have private bathrooms. The closest toilets are in the main G
 
                 {showFullForm && (
                     <div id="rest-of-form-marker" className="space-y-12 animate-in fade-in duration-300">
-                        {renderAffiliationSection()}
                         {renderEventDetailsSection()}
                         {renderTimesAndRunsheetSection()}
-                        {renderAvAndEquipmentSection()}
                         {renderCateringSection()}
+                        {renderAvAndEquipmentSection()}
                         {renderRiskAssessmentSection()}
                         {renderContactDetailsSection()}
 
-                        {/* SECTION: TICKETING SETUP */}
-                        {ticketingEnabled && <section className="bg-white p-8 border border-gray-200 rounded-sm shadow-sm space-y-6">
+                        <section id="staffing-block" className="bg-white p-8 border border-gray-200 rounded-sm shadow-sm space-y-6">
                             <h3 className="text-lg font-extrabold tracking-tight uppercase text-black border-b border-neutral-100 pb-2">
-                                Ticketing & Public Directory
+                                Staffing
                             </h3>
-                            <div className="space-y-4">
-                                <label className="flex items-start gap-3 p-4 bg-neutral-50 border border-neutral-200 rounded-sm cursor-pointer select-none">
-                                    <input
-                                        type="checkbox"
-                                        checked={formData.postToPublicDirectory}
-                                        onChange={(e) => setFormData(prev => ({ ...prev, postToPublicDirectory: e.target.checked }))}
-                                        className="w-4 h-4 accent-black mt-0.5 rounded-sm"
-                                    />
-                                    <div>
-                                        <span className="text-xs font-bold uppercase tracking-wider text-black block">
-                                            Post this event to the public directory
-                                        </span>
-                                        <span className="text-[11px] text-gray-600 font-medium mt-1 block leading-relaxed">
-                                            Tick this if you want the event listed on the MCIC public ticket directory.
-                                        </span>
-                                    </div>
-                                </label>
-
-                                <label className="text-xs font-bold uppercase tracking-wider text-gray-500 block">How will guests register for your event?</label>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                    <button
-                                        type="button"
-                                        onClick={() => setFormData(prev => ({ ...prev, ticketingMethod: 'external' }))}
-                                        className={`p-4 font-bold text-sm text-center border rounded-sm transition-all ${formData.ticketingMethod === 'external' ? 'bg-black text-white border-black' : 'bg-white border-gray-200 text-neutral-700 hover:bg-neutral-50'}`}
-                                    >
-                                        External Registration Portal (Eventbrite, Humanitix, Luma, etc.)
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => setFormData(prev => ({ ...prev, ticketingMethod: 'internal' }))}
-                                        className={`p-4 font-bold text-sm text-center border rounded-sm transition-all ${formData.ticketingMethod === 'internal' ? 'bg-black text-white border-black' : 'bg-white border-gray-200 text-neutral-700 hover:bg-neutral-50'}`}
-                                    >
-                                        Internal Registration Portal
-                                    </button>
-                                </div>
-
-                                {formData.ticketingMethod === 'external' ? (
-                                    <div className="pt-3 space-y-2">
-                                        <label className="text-xs font-bold uppercase tracking-wider text-gray-500 block">External Registration URL</label>
-                                        <input
-                                            type="url"
-                                            placeholder="https://eventbrite.com/e/your-event-id"
-                                            value={formData.externalTicketUrl}
-                                            onChange={(e) => setFormData(prev => ({ ...prev, externalTicketUrl: e.target.value }))}
-                                            className="w-full p-3 border border-gray-200 text-sm font-medium rounded-sm text-black outline-none focus:border-black"
-                                        />
-                                    </div>
-                                ) : (
-                                    <div className="pt-3 space-y-4 bg-neutral-50 p-4 border border-gray-200 rounded-sm">
-                                        <div className="space-y-2">
-                                            <label className="text-xs font-bold uppercase tracking-wider text-gray-500 block">Banner / Display Title</label>
-                                            <input
-                                                type="text"
-                                                placeholder="e.g. Founders Pitch Night Ticket Registration"
-                                                value={formData.ticketBannerName}
-                                                onChange={(e) => setFormData(prev => ({ ...prev, ticketBannerName: e.target.value }))}
-                                                className="w-full p-3 border border-gray-200 bg-white text-sm font-medium rounded-sm text-black outline-none"
-                                            />
-                                        </div>
-                                        <div className="space-y-2">
-                                            <label className="text-xs font-bold uppercase tracking-wider text-gray-500 block">Maximum Ticket Cap</label>
-                                            <input
-                                                type="number"
-                                                min="0"
-                                                placeholder="100"
-                                                value={formData.maxTicketCapacity || ''}
-                                                onChange={(e) => setFormData(prev => ({ ...prev, maxTicketCapacity: parseInt(e.target.value) || 0 }))}
-                                                className="w-full p-3 border border-gray-200 bg-white text-sm font-medium rounded-sm text-black outline-none"
-                                            />
-                                        </div>
-
-                                        <div className="space-y-3 pt-2 border-t border-gray-200">
-                                            <div className="flex items-center justify-between gap-3">
-                                                <label className="text-xs font-bold uppercase tracking-wider text-gray-500 block">Ticket Tiers</label>
-                                                <button
-                                                    type="button"
-                                                    onClick={addTicketTier}
-                                                    className="text-[10px] font-bold uppercase tracking-wider px-3 py-1.5 border border-gray-300 bg-white rounded-sm hover:bg-neutral-100"
-                                                >
-                                                    + Add Tier
-                                                </button>
-                                            </div>
-                                            {formData.ticketTiers.map((tier, idx) => (
-                                                <div key={idx} className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
-                                                    <div className="sm:col-span-7 space-y-1">
-                                                        <label className="text-[10px] font-bold uppercase text-gray-500">Tier Name</label>
-                                                        <input
-                                                            type="text"
-                                                            value={tier.name}
-                                                            onChange={(e) => updateTicketTier(idx, 'name', e.target.value)}
-                                                            placeholder="e.g. UNSW Affiliated (Students & Staff)"
-                                                            className="w-full p-2.5 border border-gray-200 bg-white text-xs font-medium rounded-sm text-black outline-none"
-                                                        />
-                                                    </div>
-                                                    <div className="sm:col-span-4 space-y-1">
-                                                        <label className="text-[10px] font-bold uppercase text-gray-500">Tier Capacity</label>
-                                                        <input
-                                                            type="number"
-                                                            min="0"
-                                                            value={tier.cap}
-                                                            onChange={(e) => updateTicketTier(idx, 'cap', e.target.value)}
-                                                            placeholder="e.g. 80"
-                                                            className="w-full p-2.5 border border-gray-200 bg-white text-xs font-medium rounded-sm text-black outline-none"
-                                                        />
-                                                    </div>
-                                                    <div className="sm:col-span-1 text-right">
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => removeTicketTier(idx)}
-                                                            disabled={formData.ticketTiers.length === 1}
-                                                            className={`p-2 text-xs font-bold rounded-sm ${formData.ticketTiers.length === 1 ? 'text-gray-300' : 'text-red-600 hover:bg-red-50'}`}
-                                                        >
-                                                            ✕
-                                                        </button>
-                                                    </div>
-                                                </div>
+                            <div className="space-y-6">
+                                {access.founders && (
+                                    <div className="space-y-2">
+                                        <p className={questionClass}>Do you need Tamara present for this event?</p>
+                                        <div className="flex flex-wrap gap-x-6 gap-y-2">
+                                            {['Whole event (including setup/packdown)', 'Setup', 'Formalities', 'Not at all'].map((opt) => (
+                                                <label key={opt} className="flex items-center gap-2 cursor-pointer select-none">
+                                                    <input
+                                                        type="checkbox"
+                                                        className="w-4 h-4 accent-black rounded-sm"
+                                                        checked={formData.tamaraPresence === opt}
+                                                        onChange={() => setFormData({ ...formData, tamaraPresence: opt })}
+                                                    />
+                                                    <span className={answerClass}>{opt}</span>
+                                                </label>
                                             ))}
                                         </div>
-
-                                        <div className="space-y-4 pt-4 border-t border-gray-200">
-                                            <label className="flex items-start gap-3 cursor-pointer select-none">
-                                                <input
-                                                    type="checkbox"
-                                                    checked={formData.emailRemindersEnabled}
-                                                    onChange={(e) => setFormData(prev => ({ ...prev, emailRemindersEnabled: e.target.checked }))}
-                                                    className="w-4 h-4 accent-black mt-0.5 rounded-sm"
-                                                />
-                                                <span>
-                                                    <span className="text-xs font-bold uppercase tracking-wider text-black block">
-                                                        Send automatic email reminders
-                                                    </span>
-                                                    <span className="text-[11px] text-gray-600 font-medium mt-1 block leading-relaxed">
-                                                        Registered guests receive these at the Australia/Sydney times below. The four standard reminders stay unless you turn reminders off. You can edit them and add more.
-                                                    </span>
-                                                </span>
-                                            </label>
-
-                                            {formData.emailRemindersEnabled && emailReminders.map(reminder => (
-                                                <div key={reminder.id} className="bg-white border border-gray-200 rounded-sm p-4 space-y-3">
-                                                    <div className="flex items-center justify-between gap-3">
-                                                        <p className="text-xs font-bold uppercase tracking-wider text-black">
-                                                            {reminder.label}
-                                                            {reminder.kind === 'default' && (
-                                                                <span className="ml-2 text-[10px] font-bold uppercase tracking-wider text-neutral-500">Standard</span>
-                                                            )}
-                                                        </p>
-                                                        {reminder.kind === 'extra' && (
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => removeEmailReminder(reminder.id)}
-                                                                className="text-[10px] font-bold uppercase tracking-wider text-red-600 hover:bg-red-50 px-2 py-1 rounded-sm"
-                                                            >
-                                                                Remove
-                                                            </button>
-                                                        )}
-                                                    </div>
-                                                    <div className="space-y-1">
-                                                        <label className="text-[10px] font-bold uppercase text-gray-500">Send date and time (Australia/Sydney)</label>
-                                                        <input
-                                                            type="datetime-local"
-                                                            value={reminder.sendAt}
-                                                            onChange={(e) => updateEmailReminder(reminder.id, 'sendAt', e.target.value, e.nativeEvent.isTrusted)}
-                                                            className="w-full p-2.5 border border-gray-200 text-xs font-medium rounded-sm text-black outline-none"
-                                                        />
-                                                        {!reminder.sendAt && (
-                                                            <p className="text-[10px] text-neutral-500">Add the event date and start time and this send time fills in. You can still set it yourself.</p>
-                                                        )}
-                                                    </div>
-                                                    <div className="space-y-1">
-                                                        <label className="text-[10px] font-bold uppercase text-gray-500">Subject</label>
-                                                        <input
-                                                            type="text"
-                                                            value={reminder.subject}
-                                                            onChange={(e) => updateEmailReminder(reminder.id, 'subject', e.target.value, e.nativeEvent.isTrusted)}
-                                                            className="w-full p-2.5 border border-gray-200 text-xs font-medium rounded-sm text-black outline-none"
-                                                        />
-                                                    </div>
-                                                    <div className="space-y-1">
-                                                        <label className="text-[10px] font-bold uppercase text-gray-500">Body</label>
-                                                        <textarea
-                                                            rows={8}
-                                                            value={reminder.body}
-                                                            onChange={(e) => updateEmailReminder(reminder.id, 'body', e.target.value, e.nativeEvent.isTrusted)}
-                                                            className="w-full p-2.5 border border-gray-200 text-xs font-medium rounded-sm text-black outline-none leading-relaxed"
-                                                        />
-                                                    </div>
-                                                </div>
-                                            ))}
-
-                                            {formData.emailRemindersEnabled && (
-                                                <button
-                                                    type="button"
-                                                    onClick={addEmailReminder}
-                                                    className="text-[10px] font-bold uppercase tracking-wider px-3 py-2 border border-gray-300 bg-white rounded-sm hover:bg-neutral-100"
-                                                >
-                                                    + Add another reminder
-                                                </button>
-                                            )}
-                                        </div>
+                                        <label className="block space-y-1">
+                                            <span className={questionClass}>Any details for Tamara</span>
+                                            <textarea
+                                                rows={2}
+                                                value={formData.tamaraDetails}
+                                                onChange={(e) => setFormData(prev => ({ ...prev, tamaraDetails: e.target.value }))}
+                                                className="w-full p-2.5 border border-gray-200 bg-white text-xs text-black rounded-sm outline-none focus:border-black"
+                                            />
+                                        </label>
                                     </div>
                                 )}
-                            </div>
-                        </section>}
-
-                        {/* SECTION: EVENT SUPPORT & FOCUS */}
-                        <section className="bg-white p-8 border border-gray-200 rounded-sm shadow-sm space-y-6">
-                            <h3 className="text-lg font-extrabold tracking-tight uppercase text-black border-b border-neutral-100 pb-2">
-                                Event Support & Focus
-                            </h3>
-
-                            <div className="space-y-6">
                                 <div className="space-y-2">
-                                    <label className="text-xs font-bold uppercase tracking-wider text-gray-500 block">
-                                        Does this event have to do with Innovation / Entrepreneurship?
-                                    </label>
-                                    <p className="text-[11px] text-neutral-500">
-                                        Selecting Yes applies an automatic discount to your venue hire rate.
-                                    </p>
-                                    <div className="flex gap-4 max-w-xs pt-1">
-                                        {['Yes', 'No'].map((choice) => (
-                                            <button
-                                                key={choice}
-                                                type="button"
-                                                onClick={() => setFormData({ ...formData, isInnovationOrEntrepreneurship: choice })}
-                                                className={`flex-1 py-2 text-xs font-bold uppercase rounded-sm border transition-all duration-150 ${formData.isInnovationOrEntrepreneurship === choice
-                                                    ? 'bg-black text-white border-black shadow-sm'
-                                                    : 'bg-white border-gray-200 text-neutral-600 hover:bg-neutral-100'
-                                                    }`}
-                                            >
-                                                {choice}
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-
-                                <div className="space-y-2 pt-4 border-t border-gray-100">
-                                    <label className="text-xs font-bold uppercase tracking-wider text-gray-500 block">
-                                        Would you like to book a casual staff member for event support?
-                                    </label>
-                                    <p className="text-[11px] text-neutral-500">
-                                        Casual staff members are available at $50 per hour. The minimum is 3 hours, or 4 hours on a weekend. They can assist with room setup, AV, and guest check-in.
-                                    </p>
-                                    <div className="flex gap-4 max-w-xs pt-1">
-                                        {['Yes', 'No'].map((choice) => (
-                                            <button
-                                                key={choice}
-                                                type="button"
-                                                onClick={() => setFormData({ ...formData, wantsCasualStaff: choice })}
-                                                className={`flex-1 py-2 text-xs font-bold uppercase rounded-sm border transition-all duration-150 ${formData.wantsCasualStaff === choice
-                                                    ? 'bg-black text-white border-black shadow-sm'
-                                                    : 'bg-white border-gray-200 text-neutral-600 hover:bg-neutral-100'
-                                                    }`}
-                                            >
-                                                {choice}
-                                            </button>
-                                        ))}
-                                    </div>
-                                    {formData.wantsCasualStaff === 'Yes' && (
+                                    <p className={questionClass}>{requiredCasual.length ? 'Casual staff are required for this booking' : 'Would you like to book a casual staff member for event support?'}</p>
+                                    {!access.founders && (
+                                        <p className="text-xs text-neutral-600">
+                                            Casual staff members are available at $50 per hour. The minimum is 3 hours, or 4 hours on a weekend. They can assist with room setup, AV, and guest check-in.
+                                        </p>
+                                    )}
+                                    {requiredCasual.length ? (
+                                        <p className="text-xs text-neutral-700">
+                                            This booking is outside ordinary working hours, 8:45am–4:00pm on weekdays. An early shift starts at bump in and finishes at 8:45am when that is longer than the 3 hour minimum, or the 4 hour minimum on a weekend. Otherwise it runs for that minimum. A late shift starts at 3:30pm, or at bump in if the event starts later, and finishes at bump out.
+                                        </p>
+                                    ) : (
+                                        yesNoChoices(formData.wantsCasualStaff, (choice) => setFormData({ ...formData, wantsCasualStaff: choice }))
+                                    )}
+                                    {(requiredCasual.length || formData.wantsCasualStaff === 'Yes') && (
                                         <div className="space-y-4 pt-2">
                                             <label className="text-[11px] font-black uppercase tracking-wider text-neutral-700 block">
                                                 Casual Staff Shift Details
                                             </label>
                                             {formData.casualStaffDetails.map((staffRow, idx) => (
-                                                <div key={idx} className={`p-4 bg-white border border-gray-200 rounded-sm grid grid-cols-1 gap-3 items-end ${foundersBooking ? 'md:grid-cols-[minmax(0,1.15fr)_5.5rem_minmax(0,0.85fr)_minmax(0,0.85fr)_minmax(0,1.4fr)_2rem]' : 'md:grid-cols-[5.5rem_minmax(0,0.9fr)_minmax(0,0.9fr)_minmax(0,1.7fr)_2rem]'}`}>
-                                                    {foundersBooking && (
+                                                <div key={staffRow.forceKey || idx} className={`p-4 bg-white border border-gray-200 rounded-sm grid grid-cols-1 gap-3 items-end ${(access.founders || foundersBooking) ? 'md:grid-cols-[minmax(0,1.15fr)_5.5rem_minmax(0,0.85fr)_minmax(0,0.85fr)_minmax(0,1.4fr)_2rem]' : 'md:grid-cols-[5.5rem_minmax(0,0.9fr)_minmax(0,0.9fr)_minmax(0,1.7fr)_2rem]'}`}>
+                                                    {staffRow.date && (
+                                                        <p className="text-[10px] font-bold uppercase text-gray-500 md:col-span-full">{formatBookingDate(staffRow.date, true)}{staffRow.forced ? ' · Required shift' : ''}</p>
+                                                    )}
+                                                    {(access.founders || foundersBooking) && (
                                                         <div className="space-y-1">
                                                             <label className="text-[10px] font-bold text-gray-500 uppercase">Preferred Staff Member</label>
                                                             <select
@@ -3077,18 +3328,20 @@ This room does not have private bathrooms. The closest toilets are in the main G
                                                         <label className="text-[10px] font-bold text-gray-500 uppercase">Shift Start</label>
                                                         <input
                                                             type="time"
+                                                            readOnly={Boolean(staffRow.forced)}
                                                             value={staffRow.shiftStart}
                                                             onChange={(e) => updateCasualStaffDetail(idx, 'shiftStart', e.target.value)}
-                                                            className="w-full p-2 border border-gray-200 rounded-sm text-xs font-medium text-black outline-none focus:border-neutral-400"
+                                                            className={`w-full p-2 border border-gray-200 rounded-sm text-xs font-medium text-black outline-none focus:border-neutral-400 ${staffRow.forced ? 'bg-neutral-100' : ''}`}
                                                         />
                                                     </div>
                                                     <div className="space-y-1">
                                                         <label className="text-[10px] font-bold text-gray-500 uppercase">Shift End</label>
                                                         <input
                                                             type="time"
+                                                            readOnly={Boolean(staffRow.forced)}
                                                             value={staffRow.shiftEnd}
                                                             onChange={(e) => updateCasualStaffDetail(idx, 'shiftEnd', e.target.value)}
-                                                            className="w-full p-2 border border-gray-200 rounded-sm text-xs font-medium text-black outline-none focus:border-neutral-400"
+                                                            className={`w-full p-2 border border-gray-200 rounded-sm text-xs font-medium text-black outline-none focus:border-neutral-400 ${staffRow.forced ? 'bg-neutral-100' : ''}`}
                                                         />
                                                     </div>
                                                     <div className="space-y-1">
@@ -3105,8 +3358,8 @@ This room does not have private bathrooms. The closest toilets are in the main G
                                                         <button
                                                             type="button"
                                                             onClick={() => removeCasualStaffRow(idx)}
-                                                            disabled={formData.casualStaffDetails.length === 1}
-                                                            className={`p-2 text-xs font-bold rounded-sm ${formData.casualStaffDetails.length === 1 ? 'text-gray-300' : 'text-red-600 hover:bg-red-50'}`}
+                                                            disabled={formData.casualStaffDetails.length === 1 || staffRow.forced}
+                                                            className={`p-2 text-xs font-bold rounded-sm ${formData.casualStaffDetails.length === 1 || staffRow.forced ? 'text-gray-300' : 'text-red-600 hover:bg-red-50'}`}
                                                         >
                                                             ✕
                                                         </button>
@@ -3123,137 +3376,49 @@ This room does not have private bathrooms. The closest toilets are in the main G
                                         </div>
                                     )}
                                 </div>
-
-                                <div className="space-y-2 pt-4 border-t border-gray-100">
-                                    <label className="text-xs font-bold uppercase tracking-wider text-gray-500 block">
-                                        Do you need help to source a judge or mentor for an entrepreneurship related event?
-                                    </label>
-                                    <div className="flex gap-4 max-w-xs pt-1">
-                                        {['Yes', 'No'].map((choice) => (
-                                            <button
-                                                key={choice}
-                                                type="button"
-                                                onClick={() => setFormData({ ...formData, needsJudgeHelp: choice })}
-                                                className={`flex-1 py-2 text-xs font-bold uppercase rounded-sm border transition-all duration-150 ${formData.needsJudgeHelp === choice
-                                                    ? 'bg-black text-white border-black shadow-sm'
-                                                    : 'bg-white border-gray-200 text-neutral-600 hover:bg-neutral-100'
-                                                    }`}
-                                            >
-                                                {choice}
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
                             </div>
                         </section>
 
-                        {/* SECTION: INTERNAL UNSW FOUNDERS STAFF COORDINATION */}
-                        {access.founders && (
-                            <section className="bg-amber-50/60 p-8 border border-amber-200 rounded-sm shadow-sm space-y-6">
-                                <h3 className="text-lg font-extrabold tracking-tight uppercase text-amber-900 border-b border-amber-200 pb-2">
-                                    Internal Founders Staff Coordination
-                                </h3>
-
-                                <div className="space-y-6">
-                                    <div className="space-y-2">
-                                        <label className="text-xs font-bold uppercase tracking-wider text-amber-900 block">
-                                            Do you need Tamara present for this event?
-                                        </label>
-                                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-1">
-                                            {['Whole event', 'Setup', 'Formalities', 'Not at all'].map((opt) => (
-                                                <button
-                                                    key={opt}
-                                                    type="button"
-                                                    onClick={() => setFormData({ ...formData, tamaraPresence: opt })}
-                                                    className={`py-2 px-3 text-xs font-bold uppercase rounded-sm border transition-all ${formData.tamaraPresence === opt
-                                                        ? 'bg-amber-900 text-white border-amber-900 shadow-xs'
-                                                        : 'bg-white border-amber-200 text-amber-900 hover:bg-amber-100/50'
-                                                        }`}
-                                                >
-                                                    {opt}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </div>
-
-                                    <div className="space-y-4 pt-4 border-t border-amber-200/80">
-                                        <label className="text-xs font-bold uppercase tracking-wider text-amber-900 block">
-                                            What serviceware, food and drinks do you need?
-                                        </label>
-                                        <div className="grid grid-cols-2 gap-3 max-w-sm">
-                                            {[
-                                                { label: 'Throwaway / Disposable', val: 'Throwaway' },
-                                                { label: 'Re-usable', val: 'Re-usable' }
-                                            ].map((pref) => (
-                                                <button
-                                                    key={pref.val}
-                                                    type="button"
-                                                    onClick={() => setFormData(prev => ({ ...prev, servicewarePreference: pref.val }))}
-                                                    className={`p-2.5 text-xs font-bold uppercase rounded-sm border text-center transition-all ${formData.servicewarePreference === pref.val
-                                                        ? 'bg-amber-900 text-white border-amber-900'
-                                                        : 'bg-white border-amber-200 text-amber-900 hover:bg-amber-100/50'
-                                                        }`}
-                                                >
-                                                    {pref.label}
-                                                </button>
-                                            ))}
-                                        </div>
-                                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                                            {[
-                                                { key: 'needWoolworthsOrder', label: 'Woolworths Order (Food, Soft Drink)' },
-                                                { key: 'needDanMurphysOrder', label: "Dan Murphy's Order (Wine, Beer, etc.)" },
-                                                { key: 'needPlates', label: 'Plates' },
-                                                { key: 'needNapkins', label: 'Napkins' },
-                                                { key: 'needTongs', label: 'Tongs' },
-                                                { key: 'needCutlery', label: 'Cutlery' },
-                                                { key: 'needIce', label: 'Ice' }
-                                            ].map((item) => (
-                                                <label key={item.key} className="flex items-center gap-2.5 p-3 bg-white border border-amber-200 rounded-sm cursor-pointer select-none">
-                                                    <input
-                                                        type="checkbox"
-                                                        className="w-4 h-4 accent-black rounded-sm"
-                                                        checked={formData.foundersSupplies?.[item.key] || false}
-                                                        onChange={(e) => setFormData(prev => ({
-                                                            ...prev,
-                                                            foundersSupplies: {
-                                                                ...prev.foundersSupplies,
-                                                                [item.key]: e.target.checked
-                                                            }
-                                                        }))}
-                                                    />
-                                                    <span className="text-xs font-bold text-amber-950">{item.label}</span>
-                                                </label>
-                                            ))}
-                                        </div>
-                                    </div>
-                                </div>
-                            </section>
-                        )}
-
-                        {/* SECTION: BILLING & PAYMENT INFORMATION */}
-                            <section className="bg-white p-8 border border-gray-200 rounded-sm shadow-sm space-y-6">
+                        {!access.founders && (
+                            <section id="billing-block" className="bg-white p-8 border border-gray-200 rounded-sm shadow-sm space-y-6">
                                 <h3 className="text-lg font-extrabold tracking-tight uppercase text-black border-b border-neutral-100 pb-2">
                                     Billing & Payment Details
                                 </h3>
                                 <div className="space-y-4">
-                                    <label className="text-xs font-bold uppercase tracking-wider text-gray-500 block">Payment Method</label>
-                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                                        {['Journal Transfer', 'Invoice', 'Credit Card'].map(method => (
-                                            <button
-                                                key={method}
-                                                type="button"
-                                                onClick={() => setFormData(prev => ({ ...prev, paymentMethod: method }))}
-                                                className={`p-3 text-xs font-bold uppercase rounded-sm border transition-all ${formData.paymentMethod === method ? 'bg-black text-white border-black' : 'bg-white border-gray-200 text-neutral-700 hover:bg-neutral-50'}`}
-                                            >
-                                                {method}
-                                            </button>
+                                    <div className="space-y-2">
+                                        <p className={questionClass}>Does this event have to do with Innovation / Entrepreneurship?</p>
+                                        <p className="text-xs text-neutral-600">Selecting Yes applies an automatic discount to your venue hire rate.</p>
+                                        {yesNoChoices(formData.isInnovationOrEntrepreneurship, (choice) => setFormData({ ...formData, isInnovationOrEntrepreneurship: choice }))}
+                                    </div>
+                                    <p className={questionClass}>Payment Method</p>
+                                    <div className="flex flex-wrap gap-x-6 gap-y-2">
+                                        {['Journal Transfer', 'Invoice'].map(method => (
+                                            <label key={method} className="flex items-center gap-2 cursor-pointer select-none">
+                                                <input
+                                                    type="checkbox"
+                                                    className="w-4 h-4 accent-black rounded-sm"
+                                                    checked={formData.paymentMethod === method}
+                                                    onChange={() => setFormData(prev => ({ ...prev, paymentMethod: method }))}
+                                                />
+                                                <span className={answerClass}>{method}</span>
+                                            </label>
                                         ))}
                                     </div>
 
                                     {formData.paymentMethod === 'Journal Transfer' && (
-                                        <p className="text-sm text-neutral-700 bg-neutral-50 border border-gray-200 rounded-sm p-4">
-                                            Not sure how to organise a Journal Transfer? The related Finance Analyst in your faculty or division can process the internal journal transfer.
-                                        </p>
+                                        <div className="text-xs text-neutral-700 bg-neutral-50 border border-gray-200 rounded-sm p-4 space-y-2">
+                                            <p>You can pay by journal transfer or invoice. A 50% deposit confirms the booking. The remaining 50% is due no later than 48 hours before the event.</p>
+                                            <p className="text-neutral-800">If you are a UNSW department, Journal Transfer is preferred.</p>
+                                            <ul className="list-disc pl-4 space-y-1.5">
+                                                <li>Not sure how to organise a Journal Transfer? The related Finance Analyst in your faculty or division can process the internal journal transfer. Simply contact them.</li>
+                                                <li>
+                                                    Who is my Finance Analyst? Check the Finance SharePoint:{' '}
+                                                    <a href="https://unsw.sharepoint.com/sites/finance-hub/SitePages/Contact-Finance.aspx" target="_blank" rel="noopener noreferrer" className="font-bold text-black underline decoration-2 decoration-[#EAD64D] underline-offset-4">
+                                                        Contact Finance
+                                                    </a>
+                                                </li>
+                                            </ul>
+                                        </div>
                                     )}
 
                                     {formData.paymentMethod === 'Invoice' && (
@@ -3294,8 +3459,22 @@ This room does not have private bathrooms. The closest toilets are in the main G
                                     )}
                                 </div>
                             </section>
+                        )}
 
-                        {/* SECTION: SIGNATURE & ACKNOWLEDGEMENT */}
+                        <section id="anything-else-block" className="bg-white p-8 border border-gray-200 rounded-sm shadow-sm space-y-3">
+                            <label className={`${questionClass} block`}>
+                                Is there anything else we should know?
+                            </label>
+                            <textarea
+                                rows={4}
+                                placeholder={access.founders ? '' : 'e.g. You need help to source a judge for an entrepreneurship related event'}
+                                value={formData.anythingElse}
+                                onChange={(e) => setFormData(prev => ({ ...prev, anythingElse: e.target.value }))}
+                                className="w-full p-3 border border-gray-200 bg-white text-xs text-black rounded-sm outline-none focus:border-black"
+                            />
+                        </section>
+
+                        {!access.founders && (
                         <section className="bg-white p-8 border border-gray-200 rounded-sm shadow-sm space-y-6">
                             <h3 className="text-lg font-extrabold tracking-tight uppercase text-black border-b border-neutral-100 pb-2">
                                 Declaration & Sign-Off
@@ -3345,17 +3524,7 @@ This room does not have private bathrooms. The closest toilets are in the main G
                                         className="w-full h-36 bg-white border border-gray-300 rounded-sm touch-none cursor-crosshair"
                                         aria-label="Draw your signature"
                                     />
-                                    <p className="text-[11px] text-gray-500">Draw your signature in the box above. You can also type it below.</p>
-                                    <input
-                                        type="text"
-                                        placeholder="Or type your full name to sign"
-                                        value={formData.signature.startsWith('data:image') ? '' : formData.signature}
-                                        onChange={(e) => {
-                                            wipeSignatureCanvas();
-                                            setFormData(prev => ({ ...prev, signature: e.target.value }));
-                                        }}
-                                        className="w-full p-2.5 border border-gray-200 bg-white text-xs font-serif italic text-black outline-none"
-                                    />
+                                    <p className="text-xs text-neutral-600">Draw your signature in the box.</p>
                                 </div>
 
                                 <div
@@ -3365,11 +3534,14 @@ This room does not have private bathrooms. The closest toilets are in the main G
                                         : 'bg-neutral-50 border-gray-200'
                                         }`}
                                 >
-                                    <div className="text-xs font-bold uppercase tracking-wide text-black">
-                                        Code of Conduct & Terms and Conditions
+                                    <div className="text-xs text-neutral-800">
+                                        Venue Hire Agreement and Campus Policy
                                     </div>
-                                    <p className="text-xs text-gray-600 leading-relaxed">
-                                        All hirers and guests at the Michael Crouch Innovation Centre must abide by the Terms and Conditions of Use and the Campus Policy and Code of Conduct.
+                                    <p className="text-xs text-neutral-700 leading-relaxed">
+                                        By submitting a booking request, hirers agree to abide by all sections of the{' '}
+                                        <a href="/docs/MCIC_Venue_Hire_Terms_and_Conditions.pdf" target="_blank" rel="noopener noreferrer" className="underline">Terms and Conditions of Use</a>
+                                        {' '}and the{' '}
+                                        <a href="https://www.unsw.edu.au/content/dam/pdfs/governance/policy/2022-01-policies/campuspolicy.pdf" target="_blank" rel="noopener noreferrer" className="underline">UNSW Campus Policy</a>.
                                     </p>
                                     <label className="flex items-start gap-3 cursor-pointer select-none">
                                         <input
@@ -3381,50 +3553,17 @@ This room does not have private bathrooms. The closest toilets are in the main G
                                             }}
                                             className="w-4 h-4 rounded-sm border-gray-300 accent-black mt-0.5"
                                         />
-                                        <span className={`text-xs font-bold uppercase tracking-tight ${conductError ? 'text-red-700' : 'text-black'}`}>
-                                            I agree to abide by the Terms and Conditions of Use and the Campus Policy and Code of Conduct.
+                                        <span className={`text-xs ${conductError ? 'text-red-700' : 'text-neutral-800'}`}>
+                                            I agree to abide by the Terms and Conditions of Use and the UNSW Campus Policy.
                                         </span>
                                     </label>
                                     {conductError && (
-                                        <p className="text-[11px] font-bold text-red-700">Please acknowledge the code of conduct before submitting.</p>
+                                        <p className="text-xs text-red-700">Please acknowledge the Venue Hire Agreement and Campus Policy before submitting.</p>
                                     )}
                                 </div>
                             </div>
                         </section>
-
-                        {/* ACCORDION FAQ ITEM 9: CASUAL STAFFING POLICY */}
-                        <section className="bg-white border border-gray-200 rounded-sm overflow-hidden">
-                            <button
-                                type="button"
-                                onClick={() => toggleAccordion('casual-staff')}
-                                className="w-full p-4 flex justify-between items-center text-xs font-bold uppercase tracking-wide text-neutral-800 bg-neutral-50 hover:bg-neutral-100 cursor-pointer"
-                            >
-                                <span>Should I book your casual staff for my event?</span>
-                                <span>{activeAccordion === 'casual-staff' ? '−' : '+'}</span>
-                            </button>
-                            {activeAccordion === 'casual-staff' && (
-                                <div className="p-6 bg-white text-xs space-y-4 text-gray-600 font-normal leading-relaxed">
-                                    <p className="text-neutral-700 font-medium">
-                                        Booking casual staff depends entirely on the timing and complexity of your event:
-                                    </p>
-                                    <div className="space-y-4 text-neutral-700 font-medium">
-                                        <div className="p-3.5 bg-neutral-900 text-white font-medium rounded-xs">
-                                            <strong className="block uppercase text-[10px] tracking-wide mb-0.5">Mandatory Staffing (After-Hours)</strong>
-                                            This space is managed by standard staff working {WORK_HOURS_LABEL} on weekdays. If your booking requires access {OUTSIDE_WORK_HOURS_LABEL.toLowerCase()}, hiring dedicated casual staff is mandatory ($50/hr, min 3 hours; min 4 hours on Sundays/Public Holidays).
-                                        </div>
-                                        <div>
-                                            <strong className="text-neutral-900 block uppercase text-[10px] tracking-wide mb-1">Optional Staffing (Standard Hours)</strong>
-                                            During core office hours ({WORK_HOURS_LABEL}), standard staffing covers room unlock, basic orientation, final checkout and is on call for ad-hoc technical requests. You should opt to pay for casual staff ($50/hr, minimum 3 hours) if:
-                                            <ul className="list-disc pl-4 mt-2 space-y-1 font-normal text-gray-600">
-                                                <li>You require tables, chairs, or stage configurations fully staged prior to your arrival.</li>
-                                                <li>You want a staff member present inside the room throughout the session to continuously assist with microphones, live streams, or slides.</li>
-                                                <li>You need hands-on event support with guest registration, greeting attendees, managing catering deliveries, or performing room layout changes during the event.</li>
-                                            </ul>
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
-                        </section>
+                        )}
 
                         {access.signedIn && (() => {
                             const lineItems = quote.lineItems || [];
@@ -3458,18 +3597,18 @@ This room does not have private bathrooms. The closest toilets are in the main G
                                         </div>
                                     ) : (
                                         <p className="text-xs text-neutral-400 italic py-2">
-                                            Select your affiliation, booking duration, and equipment above to compute itemized line items.
+                                            Select a booking duration and equipment above to compute itemized line items.
                                         </p>
                                     )}
 
                                     <div className="pt-4 border-t border-neutral-800 space-y-2 text-xs">
                                         <div className="flex justify-between">
-                                            <span className="text-neutral-400 uppercase tracking-wider text-[10px] font-bold">Subtotal (ex GST)</span>
-                                            <span className="font-mono font-bold">{money(quote.subtotalExcludingTax)}</span>
-                                        </div>
-                                        <div className="flex justify-between">
                                             <span className="text-emerald-400 uppercase tracking-wider text-[10px] font-bold">Discounts</span>
                                             <span className="font-mono font-bold text-emerald-400">-{money(discountTotal)}</span>
+                                        </div>
+                                        <div className="flex justify-between">
+                                            <span className="text-neutral-400 uppercase tracking-wider text-[10px] font-bold">Subtotal (ex GST)</span>
+                                            <span className="font-mono font-bold">{money(quote.subtotalExcludingTax)}</span>
                                         </div>
                                         <div className="flex justify-between">
                                             <span className="text-neutral-400 uppercase tracking-wider text-[10px] font-bold">GST (10%)</span>

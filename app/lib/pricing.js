@@ -1,5 +1,5 @@
 import { casualShiftQuantity } from './casualStaff';
-import { WORK_END, WORK_START } from './workingHours';
+import { WORK_END, WORK_START, casualMinimumHours } from './workingHours';
 
 // ==========================================
 // MCIC VENUE PRICING & QUOTING ENGINE (FULLY DYNAMIC & TAX INCLUSIVE)
@@ -43,14 +43,9 @@ export const ROOM_INCLUSIONS = {
         'Open Co-working Setup',
         'Shared Kitchenette Access'
     ],
-    'MCIC Ground - Colonnade': [
-        'Covered Outdoor Walkway outside MCIC Event & Design Spaces',
-        '1x Portable PA Speaker & Wireless Handheld Microphone',
-        'High networking tables & outdoor registration area'
-    ],
-    'MCIC Ground - AI Makerspace': [
-        'Our AI Makerspace is a space to test and refine AI technologies. It includes workstations and a supercomputer for AI research and development.'
-    ]
+    'MCIC Ground - Colonnade': [],
+    'MCIC Ground - AI Makerspace': [],
+    'MCIC Ground - AI Makerspace - COMING SOON': []
 };
 
 // GST-inclusive hire rates. Firestore venue documents override these when they include halfDayRate / fullDayRate.
@@ -72,6 +67,13 @@ function ratesForSpace(spaceName, dynamicVenues) {
         halfDayRate: Number(venueDoc.halfDayRate ?? fallback.halfDayRate) || 0,
         fullDayRate: Number(venueDoc.fullDayRate ?? fallback.fullDayRate) || 0
     };
+}
+
+export function hirePriceText(amount, costAppliesTo) {
+    const numeric = Number(amount);
+    if (!Number.isFinite(numeric) || numeric <= 0) return 'No additional charge';
+    const basis = costAppliesTo === 'all' ? 'for the entire quantity' : 'per item';
+    return `$${numeric.toFixed(2)} ${basis} / day`;
 }
 
 function parseTimeToHours(timeStr) {
@@ -108,6 +110,22 @@ export function calculateStaffingHours(bumpIn, bumpOut, eventStart, eventEnd, is
     }
 
     return 0;
+}
+
+function hoursBetween(start, end) {
+    const from = parseTimeToHours(start);
+    const to = parseTimeToHours(end);
+    return to > from ? to - from : 0;
+}
+
+function casualRowsBillableHours(rows) {
+    if (!Array.isArray(rows) || !rows.some((row) => row.forced)) return null;
+    return rows.reduce((total, row) => {
+        const duration = hoursBetween(row.shiftStart, row.shiftEnd);
+        if (duration <= 0) return total;
+        const hours = Math.max(casualMinimumHours(row.date), Math.ceil(duration));
+        return total + hours * (casualShiftQuantity(row) || 1);
+    }, 0);
 }
 
 function casualStaffHeadcount(formData) {
@@ -179,13 +197,16 @@ export function calculateQuote(formData, dynamicVenues = [], dynamicItems = [], 
     // Line Item 2: Staffing
     const wantsStaff = formData.requestCasualStaff || formData.wantsCasualStaff === 'Yes' || formData.needsFoundersCasualStaff === 'Yes';
     const appliedMinHours = formData.isWeekend ? Math.max(staffMinHours, 4) : staffMinHours;
-    const staffingHours = calculateStaffingHours(
-        formData.bumpIn, formData.bumpOut, formData.eventStart, formData.eventEnd,
-        formData.isWeekend, wantsStaff, appliedMinHours
-    );
+    const shiftHours = casualRowsBillableHours(formData.casualStaffDetails);
+    const staffingHours = shiftHours == null
+        ? calculateStaffingHours(
+            formData.bumpIn, formData.bumpOut, formData.eventStart, formData.eventEnd,
+            formData.isWeekend, wantsStaff, appliedMinHours
+        )
+        : shiftHours;
+    const staffCount = shiftHours == null ? casualStaffHeadcount(formData) : 1;
 
     if (staffingHours > 0) {
-        const staffCount = casualStaffHeadcount(formData);
         const billedHours = staffingHours * staffCount;
         const staffDiscount = isFoundersInternal ? billedHours * staffRate : 0;
         lineItems.push({
@@ -206,22 +227,26 @@ export function calculateQuote(formData, dynamicVenues = [], dynamicItems = [], 
         const val = avData[itemKey];
         if (!val || isFoundersInternal) return;
 
+        const bookedSpaces = Array.isArray(formData.bookedSpaces) && formData.bookedSpaces.length
+            ? formData.bookedSpaces
+            : [selectedSpaceName];
+
         const dbItem = dynamicItems.find(i => (i.id === itemKey || i.name === itemKey || i.key === itemKey)) || {};
-        let unitPrice = dbItem.costPerDay || 0;
+        let unitPrice = Number(dbItem.costPerDay) || 0;
         let qty = typeof val === 'number' ? val : 1;
 
-        // Check if item's freeInclusionSpaces array includes selectedSpaceName
         const freeSpaces = dbItem.freeInclusionSpaces || [];
-        if (Array.isArray(freeSpaces) && freeSpaces.includes(selectedSpaceName)) {
-            unitPrice = 0;
-        }
+        const includedFree = Array.isArray(freeSpaces) && bookedSpaces.every((space) => freeSpaces.includes(space));
+        const flatRate = dbItem.costAppliesTo === 'all';
+        if (includedFree) unitPrice = 0;
+        const lineTotal = includedFree ? 0 : (flatRate ? unitPrice : unitPrice * qty);
 
-        if (unitPrice > 0) {
+        if (unitPrice > 0 || includedFree) {
             lineItems.push({
-                description: dbItem.name || itemKey,
-                quantity: qty,
+                description: includedFree ? `${dbItem.name || itemKey} (included free)` : (flatRate ? `${dbItem.name || itemKey} (entire quantity)` : (dbItem.name || itemKey)),
+                quantity: flatRate ? 1 : qty,
                 unitPrice,
-                total: unitPrice * qty,
+                total: lineTotal,
                 discount: 0
             });
         }

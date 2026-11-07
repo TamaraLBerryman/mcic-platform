@@ -29,7 +29,7 @@ export async function POST(request) {
             await removeMember(body.email);
             return Response.json({ success: true, people: await listMembers() });
         }
-        const person = await saveMember(body.email, body.group);
+        const person = await saveMember(body.email, body.group, body);
         return Response.json({ success: true, person, people: await listMembers() });
     } catch (error) {
         return Response.json({ success: false, error: error.message || 'That person could not be saved.' }, { status: error.status || 500 });

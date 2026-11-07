@@ -1,8 +1,23 @@
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, updateDoc } from 'firebase/firestore';
 import { db } from '../../../../lib/firebase';
-import { createBookingCalendarHolds, deleteCalendarEvent } from '../../../../lib/googleCalendar';
+import { createBookingCalendarHolds, createBookingInventoryHolds, deleteCalendarEvent } from '../../../../lib/googleCalendar';
 import { sendPlainEmail } from '../../../../lib/mail';
 import { emailFromRequest, hasAdminAccess } from '../../../../lib/verifyUser';
+
+async function inventoryNameMap() {
+    try {
+        const snapshot = await getDocs(collection(db, 'items'));
+        const names = {};
+        snapshot.docs.forEach(item => {
+            const name = item.data().name || item.id;
+            names[item.id] = name;
+            names[String(item.id).toUpperCase()] = name;
+        });
+        return names;
+    } catch {
+        return {};
+    }
+}
 
 async function deleteHolds(booking) {
     const eventIds = [...new Set([...(booking.googleEventIds || []), booking.googleEventId].filter(Boolean))];
@@ -89,7 +104,18 @@ export async function POST(request) {
                 approvalUrl: booking.approvalUrl,
                 holdDates: [requested.bumpInDate]
             });
-            calendarError = holds.calendarError;
+            const inventory = await createBookingInventoryHolds({
+                ...booking,
+                ...requested,
+                bookingId: bookingSnapshot.id,
+                inventoryWindows: [{
+                    bumpInDate: requested.bumpInDate,
+                    bumpIn: requested.bumpIn,
+                    bumpOut: requested.bumpOut
+                }]
+            }, await inventoryNameMap());
+            const eventIds = [...holds.ids, ...inventory.ids];
+            calendarError = [holds.calendarError, inventory.calendarError].filter(Boolean).join(' ');
             if (holds.ids.length) await deleteHolds(booking);
             await updateDoc(bookingRef, {
                 eventName: requested.eventName,
@@ -101,7 +127,7 @@ export async function POST(request) {
                 bumpOut: requested.bumpOut,
                 recurrence: { pattern: 'none', interval: 1, end: null, bookedDates: [requested.bumpInDate], skippedDates: [] },
                 googleEventId: holds.ids[0] || booking.googleEventId || null,
-                googleEventIds: holds.ids.length ? holds.ids : (booking.googleEventIds || []),
+                googleEventIds: holds.ids.length ? eventIds : (booking.googleEventIds || []),
                 calendarError
             });
             if (booking.publicEventId) {

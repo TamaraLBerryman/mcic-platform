@@ -4,11 +4,14 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { allows } from '../app/lib/access';
+import { pageIsHidden } from '../app/lib/sitePages';
 import { signOutUser } from '../app/lib/clientAuth';
 import { useAccess } from './useAccess';
+import { useHiddenPages } from './SitePages';
 
 export default function Navbar() {
     const { ready, access } = useAccess();
+    const { hiddenPages } = useHiddenPages();
     const pathname = usePathname();
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const [ticketing, setTicketing] = useState(true);
@@ -115,7 +118,12 @@ export default function Navbar() {
                 {isMenuOpen && (
                     <div className="bg-neutral-900 border-b border-neutral-800 animate-in slide-in-from-top duration-200 relative z-50">
                         <nav className="max-w-7xl mx-auto px-6 py-8 flex flex-col gap-5 text-sm font-bold uppercase tracking-wider">
-                            {(access.signedIn ? [
+                            {(access.admin ? [
+                                { href: '/booking', label: 'Book an Event Space', level: 'public' },
+                                { href: '/coworking', label: 'Startup Access & Coworking', level: 'public' },
+                                { href: '/inventory', label: 'MCIC Inventory', level: 'public' },
+                                { href: '/admin', label: 'Admin Page', level: 'admin' }
+                            ] : access.signedIn ? [
                                 { href: '/booking', label: 'Book an Event Space', level: 'public' },
                                 { href: '/casuals', label: 'Book casual staff', level: 'founders' },
                                 { href: '/my-bookings', label: 'My bookings', level: 'account' },
@@ -135,8 +143,9 @@ export default function Navbar() {
                             ] : [
                                 { href: '/booking', label: 'Book an Event Space', level: 'public' },
                                 { href: '/coworking', label: 'Startup Access & Coworking', level: 'public' },
-                                { href: '/events', label: 'Attend our Events', level: 'public' }
-                            ]).filter((item) => (item.href !== '/events' || ticketing) && (item.level === 'public' || item.level === 'account' || allows(access, item.level))).map((item) => (
+                                { href: '/events', label: 'Attend our Events', level: 'public' },
+                                { href: '/inventory', label: 'MCIC Inventory', level: 'account' }
+                            ]).filter((item) => (item.href !== '/events' || ticketing) && !pageIsHidden(item.href, hiddenPages) && (item.level === 'public' || item.level === 'account' || allows(access, item.level))).map((item) => (
                                 <Link key={item.href} href={item.href} onClick={closeMenu} className="hover:text-[#EAD64D] transition-colors py-1 border-b border-neutral-800/60">
                                     {item.label}
                                 </Link>
@@ -162,6 +171,7 @@ export default function Navbar() {
                                 Main UNSW Founders Site ↗
                             </a>
 
+                            {!access.admin && !pageIsHidden('/contact', hiddenPages) && (
                             <div className="pt-2">
                                 <Link
                                     href="/contact"
@@ -171,6 +181,7 @@ export default function Navbar() {
                                     Contact Us
                                 </Link>
                             </div>
+                            )}
                         </nav>
                     </div>
                 )}

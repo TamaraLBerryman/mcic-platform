@@ -190,15 +190,7 @@ export default function BookingPage() {
                             </p>
                             <p>
                                 Internal Departments and Student Societies receive a significant discount to use our spaces while external hirers will pay full price. Discounts will be automatically applied when generating your quote.
-                            </p>
-                            <button
-                                type="button"
-                                onClick={scrollToForm}
-                                className="text-xs font-bold uppercase tracking-wider text-black underline decoration-2 decoration-[#EAD64D] underline-offset-4 hover:text-neutral-600 transition-colors block pt-2 cursor-pointer"
-                            >
-                                Book a tour of the MCIC spaces
-                            </button>
-                            <button
+                            </p>                            <button
                                 type="button"
                                 onClick={scrollToForm}
                                 className="text-xs font-bold uppercase tracking-wider text-black underline decoration-2 decoration-[#EAD64D] underline-offset-4 hover:text-neutral-600 transition-colors block pt-2 cursor-pointer"

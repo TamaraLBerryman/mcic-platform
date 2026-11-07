@@ -3,8 +3,11 @@
 import { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
 import { ALL_EVENTS } from '../lib/eventCatalog';
+import { pageIsHidden } from '../lib/sitePages';
+import { useHiddenPages } from '../../components/SitePages';
 
 export default function EventsDirectoryPage() {
+    const { hiddenPages } = useHiddenPages();
     const [viewTab, setViewTab] = useState('upcoming');
     const [selectedCollection, setSelectedCollection] = useState('ALL');
     const [filterCategory, setFilterCategory] = useState('ALL');
@@ -63,12 +66,14 @@ export default function EventsDirectoryPage() {
                     <p className="text-sm font-medium text-neutral-600 max-w-2xl leading-relaxed">
                         Discover official UNSW Founders programs, workshops, and community events hosted at the MCIC and across external partner venues.
                     </p>
+                    {!pageIsHidden('/events/list', hiddenPages) && (
                     <Link
                         href="/events/list"
                         className="inline-block text-xs font-bold uppercase tracking-wider border border-black px-3 py-2 rounded-sm hover:bg-black hover:text-white"
                     >
                         List an event not held at the MCIC
                     </Link>
+                    )}
                 </header>
 
                 {/* MAIN FILTER & NAVIGATION BAR */}

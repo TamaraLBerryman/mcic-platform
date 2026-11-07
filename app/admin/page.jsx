@@ -1,18 +1,23 @@
 "use client";
 
 import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { addDoc, collection, deleteDoc, doc, getDoc, onSnapshot, setDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { firebaseAuth, watchAuth } from '../lib/clientAuth';
 import { allows, ACCESS_GROUPS } from '../lib/access';
 import { useAccess } from '../../components/useAccess';
+import AffiliationFields, { EMPTY_AFFILIATION, affiliationError } from '../../components/AffiliationFields';
 import Gate from '../../components/Gate';
 import { DEFAULT_DESK_LAYOUT } from '../lib/deskLayout';
 import { ACCESS_PIPELINE, pipelineStepOf } from '../lib/accessPipeline';
 import { sessionIsActive } from '../lib/hotDesks';
 import { casualShiftQuantity } from '../lib/casualStaff';
+import { bookingEquipmentWindows, formatInventoryWindow, reservationWindows, withItemNames } from '../lib/inventoryBookings';
 import { WORK_END, WORK_START } from '../lib/workingHours';
+import { SITE_PAGE_GROUPS, canHidePage, pageIsHidden } from '../lib/sitePages';
 import { durationLabel } from '../lib/casualTimesheets';
+import { bookingQueueTag, holdAvailability } from '../lib/bookingRules';
 import OrganiserField from '../../components/OrganiserField';
 import DeskMap from '../../components/DeskMap';
 import InventorySuggest from '../../components/InventorySuggest';
@@ -76,9 +81,11 @@ function casualRoster(bookings, requests) {
         if (['DECLINED', 'CANCELLED'].includes(booking.status)) return;
         if (!askedForStaff(booking, [])) return;
         const shifts = Array.isArray(booking.casualStaffDetails) && booking.casualStaffDetails.length ? booking.casualStaffDetails : [{}];
-        bookingDates(booking).forEach((date) => {
-            const times = timesOn(booking, date);
-            shifts.forEach((shift, index) => {
+        const dates = bookingDates(booking);
+        shifts.forEach((shift, index) => {
+            const shiftDates = shift.date ? [dateOnly(shift.date)].filter(Boolean) : dates;
+            shiftDates.forEach((date) => {
+                const times = timesOn(booking, date);
                 const start = clock(shift.shiftStart);
                 const end = clock(shift.shiftEnd);
                 rows.push({
@@ -272,6 +279,9 @@ function AdminDashboardPage() {
     const [ticketing, setTicketing] = useState(true);
     const [ticketingBusy, setTicketingBusy] = useState(false);
     const [ticketingMessage, setTicketingMessage] = useState('');
+    const [hiddenPages, setHiddenPages] = useState([]);
+    const [pageBusy, setPageBusy] = useState('');
+    const [pageMessage, setPageMessage] = useState('');
 
     const [applications, setApplications] = useState([]);
     const [registrations, setRegistrations] = useState([]);
@@ -288,6 +298,7 @@ function AdminDashboardPage() {
     const [qrDesk, setQrDesk] = useState(null);
     const [hotDeskSessions, setHotDeskSessions] = useState([]);
     const [bookings, setBookings] = useState([]);
+    const [rsaCards, setRsaCards] = useState([]);
     const [casualRequests, setCasualRequests] = useState([]);
     const [casualSide, setCasualSide] = useState('requested');
     const [casualOffers, setCasualOffers] = useState([]);
@@ -303,6 +314,9 @@ function AdminDashboardPage() {
     const [staffDraft, setStaffDraft] = useState({ name: '', role: '', email: '' });
     const [accessEmail, setAccessEmail] = useState('');
     const [accessGroup, setAccessGroup] = useState('founders');
+    const [accessAffiliation, setAccessAffiliation] = useState(EMPTY_AFFILIATION);
+    const [accessName, setAccessName] = useState('');
+    const [accessPhone, setAccessPhone] = useState('');
     const [accessNotice, setAccessNotice] = useState('');
     const [hoursShifts, setHoursShifts] = useState([]);
     const [budgetCodes, setBudgetCodes] = useState([]);
@@ -359,6 +373,9 @@ function AdminDashboardPage() {
         const stopBookings = onSnapshot(collection(db, 'bookings'), (snapshot) => {
             setBookings(snapshot.docs.map((entry) => ({ id: entry.id, ...entry.data() })));
         });
+        const stopRsaCards = onSnapshot(collection(db, 'rsaCards'), (snapshot) => {
+            setRsaCards(snapshot.docs.map((entry) => ({ id: entry.id, ...entry.data() })));
+        });
         const stopBans = onSnapshot(collection(db, 'bans'), (snapshot) => {
             setBans(snapshot.docs.map((entry) => ({ id: entry.id, ...entry.data() })));
         });
@@ -382,6 +399,7 @@ function AdminDashboardPage() {
             stopAlerts();
             stopRegistrations();
             stopBookings();
+            stopRsaCards();
             stopBans();
             stopFramery();
             stopHotDesks();
@@ -432,7 +450,10 @@ function AdminDashboardPage() {
         fetch('/api/site')
             .then((response) => response.json())
             .then((data) => {
-                if (!cancelled && data.success) setTicketing(data.ticketing !== false);
+                if (!cancelled && data.success) {
+                    setTicketing(data.ticketing !== false);
+                    setHiddenPages(Array.isArray(data.hiddenPages) ? data.hiddenPages : []);
+                }
             })
             .catch(() => {});
         return () => {
@@ -471,9 +492,39 @@ function AdminDashboardPage() {
         }
     };
 
+    const togglePage = async (path) => {
+        const user = firebaseAuth().currentUser;
+        if (!user) {
+            setPageMessage('Sign in with an admin email to hide a page.');
+            return;
+        }
+        const hidden = !hiddenPages.includes(path);
+        setPageBusy(path);
+        setPageMessage('');
+        try {
+            const token = await user.getIdToken();
+            const response = await fetch('/api/site', {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ path, hidden })
+            });
+            const data = await response.json();
+            if (!data.success) {
+                setPageMessage(data.error || 'That page could not be updated.');
+                return;
+            }
+            setHiddenPages(Array.isArray(data.hiddenPages) ? data.hiddenPages : []);
+            window.dispatchEvent(new Event('mcic-site-settings'));
+        } catch (error) {
+            setPageMessage(error.message || 'That page could not be updated.');
+        } finally {
+            setPageBusy('');
+        }
+    };
+
     useEffect(() => {
         if (!accessReady) return;
-        const levels = { reporting: 'admin', coworking: 'admin', inventory: 'admin', database: 'founders', casuals: 'admin', access: 'admin', pages: 'admin' };
+        const levels = { reporting: 'admin', coworking: 'admin', inventory: 'admin', database: 'founders', casuals: 'admin', access: 'admin', pages: 'admin', staffing: 'admin', events: 'admin' };
         if (!allows(access, levels[activeTab] || 'admin')) setActiveTab('database');
     }, [accessReady, access, activeTab]);
 
@@ -512,12 +563,25 @@ function AdminDashboardPage() {
         event.preventDefault();
         const user = firebaseAuth().currentUser;
         if (!user) return;
+        if (!accessName.trim()) {
+            setAccessNotice('Enter their full name.');
+            return;
+        }
+        if (!accessPhone.trim()) {
+            setAccessNotice('Enter their mobile phone.');
+            return;
+        }
+        const affiliationProblem = affiliationError(accessAffiliation);
+        if (affiliationProblem) {
+            setAccessNotice(affiliationProblem);
+            return;
+        }
         setAccessNotice('');
         const token = await user.getIdToken();
         const response = await fetch('/api/access', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-            body: JSON.stringify({ email: accessEmail, group: accessGroup })
+            body: JSON.stringify({ email: accessEmail, group: accessGroup, name: accessName, phone: accessPhone, ...accessAffiliation })
         });
         const data = await response.json();
         if (!data.success) {
@@ -527,6 +591,9 @@ function AdminDashboardPage() {
         setAccessPeople(data.people || []);
         setAccessNotice(`Saved ${accessEmail}. They sign in with that email and a password they choose.`);
         setAccessEmail('');
+        setAccessName('');
+        setAccessPhone('');
+        setAccessAffiliation(EMPTY_AFFILIATION);
     };
 
     const removeAccess = async (email) => {
@@ -664,12 +731,23 @@ function AdminDashboardPage() {
         return map;
     }, [casualOffers]);
     const eventsWithoutStaff = useMemo(() => unstaffedEvents(bookings, casualRequests), [bookings, casualRequests]);
+    const bookingRequests = useMemo(() => {
+        const approved = bookings.filter((booking) => booking.status === 'APPROVED');
+        return bookings
+            .filter((booking) => (booking.status || 'PENDING') === 'PENDING')
+            .map((booking) => ({
+                ...booking,
+                queueTag: bookingQueueTag(booking, approved),
+                holdTags: holdAvailability(booking, approved)
+            }))
+            .sort((a, b) => String(a.createdAt || '').localeCompare(String(b.createdAt || '')));
+    }, [bookings]);
     const hotDeskOccupancy = hotDeskSessions.reduce((map, session) => {
         if (sessionIsActive(session)) map[session.id] = { name: session.occupantName };
         return map;
     }, {});
 
-    const borrowedItems = items.filter((item) => item.status && item.status !== 'Available');
+    const borrowedItems = items.filter((item) => Number(item.checkedOutQty) > 0 || (item.status && item.status !== 'Available'));
     const openAlerts = [...alerts].sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
 
     const filteredApplications = applications
@@ -1085,6 +1163,8 @@ function AdminDashboardPage() {
 
                 <div className="flex flex-wrap gap-2 border-b border-gray-200 pb-3">
                     {[
+                        { id: 'staffing', label: 'Casual Staffing', level: 'admin' },
+                        { id: 'events', label: 'Events', level: 'admin' },
                         { id: 'reporting', label: 'Reporting', level: 'admin' },
                         { id: 'coworking', label: 'Coworking', level: 'admin' },
                         { id: 'inventory', label: 'Inventory', level: 'admin' },
@@ -1107,88 +1187,64 @@ function AdminDashboardPage() {
                     ))}
                 </div>
 
+                {(activeTab === 'staffing' || activeTab === 'events') && (
+                    <section className="bg-white border border-gray-200 rounded-sm p-6 space-y-4">
+                        <h2 className="text-xl font-extrabold uppercase">{activeTab === 'staffing' ? 'Casual Staffing' : 'Events'}</h2>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            {(activeTab === 'staffing' ? [
+                                ['/casuals', 'Book casual staff'],
+                                ['/casuals/available', 'Shift availability'],
+                                ['/casuals/hours', 'My shifts'],
+                                ['/timesheets', 'Submit a Timesheet'],
+                                ['/casuals/approve', 'Approve casual hours']
+                            ] : [
+                                ['/boards', 'Event countdown'],
+                                ['/boards/spaces', 'Spaces today'],
+                                ['/events', 'Attend our Events'],
+                                ['/my-bookings', 'My bookings']
+                            ]).filter(([href]) => (href !== '/events' || ticketing) && !pageIsHidden(href, hiddenPages)).map(([href, label]) => (
+                                <Link key={href} href={href} className="border border-gray-200 p-4 text-sm font-bold hover:border-black">
+                                    {label}
+                                </Link>
+                            ))}
+                        </div>
+                    </section>
+                )}
+
                 {activeTab === 'pages' && (
                     <section className="bg-white border border-gray-200 rounded-sm p-6 space-y-6">
                         <div>
                             <h2 className="text-xl font-extrabold uppercase">All pages</h2>
-                            <p className="text-sm text-gray-600">Every page on the site, so nothing is only reachable if you remember the address.</p>
+                            <p className="text-sm text-gray-600">Hide takes a page off the menu and out of the site. Publish puts it back. Admin and sign in stay available so this list can still be opened.</p>
                         </div>
-                        {[
-                            {
-                                title: 'Public',
-                                pages: [
-                                    ['/', 'Home'],
-                                    ['/booking', 'Book an event space'],
-                                    ['/events', 'Attend our events'],
-                                    ['/events/SLUG', 'One event'],
-                                    ['/coworking', 'Startup access and coworking'],
-                                    ['/coworking/desk/KEY', 'Hot desk check-in'],
-                                    ['/coworking/desk/KEY/print', 'Hot desk QR print'],
-                                    ['/boards/spaces', 'Spaces today'],
-                                    ['/inventory', 'Inventory'],
-                                    ['/borrow/ITEM', 'Borrow an item'],
-                                    ['/OnTheDay', 'On the day'],
-                                    ['/contact', 'Contact'],
-                                    ['/doorbell', 'Lobby doorbell'],
-                                    ['/ticket/CODE', 'Guest ticket']
-                                ]
-                            },
-                            {
-                                title: 'Any signed-in account',
-                                pages: [
-                                    ['/my-bookings', 'My bookings'],
-                                    ['/my-bookings/ID', 'One booking'],
-                                    ['/login', 'Sign in']
-                                ]
-                            },
-                            {
-                                title: 'Founders general staff and Admin',
-                                pages: [
-                                    ['/casuals', 'Book casual staff'],
-                                    ['/events/list', 'List an off-site event'],
-                                    ['/boards', 'Event countdown'],
-                                    ['/casuals/approve', 'Approve casual hours'],
-                                    ['/admin', 'Admin, Database tab']
-                                ]
-                            },
-                            {
-                                title: 'Casual staff and Admin',
-                                pages: [
-                                    ['/casuals/available', 'Shift availability'],
-                                    ['/casuals/hours', 'My shifts']
-                                ]
-                            },
-                            {
-                                title: 'Founders, casuals, and Admin',
-                                pages: [
-                                    ['/kitchen', 'Kitchen search'],
-                                    ['/lockers', 'Lockers'],
-                                    ['/timesheets', 'Timesheets'],
-                                    ['/inventory/add', 'Add an inventory item'],
-                                    ['/events/SLUG/door', 'Door check-in, also open to that event’s organiser']
-                                ]
-                            },
-                            {
-                                title: 'Admin',
-                                pages: [
-                                    ['/admin', 'Reporting, coworking, inventory, casuals, access, and this list'],
-                                    ['/admin/approve', 'Approve a booking'],
-                                    ['/admin/changes', 'Review a booking change'],
-                                    ['/admin/listings', 'Review an off-site listing'],
-                                    ['/admin/runsheet', 'Old runsheet address, opens this dashboard'],
-                                    ['/events/SLUG/guests', 'Guest list, also open to the booker']
-                                ]
-                            }
-                        ].map((group) => (
+                        {pageMessage && <p className="text-sm font-semibold">{pageMessage}</p>}
+                        {SITE_PAGE_GROUPS.map((group) => (
                             <div key={group.title} className="space-y-2">
                                 <h3 className="text-xs font-black uppercase tracking-wider">{group.title}</h3>
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                    {group.pages.map(([href, label]) => (
-                                        <a key={href + label} href={href} className="border border-gray-200 p-3 text-sm hover:border-black">
-                                            <span className="block font-bold">{label}</span>
-                                            <span className="text-xs text-gray-500">{href}</span>
-                                        </a>
-                                    ))}
+                                    {group.pages.map(([href, label]) => {
+                                        const hidden = hiddenPages.includes(href);
+                                        return (
+                                            <div key={href + label} className="border border-gray-200 p-3 text-sm flex items-start justify-between gap-3">
+                                                <a href={href} className="min-w-0 hover:underline">
+                                                    <span className="block font-bold">{label}</span>
+                                                    <span className="text-xs text-gray-500">{href}{hidden ? ' · Hidden' : ''}</span>
+                                                </a>
+                                                {canHidePage(href) ? (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => togglePage(href)}
+                                                        disabled={pageBusy === href}
+                                                        className="shrink-0 px-3 py-2 text-[10px] font-bold uppercase tracking-wider border border-black rounded-sm disabled:opacity-50"
+                                                    >
+                                                        {hidden ? 'Publish' : 'Hide'}
+                                                    </button>
+                                                ) : (
+                                                    <span className="shrink-0 text-[10px] font-bold uppercase tracking-wider text-gray-400">Stays available</span>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
                                 </div>
                             </div>
                         ))}
@@ -1201,18 +1257,25 @@ function AdminDashboardPage() {
                             <p className="text-sm text-gray-600">Add an email to Admin, Founders general staff, or Casual staff. They sign in with that email and a password they choose. Anyone else can create their own account from the sign-in page and is treated as Others.</p>
                         </div>
                         {accessNotice && <p className="text-sm font-semibold">{accessNotice}</p>}
-                        <form onSubmit={saveAccess} className="flex flex-col sm:flex-row gap-2">
-                            <input type="email" required value={accessEmail} onChange={(event) => setAccessEmail(event.target.value)} placeholder="name@unsw.edu.au" className="flex-1 p-2 border border-gray-200 rounded-sm text-sm" />
-                            <select value={accessGroup} onChange={(event) => setAccessGroup(event.target.value)} className="p-2 border border-gray-200 rounded-sm text-sm">
-                                {ACCESS_GROUPS.map((group) => <option key={group.id} value={group.id}>{group.label}</option>)}
-                            </select>
-                            <button type="submit" className="px-3 py-2 text-[10px] font-bold uppercase tracking-wider bg-black text-[#EAD64D] rounded-sm">Add</button>
+                        <form onSubmit={saveAccess} className="space-y-4">
+                            <div className="flex flex-col sm:flex-row gap-2">
+                                <input type="email" required value={accessEmail} onChange={(event) => setAccessEmail(event.target.value)} placeholder="name@unsw.edu.au" className="flex-1 p-2 border border-gray-200 rounded-sm text-sm" />
+                                <select value={accessGroup} onChange={(event) => setAccessGroup(event.target.value)} className="p-2 border border-gray-200 rounded-sm text-sm">
+                                    {ACCESS_GROUPS.map((group) => <option key={group.id} value={group.id}>{group.label}</option>)}
+                                </select>
+                                <button type="submit" className="px-3 py-2 text-[10px] font-bold uppercase tracking-wider bg-black text-[#EAD64D] rounded-sm">Add</button>
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                <input type="text" required value={accessName} onChange={(event) => setAccessName(event.target.value)} placeholder="Full name" className="p-2 border border-gray-200 rounded-sm text-sm" />
+                                <input type="tel" required value={accessPhone} onChange={(event) => setAccessPhone(event.target.value)} placeholder="Mobile phone" className="p-2 border border-gray-200 rounded-sm text-sm" />
+                            </div>
+                            <AffiliationFields value={accessAffiliation} onChange={setAccessAffiliation} />
                         </form>
                         <div className="space-y-2 text-sm">
                             {accessPeople.length === 0 && <p className="text-gray-500">No one has been added yet. Emails in the server admin list still have admin access.</p>}
                             {accessPeople.map((person) => (
                                 <div key={person.email} className="flex items-center justify-between gap-3 border border-gray-200 p-3">
-                                    <span>{person.email} · {ACCESS_GROUPS.find((group) => group.id === person.group)?.label || person.group}</span>
+                                    <span>{person.email} · {ACCESS_GROUPS.find((group) => group.id === person.group)?.label || person.group}{person.userType ? ` · ${person.userType}${person.department ? `, ${person.department}` : ''}` : ''}</span>
                                     <button type="button" onClick={() => removeAccess(person.email)} className="text-[10px] font-bold uppercase tracking-wider border border-gray-300 px-2 py-1 rounded-sm">Remove</button>
                                 </div>
                             ))}
@@ -1223,7 +1286,7 @@ function AdminDashboardPage() {
                             {accessAccounts.length === 0 && <p className="text-gray-500">No one has signed in yet.</p>}
                             {accessAccounts.map((account) => (
                                 <p key={account.email} className="border border-gray-200 p-3">
-                                    {account.email} · {ACCESS_GROUPS.find((group) => group.id === account.group)?.label || 'Others'}
+                                    {account.email} · {ACCESS_GROUPS.find((group) => group.id === account.group)?.label || 'Others'}{account.userType ? ` · ${account.userType}${account.department ? `, ${account.department}` : ''}` : ''}
                                     {account.lastSeenAt ? ` · last signed in ${account.lastSeenAt.slice(0, 16).replace('T', ' ')}` : ''}
                                 </p>
                             ))}
@@ -1248,6 +1311,56 @@ function AdminDashboardPage() {
                 )}
                 {activeTab === 'reporting' && (
                     <div className="space-y-8">
+                        <section className="bg-white border border-gray-200 rounded-sm p-6 space-y-4">
+                            <div>
+                                <h2 className="text-lg font-extrabold uppercase">Booking requests</h2>
+                                <p className="text-sm text-gray-600">Listed in the order they were received. Each request is Held until you accept a booking for that time. After that, the other requests for the same time are tagged Unavailable.</p>
+                            </div>
+                            {bookingRequests.length === 0 && <p className="text-sm text-gray-500">No booking requests are waiting.</p>}
+                            {bookingRequests.map((booking) => (
+                                <a key={booking.id} href={`/admin/approve?id=${booking.id}`} className="block border border-gray-200 p-4 hover:border-black space-y-1">
+                                    <p className="text-xs font-bold uppercase tracking-wider">
+                                        <span className={`inline-block px-2 py-0.5 rounded-sm ${booking.queueTag === 'Unavailable' ? 'bg-rose-100 text-rose-800' : 'bg-[#EAD64D] text-black'}`}>
+                                            {booking.queueTag}
+                                        </span>
+                                    </p>
+                                    <p className="font-black">{booking.eventName || 'Untitled booking'}</p>
+                                    <p className="text-sm text-neutral-700">{booking.space}</p>
+                                    <p className="text-sm text-neutral-700">{booking.bumpInDate} · {booking.bumpIn}–{booking.bumpOut}</p>
+                                    {Array.isArray(booking.tentativeHolds) && booking.tentativeHolds.length > 1 && booking.tentativeHolds.map((hold, index) => (
+                                        <p key={`${booking.id}-${index}`} className="text-xs text-neutral-700">
+                                            Hold {index + 1}: {hold.bumpInDate} · {hold.bumpIn}–{hold.bumpOut} · {hold.space}
+                                            <span className={`ml-2 font-bold uppercase ${booking.holdTags?.[index] === 'Unavailable' ? 'text-rose-800' : 'text-black'}`}>{booking.holdTags?.[index]}</span>
+                                        </p>
+                                    ))}
+                                </a>
+                            ))}
+                        </section>
+                        <section className="bg-white border border-gray-200 rounded-sm p-6 space-y-4">
+                            <div>
+                                <h2 className="text-lg font-extrabold uppercase">RSA cards</h2>
+                                <p className="text-sm text-gray-600">Add the expiry date from the card. That person will not be asked to upload again until the day after it expires.</p>
+                            </div>
+                            {rsaCards.length === 0 && <p className="text-sm text-gray-500">No RSA cards have been uploaded.</p>}
+                            {[...rsaCards].sort((a, b) => String(a.expiryDate || '').localeCompare(String(b.expiryDate || '')) || String(a.email || a.id).localeCompare(String(b.email || b.id))).map((card) => (
+                                <div key={card.id} className="border border-gray-200 p-4 space-y-2">
+                                    <p className="font-bold">{card.email || card.id}</p>
+                                    <p className="text-sm text-neutral-700">{card.fileName || 'RSA card'}{card.uploadedAt ? ` · uploaded ${card.uploadedAt.slice(0, 10)}` : ''}</p>
+                                    {card.fileData && (
+                                        <a href={card.fileData} target="_blank" rel="noreferrer" className="text-sm font-bold underline">View card</a>
+                                    )}
+                                    <label className="flex items-center gap-2 text-sm">
+                                        <span className="font-bold">Expiry</span>
+                                        <input
+                                            type="date"
+                                            value={card.expiryDate || ''}
+                                            onChange={(event) => updateDoc(doc(db, 'rsaCards', card.id), { expiryDate: event.target.value })}
+                                            className="p-2 border border-gray-200 rounded-sm"
+                                        />
+                                    </label>
+                                </div>
+                            ))}
+                        </section>
                         <section className="space-y-6">
                             <div className="bg-white p-6 border border-gray-200 rounded-sm shadow-xs flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                                 <div>
@@ -1620,11 +1733,11 @@ function AdminDashboardPage() {
                     <div className="space-y-6">
                         <section className="bg-white border border-gray-200 p-6 rounded-sm shadow-xs space-y-4">
                             <div>
-                                <h2 className="text-xl font-extrabold uppercase text-black">Borrowed inventory</h2>
-                                <p className="text-xs text-gray-500">Items currently checked out, and future reservations, from the inventory borrowing records.</p>
+                                <h2 className="text-xl font-extrabold uppercase text-black">Checkouts</h2>
+                                <p className="text-xs text-gray-500">Items that are out now, and the next inventory bookings so you can see when each one is needed again.</p>
                             </div>
-                            {borrowedItems.length === 0 && reservations.length === 0 ? (
-                                <p className="text-xs text-gray-500 border border-dashed border-gray-300 p-6 text-center">Nothing is currently borrowed or reserved.</p>
+                            {borrowedItems.length === 0 ? (
+                                <p className="text-xs text-gray-500 border border-dashed border-gray-300 p-6 text-center">Nothing is currently checked out.</p>
                             ) : (
                                 <div className="border border-gray-200 rounded-xs overflow-x-auto">
                                     <table className="w-full text-left text-xs">
@@ -1632,34 +1745,49 @@ function AdminDashboardPage() {
                                             <tr>
                                                 <th className="py-3 px-4">Item</th>
                                                 <th className="py-3 px-4">Borrower</th>
-                                                <th className="py-3 px-4">When</th>
-                                                <th className="py-3 px-4">Status</th>
+                                                <th className="py-3 px-4">Checked out</th>
+                                                <th className="py-3 px-4">Next booking</th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-gray-100">
-                                            {borrowedItems.map((item) => (
-                                                <tr key={item.id}>
-                                                    <td className="py-3 px-4 font-bold">{item.name}</td>
-                                                    <td className="py-3 px-4">{item.user || '—'}</td>
-                                                    <td className="py-3 px-4">{item.storageLocation || '—'}</td>
-                                                    <td className="py-3 px-4">{item.status}</td>
-                                                </tr>
-                                            ))}
-                                            {reservations.map((reservation) => (
-                                                <tr key={reservation.id}>
-                                                    <td className="py-3 px-4 font-bold">{reservation.itemName}</td>
-                                                    <td className="py-3 px-4">{reservation.borrowerName}</td>
-                                                    <td className="py-3 px-4">
-                                                        {reservation.bookingDate || [reservation.bookingStartDate, reservation.bookingEndDate].filter(Boolean).join(' to ')}
-                                                        {reservation.bookingStartTime ? ` ${reservation.bookingStartTime}–${reservation.bookingEndTime}` : ''}
-                                                    </td>
-                                                    <td className="py-3 px-4">{reservation.status || 'Scheduled'}</td>
-                                                </tr>
-                                            ))}
+                                            {borrowedItems.map((item) => {
+                                                const upcoming = withItemNames([
+                                                    ...reservations.flatMap(reservation => reservationWindows(reservation)),
+                                                    ...bookings.flatMap(booking => bookingEquipmentWindows(booking))
+                                                ], items);
+                                                const next = upcoming
+                                                    .filter(window => window.itemId === String(item.id).toUpperCase() && window.end > new Date())
+                                                    .sort((a, b) => a.start - b.start)[0];
+                                                return (
+                                                    <tr key={item.id}>
+                                                        <td className="py-3 px-4 font-bold">{item.name}</td>
+                                                        <td className="py-3 px-4">{item.user || '—'}</td>
+                                                        <td className="py-3 px-4">{item.checkedOutAt ? new Date(item.checkedOutAt).toLocaleString('en-AU') : '—'}</td>
+                                                        <td className="py-3 px-4">{next ? formatInventoryWindow(next) : 'None'}</td>
+                                                    </tr>
+                                                );
+                                            })}
                                         </tbody>
                                     </table>
                                 </div>
                             )}
+                            <div className="pt-2">
+                                <h3 className="text-sm font-extrabold uppercase text-black">Upcoming inventory bookings</h3>
+                            </div>
+                            {(() => {
+                                const upcoming = withItemNames([
+                                    ...reservations.flatMap(reservation => reservationWindows(reservation)),
+                                    ...bookings.flatMap(booking => bookingEquipmentWindows(booking))
+                                ], items).filter(window => window.end > new Date()).sort((a, b) => a.start - b.start);
+                                if (!upcoming.length) return <p className="text-xs text-gray-500">No upcoming inventory bookings.</p>;
+                                return (
+                                    <ul className="space-y-1">
+                                        {upcoming.map((window, index) => (
+                                            <li key={`${window.itemId}-${window.start.toISOString()}-${index}`} className="text-xs text-neutral-800">{formatInventoryWindow(window)}</li>
+                                        ))}
+                                    </ul>
+                                );
+                            })()}
                         </section>
 
                         <section className="bg-white border border-gray-200 p-6 rounded-sm shadow-xs space-y-4">

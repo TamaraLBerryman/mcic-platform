@@ -2,54 +2,63 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { db } from '../lib/firebase';
 import { addDoc, collection, onSnapshot, query, orderBy } from 'firebase/firestore';
 import InventorySuggest from '../../components/InventorySuggest';
-import { allows } from '../lib/access';
+import { canViewItem } from '../lib/access';
 import { useAccess } from '../../components/useAccess';
+import Gate from '../../components/Gate';
+import { pageIsHidden } from '../lib/sitePages';
+import { useHiddenPages } from '../../components/SitePages';
 
-export default function InventoryPage() {
+function InventoryPage() {
     const router = useRouter();
     const { access } = useAccess();
+    const { hiddenPages } = useHiddenPages();
     const [searchQuery, setSearchQuery] = useState('');
     const [items, setItems] = useState([]);
     const [loading, setLoading] = useState(true);
+    const searchParams = useSearchParams();
+    const requestedSection = searchParams.get('section');
+    const section = requestedSection === 'digital' || requestedSection === 'locker' || requestedSection === 'kitchen' ? requestedSection : 'general';
     const [showReport, setShowReport] = useState(false);
+    const [reportType, setReportType] = useState(null);
     const [reportWhat, setReportWhat] = useState('');
     const [reportItemId, setReportItemId] = useState(null);
     const [reportInInventory, setReportInInventory] = useState(false);
     const [reportFinished, setReportFinished] = useState(false);
     const [reportWhere, setReportWhere] = useState('');
     const [reportDetails, setReportDetails] = useState('');
-    const [reporterName, setReporterName] = useState('');
     const [reportMessage, setReportMessage] = useState('');
     const [reportBusy, setReportBusy] = useState(false);
 
+    const accountName = (access?.name || '').trim() || access?.email || '';
+
     const submitBrokenReport = async (event) => {
         event.preventDefault();
-        if (!reportWhat.trim() || !reportWhere.trim() || !reportDetails.trim() || !reporterName.trim()) return;
+        if (!reportType || !reportWhat.trim() || !reportWhere.trim() || !reportDetails.trim() || !accountName) return;
         setReportBusy(true);
         setReportMessage('');
         try {
             await addDoc(collection(db, 'alerts'), {
-                type: 'Maintenance / Damaged Asset',
+                type: reportType === 'stock' ? 'Low Stock Alert' : 'Maintenance / Damaged Asset',
                 item: reportWhat.trim(),
                 itemId: reportInInventory ? reportItemId : null,
                 inInventory: Boolean(reportInInventory && reportItemId),
                 location: reportWhere.trim(),
                 description: reportDetails.trim(),
-                reporter: reporterName.trim(),
+                reporter: accountName,
                 status: 'Pending',
                 createdAt: new Date().toISOString()
             });
+            setReportType(null);
             setReportWhat('');
             setReportItemId(null);
             setReportInInventory(false);
             setReportFinished(false);
             setReportWhere('');
             setReportDetails('');
-            setReporterName('');
             setShowReport(false);
             setReportMessage('Report sent. The MCIC team can see it in admin.');
         } catch (error) {
@@ -84,10 +93,15 @@ export default function InventoryPage() {
         return items.filter(item => {
             const nameMatch = item.name ? item.name.toLowerCase().includes(searchQuery.toLowerCase()) : false;
             const locationMatch = item.storageLocation ? item.storageLocation.toLowerCase().includes(searchQuery.toLowerCase()) : false;
-            if (!allows(access, item.viewAccess || 'public')) return false;
+            const tabs = Array.isArray(item.tabs) && item.tabs.length
+                ? item.tabs
+                : (item.section === 'digital' ? ['digital'] : []);
+            const listedInGeneral = tabs.length === 0 || tabs.includes('kitchen') || tabs.includes('locker');
+            if (section === 'general' ? !listedInGeneral : !tabs.includes(section)) return false;
+            if (!canViewItem(access, item.viewAccess)) return false;
             return nameMatch || locationMatch;
         });
-    }, [items, searchQuery, access]);
+    }, [items, searchQuery, access, section]);
 
     return (
         <main className="min-h-screen bg-[#F9F9F9] text-black font-sans antialiased selection:bg-[#EAD64D]">
@@ -99,18 +113,18 @@ export default function InventoryPage() {
                         <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight text-black">
                             Inventory Hub
                         </h1>
-                        <p className="text-gray-600 text-xs sm:text-sm">Search, Check-Out, Book and Report Broken Items.</p>
+                        <p className="text-gray-600 text-xs sm:text-sm">Search, check out, book, and report something broken or low on stock.</p>
                     </div>
 
                     <div className="flex flex-wrap gap-2">
                         <button
                             type="button"
-                            onClick={() => setShowReport((open) => !open)}
+                            onClick={() => { setReportType(null); setShowReport(true); }}
                             className="inline-block bg-white text-black border border-gray-300 hover:border-black transition-colors px-4 py-2.5 rounded-sm font-bold text-xs uppercase tracking-wider"
                         >
-                            Report something broken
+                            Report something broken or low on stock
                         </button>
-                        {access.staff && (
+                        {access.staff && !pageIsHidden('/inventory/add', hiddenPages) && (
                             <Link
                                 href="/inventory/add"
                                 className="inline-block bg-black text-white hover:bg-[#EAD64D] hover:text-black transition-colors px-4 py-2.5 rounded-sm font-bold text-xs uppercase tracking-wider"
@@ -125,11 +139,17 @@ export default function InventoryPage() {
                 <div className="flex items-center gap-2 border-b border-gray-200 pb-2 overflow-x-auto text-xs font-bold uppercase tracking-wider">
                     <Link
                         href="/inventory"
-                        className="px-3.5 py-2 bg-black text-white rounded-sm shrink-0"
+                        className={`px-3.5 py-2 rounded-sm shrink-0 ${section === 'general' ? 'bg-black text-white' : 'text-gray-600 hover:text-black hover:bg-gray-100 transition-colors'}`}
                     >
                         🗄️ General Inventory
                     </Link>
-                    {access.staff && (
+                    <Link
+                        href="/inventory?section=digital"
+                        className={`px-3.5 py-2 rounded-sm shrink-0 ${section === 'digital' ? 'bg-black text-white' : 'text-gray-600 hover:text-black hover:bg-gray-100 transition-colors'}`}
+                    >
+                        💻 Digital Assets
+                    </Link>
+                    {access.staff && !pageIsHidden('/lockers', hiddenPages) && (
                         <Link
                             href="/lockers"
                             className="px-3.5 py-2 text-gray-600 hover:text-black hover:bg-gray-100 rounded-sm transition-colors shrink-0"
@@ -137,7 +157,7 @@ export default function InventoryPage() {
                             🔒 Lockers
                         </Link>
                     )}
-                    {access.staff && (
+                    {access.staff && !pageIsHidden('/kitchen', hiddenPages) && (
                         <Link
                             href="/kitchen"
                             className="px-3.5 py-2 text-gray-600 hover:text-black hover:bg-gray-100 rounded-sm transition-colors shrink-0"
@@ -149,33 +169,6 @@ export default function InventoryPage() {
 
                 {reportMessage && (
                     <p className="text-xs font-bold text-black">{reportMessage}</p>
-                )}
-
-                {showReport && (
-                    <form onSubmit={submitBrokenReport} className="bg-white p-4 border border-gray-200 rounded-sm shadow-xs grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div className="sm:col-span-2">
-                            <h2 className="text-sm font-extrabold uppercase">Report something broken</h2>
-                            <p className="text-xs text-gray-500 mt-1">Use this when there is no inventory item, for example a broken tap or a light in the building.</p>
-                        </div>
-                        <InventorySuggest
-                            items={items}
-                            value={reportWhat}
-                            itemId={reportItemId}
-                            finished={reportFinished}
-                            onChange={({ text, itemId, inInventory, finished }) => {
-                                setReportWhat(text);
-                                setReportItemId(itemId);
-                                setReportInInventory(inInventory);
-                                setReportFinished(Boolean(finished));
-                            }}
-                        />
-                        <input required value={reportWhere} onChange={(event) => setReportWhere(event.target.value)} placeholder="Where" className="p-3 border border-gray-300 text-xs rounded-sm" />
-                        <input required value={reporterName} onChange={(event) => setReporterName(event.target.value)} placeholder="Your name" className="p-3 border border-gray-300 text-xs rounded-sm" />
-                        <textarea required value={reportDetails} onChange={(event) => setReportDetails(event.target.value)} placeholder="What is wrong" className="p-3 border border-gray-300 text-xs rounded-sm h-20" />
-                        <button type="submit" disabled={reportBusy} className="sm:col-span-2 bg-[#EAD64D] text-black font-bold text-xs uppercase py-3 rounded-sm disabled:opacity-50">
-                            Send report
-                        </button>
-                    </form>
                 )}
 
                 {/* SEARCH BAR */}
@@ -225,7 +218,7 @@ export default function InventoryPage() {
                                         <div className="space-y-1">
                                             <div>
                                                 <span className={`font-mono text-[10px] font-bold uppercase px-2.5 py-0.5 rounded-sm border ${isAvailable ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
-                                                    {isAvailable ? 'Available' : `Borrowed by ${item.user || '-'}`}
+                                                    {isAvailable ? 'Available' : `Checked out By ${item.user || '—'}`}
                                                 </span>
                                             </div>
                                             <h3 className="font-bold text-lg text-black pt-1 group-hover:underline">
@@ -251,12 +244,55 @@ export default function InventoryPage() {
                         })
                     ) : (
                         <div className="p-8 text-center text-xs font-bold uppercase text-gray-400 italic tracking-wide">
-                            No inventory items found. Change your search parameters or add a new item.
+                            {section === 'digital' ? 'No digital assets found.' : section === 'locker' ? 'No locker items found.' : section === 'kitchen' ? 'No kitchen items found.' : 'No inventory items found. Change your search parameters or add a new item.'}
                         </div>
                     )}
                 </div>
 
             </div>
+
+            {showReport && (
+                <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onClick={() => { if (!reportBusy) setShowReport(false); }}>
+                    <div className="bg-white max-w-md w-full p-6 rounded-sm space-y-4 max-h-[90vh] overflow-y-auto" onClick={(event) => event.stopPropagation()}>
+                        <div className="flex items-start justify-between gap-3">
+                            <h2 className="text-lg font-extrabold">Report something broken or low on stock</h2>
+                            <button type="button" onClick={() => setShowReport(false)} disabled={reportBusy} className="text-xs font-bold uppercase tracking-wider">Close</button>
+                        </div>
+                        <form onSubmit={submitBrokenReport} className="space-y-3">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                <button type="button" onClick={() => setReportType('broken')} className={`py-3 text-xs font-bold uppercase tracking-wider rounded-sm border cursor-pointer ${reportType === 'broken' ? 'bg-black text-[#EAD64D] border-black' : 'bg-white text-black border-gray-300'}`}>🔧 Broken / Damaged</button>
+                                <button type="button" onClick={() => setReportType('stock')} className={`py-3 text-xs font-bold uppercase tracking-wider rounded-sm border cursor-pointer ${reportType === 'stock' ? 'bg-black text-[#EAD64D] border-black' : 'bg-white text-black border-gray-300'}`}>⚠️ Low Stock</button>
+                            </div>
+                            {reportType && (
+                                <>
+                                    <InventorySuggest
+                                        items={items}
+                                        value={reportWhat}
+                                        itemId={reportItemId}
+                                        finished={reportFinished}
+                                        placeholder={reportType === 'stock' ? 'What is running low' : 'What is broken'}
+                                        onChange={({ text, itemId, inInventory, finished }) => {
+                                            setReportWhat(text);
+                                            setReportItemId(itemId);
+                                            setReportInInventory(inInventory);
+                                            setReportFinished(Boolean(finished));
+                                        }}
+                                    />
+                                    <input required value={reportWhere} onChange={(event) => setReportWhere(event.target.value)} placeholder="Where" className="w-full p-3 border border-gray-300 text-xs rounded-sm" />
+                                    <textarea required value={reportDetails} onChange={(event) => setReportDetails(event.target.value)} placeholder={reportType === 'stock' ? 'e.g. Only 2 left, paper out, batteries needed...' : 'e.g. Screen flickering, cable frayed, missing part...'} className="w-full p-3 border border-gray-300 text-xs rounded-sm h-24" />
+                                    <button type="submit" disabled={reportBusy} className="w-full bg-black text-white font-bold text-xs uppercase py-3 rounded-sm hover:bg-[#EAD64D] hover:text-black cursor-pointer disabled:bg-neutral-200 disabled:text-neutral-500">
+                                        {reportBusy ? 'Sending...' : 'Send report'}
+                                    </button>
+                                </>
+                            )}
+                        </form>
+                    </div>
+                </div>
+            )}
         </main>
     );
+}
+
+export default function Page() {
+    return <Gate level="account"><InventoryPage /></Gate>;
 }

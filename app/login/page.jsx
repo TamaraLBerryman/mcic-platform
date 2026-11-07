@@ -13,6 +13,9 @@ function LoginForm() {
     return (
         <main className="min-h-screen bg-[#F9F9F9] text-black font-sans">
             <div className="max-w-lg mx-auto px-6 py-16">
+                {(next.startsWith('/inventory') || next.startsWith('/borrow')) && (
+                    <p className="text-sm font-medium mb-4">Log in or create an account to see inventory.</p>
+                )}
                 <SignInPanel onSuccess={() => router.replace(next)} />
             </div>
         </main>

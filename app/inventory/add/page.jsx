@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Gate from '../../../components/Gate';
+import InventoryItemForm from '../../../components/InventoryItemForm';
 import { useRouter } from 'next/navigation';
 import { db, storage } from '../../lib/firebase';
 import { doc, setDoc } from 'firebase/firestore';
@@ -20,13 +21,13 @@ function AddInventoryItemPage() {
     // Additional Specification Details
     const [dimensions, setDimensions] = useState('');
     const [includedItems, setIncludedItems] = useState('');
+    const [details, setDetails] = useState('');
     const [quantity, setQuantity] = useState('1');
     const [costPerDay, setCostPerDay] = useState('');
+    const [costAppliesTo, setCostAppliesTo] = useState('item');
 
-    // Restrictions & Badges
-    const [hireScope, setHireScope] = useState('mcic_only'); // 'mcic_only' | 'external_hire'
-    const [isFoundersStaffOnly, setIsFoundersStaffOnly] = useState(false);
-    const [viewAccess, setViewAccess] = useState('public');
+    const [tabs, setTabs] = useState([]);
+    const [viewAccess, setViewAccess] = useState(['account']);
     const [freeInclusionSpaces, setFreeInclusionSpaces] = useState([]);
 
     // Multi-photo State (up to 4 photos)
@@ -35,34 +36,6 @@ function AddInventoryItemPage() {
 
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [successMessage, setSuccessMessage] = useState(false);
-
-    const roomOptions = [
-        "MCIC Event Space",
-        "MCIC Design Space",
-        "Fishbowl",
-        "Founders Place Event Space",
-        "Founders Place Group Study",
-        "Ground Floor Lockers",
-        "Founders Level 1 Office",
-        "Founders Level 1 Copy Room",
-        "Founders Level 1 Kitchen"
-    ];
-
-    const venueHireSpaces = [
-        "MCIC Ground - Entire Space",
-        "MCIC Ground - Event Space",
-        "MCIC Ground - Design Space",
-        "MCIC Level 1 - Founders Place",
-        "MCIC Level 1 - Group Study"
-    ];
-
-    const toggleFreeInclusionSpace = (spaceName) => {
-        if (freeInclusionSpaces.includes(spaceName)) {
-            setFreeInclusionSpaces(freeInclusionSpaces.filter(s => s !== spaceName));
-        } else {
-            setFreeInclusionSpaces([...freeInclusionSpaces, spaceName]);
-        }
-    };
 
     const handleImageChange = (e) => {
         const files = Array.from(e.target.files);
@@ -113,12 +86,15 @@ function AddInventoryItemPage() {
                 storageLocation: fullStorageLocation,
                 dimensions: dimensions.trim(),
                 includedItems: includedItems.trim(),
+                details: details.trim(),
                 quantity: parseInt(quantity, 10) || 1,
                 costPerDay: parseFloat(costPerDay) || 0,
-                hireScope: hireScope,
-                isFoundersStaffOnly: isFoundersStaffOnly,
+                costAppliesTo,
+                tabs,
+                section: tabs.includes('digital') ? 'digital' : 'general',
                 viewAccess,
                 freeInclusionSpaces: freeInclusionSpaces,
+                assetId: itemId.trim(),
                 status: 'Available',
                 user: '-',
                 image: uploadedUrls[0] || '',
@@ -135,10 +111,12 @@ function AddInventoryItemPage() {
             setSpecificLocation('');
             setDimensions('');
             setIncludedItems('');
+            setDetails('');
             setQuantity('1');
             setCostPerDay('');
-            setHireScope('mcic_only');
-            setIsFoundersStaffOnly(false);
+            setCostAppliesTo('item');
+            setTabs([]);
+            setViewAccess(['account']);
             setFreeInclusionSpaces([]);
             setImageFiles([]);
             setImagePreviews([]);
@@ -156,305 +134,55 @@ function AddInventoryItemPage() {
 
     return (
         <main className="min-h-screen bg-[#F9F9F9] text-black font-sans antialiased selection:bg-[#EAD64D]">
-            <div className="max-w-2xl mx-auto px-6 py-16 space-y-8">
-
-                <header className="space-y-2">
-                    <h1 className="text-3xl font-extrabold tracking-tight text-black">
-                        Add New Item to Inventory
-                    </h1>
-                </header>
-
-                <div className="bg-white border border-gray-200 p-6 md:p-8 rounded-sm shadow-xs space-y-6">
-
+            <div className="max-w-md mx-auto px-6 py-12">
+                <div className="bg-white border border-gray-200 p-6 rounded-sm shadow-xs space-y-6">
+                    <a href="/inventory" aria-label="Back to inventory" className="inline-block text-xl font-bold leading-none">←</a>
                     {successMessage ? (
-                        <div className="p-4 bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-bold uppercase tracking-wider text-center rounded-sm animate-pulse">
-                            ✓ Item added successfully! Redirecting to Inventory List...
-                        </div>
+                        <p className="text-sm font-bold text-emerald-800">Item added. Returning to inventory.</p>
                     ) : (
-                        <form onSubmit={handleSubmit} className="space-y-6">
-
-                            {/* 1. ITEM NAME */}
-                            <div className="space-y-1.5">
-                                <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-500">
-                                    Item Name *
-                                </label>
-                                <input
-                                    type="text"
-                                    required
-                                    placeholder="e.g. Guillotine, Banner..."
-                                    value={name}
-                                    onChange={(e) => setName(e.target.value)}
-                                    className="w-full bg-neutral-50 border border-gray-200 text-sm p-3.5 rounded-sm focus:outline-none focus:border-black font-medium text-black placeholder-gray-400"
-                                />
-                            </div>
-
-                            {/* 2. LOCATION SECTION */}
-                            <div className="space-y-2">
-                                <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-500">
-                                    Location
-                                </label>
-
-                                <div className="border border-gray-200 p-5 bg-neutral-50/50 rounded-sm space-y-5">
-                                    <div className="space-y-2">
-                                        <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-400">
-                                            Room *
-                                        </label>
-                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                                            {roomOptions.map((room) => {
-                                                const isSelected = selectedRoom === room;
-                                                return (
-                                                    <button
-                                                        key={room}
-                                                        type="button"
-                                                        onClick={() => setSelectedRoom(room)}
-                                                        className={`p-3 text-[11px] font-bold uppercase tracking-wider rounded-sm border transition-all cursor-pointer text-left flex items-center justify-between ${isSelected
-                                                            ? 'bg-black text-[#EAD64D] border-black shadow-xs'
-                                                            : 'bg-white text-neutral-700 border-gray-200 hover:border-black hover:bg-neutral-100'
-                                                            }`}
-                                                    >
-                                                        <span>{room}</span>
-                                                        {isSelected && <span className="text-[10px]">✓</span>}
-                                                    </button>
-                                                );
-                                            })}
-                                        </div>
-                                    </div>
-
-                                    <div className="space-y-1.5 pt-2 border-t border-gray-200/60">
-                                        <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-400">
-                                            Storage Point
-                                        </label>
-                                        <input
-                                            type="text"
-                                            placeholder="e.g. Locker 50"
-                                            value={specificLocation}
-                                            onChange={(e) => setSpecificLocation(e.target.value)}
-                                            className="w-full bg-white border border-gray-200 text-sm p-3.5 rounded-sm focus:outline-none focus:border-black font-medium text-black placeholder-gray-400"
-                                        />
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* 3. COST & QUANTITY */}
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                <div className="space-y-1.5">
-                                    <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-500">
-                                        Cost of Hire ($ / day)
-                                    </label>
-                                    <div className="relative">
-                                        <span className="absolute left-3.5 top-3.5 text-sm text-gray-400 font-bold">$</span>
-                                        <input
-                                            type="number"
-                                            step="0.01"
-                                            min="0"
-                                            placeholder="0.00"
-                                            value={costPerDay}
-                                            onChange={(e) => setCostPerDay(e.target.value)}
-                                            className="w-full bg-neutral-50 border border-gray-200 text-sm p-3.5 pl-8 rounded-sm focus:outline-none focus:border-black font-medium text-black placeholder-gray-400"
-                                        />
-                                    </div>
-                                </div>
-
-                                <div className="space-y-1.5">
-                                    <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-500">
-                                        Quantity
-                                    </label>
-                                    <input
-                                        type="number"
-                                        min="1"
-                                        value={quantity}
-                                        onChange={(e) => setQuantity(e.target.value)}
-                                        className="w-full bg-neutral-50 border border-gray-200 text-sm p-3.5 rounded-sm focus:outline-none focus:border-black font-medium text-black"
-                                    />
-                                </div>
-                            </div>
-
-                            {/* 4. HIRE SCOPE & FOUNDERS STAFF ONLY CHECKBOX */}
-                            <div className="space-y-3 p-4 bg-neutral-50 border border-neutral-200 rounded-sm">
-                                <div className="space-y-1.5">
-                                    <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-700">
-                                        Usage & Hire Restrictions *
-                                    </label>
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                        <button
-                                            type="button"
-                                            onClick={() => setHireScope('mcic_only')}
-                                            className={`p-3 text-[10px] font-bold uppercase tracking-wider rounded-sm border transition-all cursor-pointer flex items-center justify-between ${hireScope === 'mcic_only'
-                                                ? 'bg-black text-[#EAD64D] border-black shadow-xs'
-                                                : 'bg-white text-neutral-700 border-gray-200 hover:border-black'
-                                                }`}
-                                        >
-                                            <span>🏛️ Only available with MCIC booking</span>
-                                            {hireScope === 'mcic_only' && <span className="text-[10px]">✓</span>}
-                                        </button>
-
-                                        <button
-                                            type="button"
-                                            onClick={() => setHireScope('external_hire')}
-                                            className={`p-3 text-[10px] font-bold uppercase tracking-wider rounded-sm border transition-all cursor-pointer flex items-center justify-between ${hireScope === 'external_hire'
-                                                ? 'bg-black text-[#EAD64D] border-black shadow-xs'
-                                                : 'bg-white text-neutral-700 border-gray-200 hover:border-black'
-                                                }`}
-                                        >
-                                            <span>🚚 External hire allowed</span>
-                                            {hireScope === 'external_hire' && <span className="text-[10px]">✓</span>}
-                                        </button>
-                                    </div>
-                                </div>
-
-                                <label className="block text-xs font-bold uppercase tracking-wider">Who can see this item
-                                    <select value={viewAccess} onChange={(event) => setViewAccess(event.target.value)} className="mt-1 w-full p-2 border border-gray-200 rounded-sm font-medium normal-case">
-                                        <option value="public">Anyone</option>
-                                        <option value="account">Any signed-in account</option>
-                                        <option value="founders">Founders general staff and Admin</option>
-                                        <option value="casual">Casual staff and Admin</option>
-                                        <option value="staff">Founders staff, casuals, and Admin</option>
-                                        <option value="admin">Admin only</option>
-                                    </select>
-                                </label>
-                                <div className="pt-2 border-t border-gray-200">
-                                    <label className="flex items-center gap-2.5 cursor-pointer select-none">
-                                        <input
-                                            type="checkbox"
-                                            checked={isFoundersStaffOnly}
-                                            onChange={(e) => setIsFoundersStaffOnly(e.target.checked)}
-                                            className="w-4 h-4 accent-black rounded-xs cursor-pointer"
-                                        />
-                                        <span className="text-xs font-bold uppercase tracking-wider text-purple-900">
-                                            🔒 Founders Staff Bookings Only
-                                        </span>
-                                    </label>
-                                </div>
-                            </div>
-
-                            {/* 5. FREE ROOM INCLUSIONS MULTI-SELECT */}
-                            <div className="space-y-2 p-4 bg-neutral-50 border border-neutral-200 rounded-sm">
-                                <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-700">
-                                    🎁 Free Inclusion Rooms ($0 Hire Fee)
-                                </label>
-                                <p className="text-[10px] text-gray-500 mb-2">
-                                    Select rooms where this equipment is included free ($0). Hirers of other rooms will be charged the standard daily rate.
-                                </p>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                    {venueHireSpaces.map((space) => {
-                                        const isIncluded = freeInclusionSpaces.includes(space);
-                                        return (
-                                            <button
-                                                key={space}
-                                                type="button"
-                                                onClick={() => toggleFreeInclusionSpace(space)}
-                                                className={`p-2.5 text-[10px] font-bold uppercase tracking-wider rounded-sm border transition-all text-left flex items-center justify-between cursor-pointer ${isIncluded
-                                                        ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
-                                                        : 'bg-white text-gray-700 border-gray-200 hover:border-black'
-                                                    }`}
-                                            >
-                                                <span>{space}</span>
-                                                <span>{isIncluded ? '✓ Included Free' : '+ Add'}</span>
-                                            </button>
-                                        );
-                                    })}
-                                </div>
-                            </div>
-
-                            {/* 6. DIMENSIONS */}
-                            <div className="space-y-1.5">
-                                <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-500">
-                                    Dimensions (if relevant)
-                                </label>
-                                <input
-                                    type="text"
-                                    placeholder="e.g. 170cm (H) x 65cm (W) x 75cm (D)"
-                                    value={dimensions}
-                                    onChange={(e) => setDimensions(e.target.value)}
-                                    className="w-full bg-neutral-50 border border-gray-200 text-sm p-3.5 rounded-sm focus:outline-none focus:border-black font-medium text-black placeholder-gray-400"
-                                />
-                            </div>
-
-                            {/* 7. WHAT'S INCLUDED */}
-                            <div className="space-y-1.5">
-                                <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-500">
-                                    What's Included (if relevant)
-                                </label>
-                                <input
-                                    type="text"
-                                    placeholder="e.g. Power Cable, HDMI Cable, Remote Control"
-                                    value={includedItems}
-                                    onChange={(e) => setIncludedItems(e.target.value)}
-                                    className="w-full bg-neutral-50 border border-gray-200 text-sm p-3.5 rounded-sm focus:outline-none focus:border-black font-medium text-black placeholder-gray-400"
-                                />
-                            </div>
-
-                            {/* 8. ASSET ID */}
-                            <div className="space-y-1.5">
-                                <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-500">
-                                    Asset ID (if relevant)
-                                </label>
-                                <input
-                                    type="text"
-                                    placeholder="e.g. Ipad_004"
-                                    value={itemId}
-                                    onChange={(e) => setItemId(e.target.value)}
-                                    className="w-full bg-neutral-50 border border-gray-200 text-sm p-3.5 font-medium rounded-sm focus:outline-none focus:border-black text-black placeholder-gray-400"
-                                />
-                            </div>
-
-                            {/* 9. MULTI-PHOTO UPLOAD */}
-                            <div className="space-y-3 pt-2 border-t border-gray-100">
-                                <div className="flex items-center justify-between text-[11px] text-gray-500 font-bold uppercase tracking-wider">
-                                    <span>Upload Photos (4 max)</span>
-                                    <span className="text-gray-400 font-normal">{imageFiles.length}/4 Selected</span>
-                                </div>
-
-                                <div className="grid grid-cols-4 gap-2">
-                                    {imagePreviews.map((src, idx) => (
-                                        <div key={idx} className="relative aspect-square bg-neutral-100 border border-gray-200 rounded-sm overflow-hidden group">
-                                            <img src={src} alt={`Preview ${idx + 1}`} className="w-full h-full object-cover" />
-                                            <button
-                                                type="button"
-                                                onClick={() => handleRemovePhoto(idx)}
-                                                className="absolute top-1 right-1 bg-black/80 text-white text-[10px] w-5 h-5 rounded-full flex items-center justify-center opacity-90 hover:bg-red-600 transition-colors cursor-pointer"
-                                            >
-                                                ✕
-                                            </button>
-                                        </div>
-                                    ))}
-
-                                    {imageFiles.length < 4 && (
-                                        <label className="aspect-square bg-neutral-50 border-2 border-dashed border-gray-200 rounded-sm flex flex-col items-center justify-center cursor-pointer hover:border-black transition-colors">
-                                            <span className="text-xl text-gray-400">📷</span>
-                                            <span className="text-[9px] font-bold uppercase text-gray-400 mt-1">+ Photo</span>
-                                            <input
-                                                type="file"
-                                                accept="image/*"
-                                                multiple
-                                                onChange={handleImageChange}
-                                                className="hidden"
-                                            />
-                                        </label>
-                                    )}
-                                </div>
-                                <p className="text-[10px] text-gray-400">PNG, JPG, or WEBP formats allowed.</p>
-                            </div>
-
-                            <button
-                                type="submit"
-                                disabled={isSubmitting}
-                                className={`w-full py-3.5 text-center font-bold text-xs uppercase tracking-wider rounded-sm transition-all text-white bg-black ${isSubmitting ? 'opacity-50 cursor-wait' : 'hover:bg-[#EAD64D] hover:text-black cursor-pointer'}`}
-                            >
-                                {isSubmitting ? "Uploading Photos & Saving..." : "+ Save Item to Inventory"}
-                            </button>
-
-                        </form>
+                        <InventoryItemForm
+                            values={{
+                                name,
+                                details,
+                                assetId: itemId,
+                                room: selectedRoom,
+                                specificLocation,
+                                costPerDay,
+                                costAppliesTo,
+                                quantity,
+                                viewAccess,
+                                tabs,
+                                freeInclusionSpaces,
+                                dimensions,
+                                includedItems
+                            }}
+                            onChange={(field, value) => {
+                                const update = {
+                                    name: setName,
+                                    details: setDetails,
+                                    assetId: setItemId,
+                                    room: setSelectedRoom,
+                                    specificLocation: setSpecificLocation,
+                                    costPerDay: setCostPerDay,
+                                    costAppliesTo: setCostAppliesTo,
+                                    quantity: setQuantity,
+                                    viewAccess: setViewAccess,
+                                    tabs: setTabs,
+                                    freeInclusionSpaces: setFreeInclusionSpaces,
+                                    dimensions: setDimensions,
+                                    includedItems: setIncludedItems
+                                };
+                                update[field](value);
+                            }}
+                            photos={imagePreviews.map((src, index) => ({ key: String(index), src }))}
+                            onAddPhotos={handleImageChange}
+                            onRemovePhoto={(key) => handleRemovePhoto(Number(key))}
+                            submitLabel={isSubmitting ? 'Saving...' : 'Save'}
+                            submitting={isSubmitting}
+                            onSubmit={handleSubmit}
+                        />
                     )}
-
                 </div>
-
-                <div className="text-center">
-                    <a href="/inventory" className="text-xs text-gray-400 hover:text-black font-bold tracking-wider uppercase transition-colors">
-                        ← Return to Inventory List
-                    </a>
-                </div>
-
             </div>
         </main>
     );

@@ -137,7 +137,11 @@ export default function BookingChangePage({ params }) {
                 {booking && (
                     <>
                         <section className="bg-white border border-gray-200 rounded-sm p-6 space-y-2">
-                            <p className="text-xs font-bold uppercase tracking-wider text-neutral-500">{booking.status}</p>
+                            <p className="text-xs font-bold uppercase tracking-wider">
+                                <span className={`inline-block px-2 py-0.5 rounded-sm ${booking.queueTag === 'Unavailable' ? 'bg-rose-100 text-rose-800' : booking.queueTag === 'Held' ? 'bg-[#EAD64D] text-black' : 'text-neutral-500'}`}>
+                                    {booking.queueTag || booking.status}
+                                </span>
+                            </p>
                             <h1 className="text-3xl font-extrabold tracking-tight">{booking.eventName}</h1>
                             <p className="text-sm text-neutral-700">{booking.space}</p>
                             <p className="text-sm text-neutral-700">{booking.bumpInDate} · bump-in {booking.bumpIn} · event {booking.eventStart}–{booking.eventEnd} · bump-out {booking.bumpOut}</p>
@@ -145,7 +149,10 @@ export default function BookingChangePage({ params }) {
                                 <div className="text-sm text-neutral-700 space-y-1 pt-2">
                                     <p className="font-bold">Tentative holds</p>
                                     {booking.tentativeHolds.map((hold, index) => (
-                                        <p key={hold.id || index}>Hold {index + 1}: {hold.bumpInDate} · {hold.bumpIn}–{hold.bumpOut} · {hold.space}</p>
+                                        <p key={hold.id || index}>
+                                            Hold {index + 1}: {hold.bumpInDate} · {hold.bumpIn}–{hold.bumpOut} · {hold.space}
+                                            {booking.holdTags?.[index] ? <span className="ml-2 font-bold uppercase">{booking.holdTags[index]}</span> : null}
+                                        </p>
                                     ))}
                                     <p className="text-neutral-600">After one week you will be asked to confirm one date. After two weeks the holds are sent to an admin to remove, unless the admin keeps them.</p>
                                 </div>
@@ -155,7 +162,7 @@ export default function BookingChangePage({ params }) {
                                     View who registered and who is checked in
                                 </Link>
                             )}
-                            {booking.recurrence?.pattern === 'weekly' && (
+                            {['weekly', 'fortnightly', 'monthly'].includes(booking.recurrence?.pattern) && (
                                 <p className="text-sm text-neutral-600">This is a repeating booking. An approved update keeps the new date only. The other dates in the series are released.</p>
                             )}
                         </section>

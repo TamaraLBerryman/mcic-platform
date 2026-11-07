@@ -4,6 +4,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import Gate from '../../components/Gate';
 import { db, storage } from '../lib/firebase';
 import { collection, onSnapshot, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { saveLinkedLockerItem } from '../lib/placeItems';
 import { ref, uploadString, getDownloadURL } from 'firebase/storage';
 import {
     Search,
@@ -301,6 +302,7 @@ function LockerManagementPage() {
                 img: imageUrl,
                 updatedAt: serverTimestamp()
             });
+            await saveLinkedLockerItem(db, editFormData.id, editFormData.items || '');
 
             setSelectedLocker(null);
             setEditFormData(null);

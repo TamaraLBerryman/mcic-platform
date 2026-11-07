@@ -1,9 +1,14 @@
 "use client";
 
 import { useRouter } from 'next/navigation';
+import { pageIsHidden } from './lib/sitePages';
+import { useHiddenPages } from '../components/SitePages';
 
 export default function MasterHubPage() {
     const router = useRouter();
+    const { hiddenPages } = useHiddenPages();
+    const showBooking = !pageIsHidden('/booking', hiddenPages);
+    const showCoworking = !pageIsHidden('/coworking', hiddenPages);
 
     return (
         <main className="min-h-screen bg-[#F9F9F9] text-black font-sans antialiased selection:bg-[#EAD64D]">
@@ -39,6 +44,7 @@ export default function MasterHubPage() {
             <div className="max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-8 px-6 pb-32">
 
                 {/* CHOICE PANEL 01: VENUE BOOKING */}
+                {showBooking && (
                 <div
                     onClick={() => router.push('/booking')}
                     className="bg-white p-8 flex flex-col justify-between items-start gap-10 border border-gray-200 shadow-xs hover:shadow-md transition-all cursor-pointer group rounded-sm"
@@ -59,8 +65,9 @@ export default function MasterHubPage() {
                         Book Event Spaces
                     </button>
                 </div>
+                )}
 
-                {/* CHOICE PANEL 02: STARTUPS & COWORKING */}
+                {showCoworking && (
                 <div
                     onClick={() => router.push('/coworking')}
                     className="bg-white p-8 flex flex-col justify-between items-start gap-10 border border-gray-200 shadow-xs hover:shadow-md transition-all cursor-pointer group rounded-sm"
@@ -81,8 +88,7 @@ export default function MasterHubPage() {
                         Startup Access, Use & Support
                     </button>
                 </div>
-
-                {/* CHOICE PANEL 03: MAKERSPACE PROTOTYPING */}
+                )}
                 <a
                     href="https://www.making.unsw.edu.au/mcic/"
                     target="_blank"

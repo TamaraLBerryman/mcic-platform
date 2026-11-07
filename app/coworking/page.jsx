@@ -7,8 +7,11 @@ import { db } from '../lib/firebase';
 import { DEFAULT_DESK_LAYOUT } from '../lib/deskLayout';
 import { sessionIsActive } from '../lib/hotDesks';
 import DeskMap from '../../components/DeskMap';
+import { pageIsHidden } from '../lib/sitePages';
+import { useHiddenPages } from '../../components/SitePages';
 
 export default function CoworkingPage() {
+    const { hiddenPages } = useHiddenPages();
     // Navigation tab state: 'apply' | 'floorplan'
     const [activeTab, setActiveTab] = useState('apply');
 
@@ -385,7 +388,7 @@ export default function CoworkingPage() {
                             { id: 'officehours', label: 'Book Startup Support' },
                             { id: 'spaces', label: 'Spaces today', href: '/boards/spaces' },
                             { id: 'contact', label: 'Contact Us', href: '/contact' }
-                        ].map((tab) =>
+                        ].filter((tab) => !tab.href || !pageIsHidden(tab.href, hiddenPages)).map((tab) =>
                             tab.href ? (
                                 <a
                                     key={tab.id}
@@ -1771,6 +1774,7 @@ export default function CoworkingPage() {
                                                 <p className="text-neutral-700 text-xs">
                                                     Yes! Startups can book Michael Crouch Innocation Centre event spaces at discounted rates or at no cost.
                                                 </p>
+                                                {!pageIsHidden('/booking', hiddenPages) && (
                                                 <div className="pt-1">
                                                     <a
                                                         href="/booking"
@@ -1780,6 +1784,7 @@ export default function CoworkingPage() {
                                                         <span className="font-mono">↗</span>
                                                     </a>
                                                 </div>
+                                                )}
                                             </div>
                                         )}
                                     </div>
@@ -2894,12 +2899,14 @@ export default function CoworkingPage() {
                                 </div>
 
                                 <div className="w-full md:w-auto flex-shrink-0">
+                                    {!pageIsHidden('/contact', hiddenPages) && (
                                     <Link
                                         href="/contact"
                                         className="w-full md:w-auto bg-[#EAD64D] text-black hover:bg-white font-extrabold text-xs uppercase tracking-wider py-3 px-6 rounded-xs transition-colors duration-150 text-center cursor-pointer block"
                                     >
                                         Get in Touch ↗
                                     </Link>
+                                    )}
                                 </div>                            </div>
 
                         </section>

@@ -1,5 +1,6 @@
 import "./global.css";
 import Navbar from '../components/Navbar';
+import { PublishedBody, SitePagesProvider } from '../components/SitePages';
 
 function Footer() {
     return (
@@ -27,11 +28,13 @@ export default function RootLayout({ children }) {
     return (
         <html lang="en">
             <body className="bg-neutral-50 text-black antialiased flex flex-col min-h-screen">
-                <Navbar />
-                <div className="flex-grow">
-                    {children}
-                </div>
-                <Footer />
+                <SitePagesProvider>
+                    <Navbar />
+                    <div className="flex-grow">
+                        <PublishedBody>{children}</PublishedBody>
+                    </div>
+                    <Footer />
+                </SitePagesProvider>
             </body>
         </html>
     );

@@ -1,6 +1,7 @@
 // lib/googleCalendar.js
 import { google } from 'googleapis';
 import { casualHoldDescription, TAMARA_CONTACT } from './casualOffers';
+import { isIsoDate, repeatCadenceLabel } from './bookingRules';
 
 const CALENDAR_ID = process.env.GOOGLE_CALENDAR_ID || 'primary';
 
@@ -41,6 +42,7 @@ export async function checkRoomAvailability(spaceName, startIso, endIso) {
     const events = response.data.items || [];
 
     const conflictingEvent = events.find(event => {
+        if (isInventoryCalendarEvent(event)) return false;
         const summary = event.summary || '';
         const desc = event.description || '';
 
@@ -69,20 +71,21 @@ export async function createBookingCalendarEvent(bookingData) {
     const endIso = `${bookingData.bumpInDate}T${bookingData.bumpOut}:00+11:00`;
 
     const supplies = bookingData.foundersSupplies || {};
-    const supplyLines = Object.entries(supplies)
-        .filter(([, on]) => on)
-        .map(([key]) => key.replace(/^need/, '').replace(/([A-Z])/g, ' $1').trim())
-        .join(', ');
+    const supplyLines = [
+        supplies.woolworths ? `Woolworths or caterer: ${supplies.woolworths}` : '',
+        supplies.danMurphys ? `Dan Murphy's: ${supplies.danMurphys}` : ''
+    ].filter(Boolean).join('; ');
     const tiers = Array.isArray(bookingData.ticketing?.ticketTiers)
         ? bookingData.ticketing.ticketTiers.map(tier => `${tier.name || 'Tier'}: ${tier.cap || 'n/a'}`).join('; ')
         : '';
 
-    const recurrence = bookingData.recurrence?.pattern === 'weekly' ? bookingData.recurrence : null;
+    const cadence = repeatCadenceLabel(bookingData.recurrence);
+    const recurrence = cadence ? bookingData.recurrence : null;
     const skippedDates = (recurrence?.skippedDates || []).map(item => item.date || item).filter(Boolean);
     const seriesNote = recurrence ? `
 🔁 SERIES:
 - This occurrence: ${bookingData.bumpInDate}
-- Repeats every ${recurrence.interval || 1} week(s)
+- Repeats ${cadence}
 - Dates booked: ${(recurrence.bookedDates || []).join(', ') || 'n/a'}
 - Dates left out because the room was already booked: ${skippedDates.join(', ') || 'None'}
 ` : '';
@@ -126,13 +129,13 @@ ${bookingData.runsheetObjectives || 'No runsheet supplied.'}
 
 🍽️ CATERING / FOUNDERS SUPPLIES:
 - Food: ${bookingData.catering || 'No'}
-- Alcohol: ${bookingData.alcohol || 'No'}
-- Serviceware: ${bookingData.servicewarePreference || 'n/a'}
-- Supplies: ${supplyLines || 'None'}
+- Alcohol: ${bookingData.alcohol || 'No'}${bookingData.alcohol === 'Yes' ? ` · RSA: ${bookingData.rsaChoice === 'staff' ? 'organise a staff member with an RSA' : bookingData.rsaChoice === 'onfile' ? 'card on file' : bookingData.rsaChoice === 'upload' ? `new card ${bookingData.rsaFileName || ''}`.trim() : 'not chosen'}` : ''}
+- Founders food and drinks: ${supplyLines || 'None'}
+- Tamara present: ${bookingData.tamaraPresence || 'n/a'}${bookingData.tamaraDetails ? ` — ${bookingData.tamaraDetails}` : ''}
 
 ⚠️ RISK:
-- Machinery / high risk: ${bookingData.isHighRisk ? 'Yes' : 'No'} ${bookingData.riskDetails || ''}
 - Controversial / security: ${bookingData.involvesControversialTopics ? 'Yes' : 'No'} ${bookingData.securityDetails || ''}
+- Anything else: ${bookingData.anythingElse || 'n/a'}
 
 👤 CONTACT:
 - Organiser: ${bookingData.mainContact?.name} (${bookingData.mainContact?.email}) ${bookingData.mainContact?.phone || ''}
@@ -226,6 +229,134 @@ export async function createCasualShiftHold(shift, casualEmail) {
         }
     });
     return result.data;
+}
+
+export function isInventoryCalendarEvent(event) {
+    const summary = event?.summary || '';
+    const description = event?.description || '';
+    return summary.startsWith('Inventory:') || description.includes('INVENTORY BOOKING');
+}
+
+export async function listInventoryItemHolds(itemName, timeMin, timeMax) {
+    const wanted = shortLabel(itemName, 'Item').toLowerCase();
+    const calendar = getCalendarClient();
+    const calendarId = process.env.GOOGLE_CALENDAR_ID || CALENDAR_ID;
+    const items = [];
+    let pageToken;
+    do {
+        const response = await calendar.events.list({
+            calendarId,
+            timeMin,
+            timeMax,
+            singleEvents: true,
+            orderBy: 'startTime',
+            maxResults: 250,
+            ...(pageToken ? { pageToken } : {})
+        });
+        items.push(...(response.data.items || []));
+        pageToken = response.data.nextPageToken;
+    } while (pageToken);
+    return items.flatMap((event) => {
+        if (!isInventoryCalendarEvent(event)) return [];
+        const summary = event.summary || '';
+        const named = summary.replace(/^Inventory:\s*/i, '').split('—')[0].trim().toLowerCase();
+        if (named !== wanted) return [];
+        const start = event.start?.dateTime;
+        const end = event.end?.dateTime;
+        if (!start || !end) return [];
+        const quantityMatch = String(event.description || '').match(/Quantity:\s*(\d+)/i);
+        return [{
+            start,
+            end,
+            who: summary.split('—')[1]?.trim() || 'Booked',
+            quantity: quantityMatch ? Number(quantityMatch[1]) : 1
+        }];
+    });
+}
+
+function clockTime(value) {
+    return /^([01]\d|2[0-3]):[0-5]\d$/.test(String(value || ''));
+}
+
+function shortLabel(value, fallback) {
+    const text = String(value || fallback).replace(/\s+/g, ' ').trim();
+    return (text || fallback).slice(0, 120);
+}
+
+export function selectedEquipment(requests) {
+    if (!requests || typeof requests !== 'object') return [];
+    return Object.entries(requests)
+        .filter(([, value]) => value === true || Number(value) > 0)
+        .map(([id, value]) => ({ id, quantity: value === true ? 1 : Number(value) }));
+}
+
+/**
+ * An item hold on the same calendar as venue bookings.
+ * The summary is prefixed so room availability ignores it.
+ */
+export async function createInventoryCalendarEvent({ itemName, who, startDate, endDate, startTime, endTime, note, quantity }) {
+    const finishDate = endDate || startDate;
+    if (!isIsoDate(startDate) || !isIsoDate(finishDate) || !clockTime(startTime) || !clockTime(endTime)) {
+        throw new Error('An inventory booking needs a date and a start and end time.');
+    }
+    const startIso = `${startDate}T${startTime}:00+11:00`;
+    const endIso = `${finishDate}T${endTime}:00+11:00`;
+    if (new Date(endIso) <= new Date(startIso)) {
+        throw new Error('The inventory booking must end after it starts.');
+    }
+
+    const calendar = getCalendarClient();
+    const amount = Number(quantity) > 1 ? `Quantity: ${Number(quantity)}\n` : '';
+    const detail = note ? `${String(note).replace(/\s+/g, ' ').trim().slice(0, 500)}\n` : '';
+    const result = await calendar.events.insert({
+        calendarId: CALENDAR_ID,
+        sendUpdates: 'none',
+        requestBody: {
+            summary: `Inventory: ${shortLabel(itemName, 'Item')} — ${shortLabel(who, 'Booking')}`,
+            description: `INVENTORY BOOKING\n${amount}${detail}This hold is for the item only.`,
+            start: { dateTime: startIso, timeZone: 'Australia/Sydney' },
+            end: { dateTime: endIso, timeZone: 'Australia/Sydney' },
+            reminders: {
+                useDefault: false,
+                overrides: [{ method: 'popup', minutes: 30 }]
+            }
+        }
+    });
+    return result.data;
+}
+
+export async function createBookingInventoryHolds(booking, itemNames = {}) {
+    const selected = selectedEquipment(booking?.equipmentRequests);
+    const windows = Array.isArray(booking?.inventoryWindows) ? booking.inventoryWindows : [];
+    if (!selected.length || !windows.length) return { ids: [], calendarError: null };
+
+    const ids = [];
+    const failed = [];
+    for (const window of windows) {
+        for (const item of selected) {
+            const itemName = itemNames[item.id] || itemNames[String(item.id).toUpperCase()] || item.id;
+            try {
+                const created = await createInventoryCalendarEvent({
+                    itemName,
+                    who: booking.eventName || booking.mainContact?.name || 'Event booking',
+                    startDate: window.bumpInDate,
+                    startTime: window.bumpIn,
+                    endTime: window.bumpOut,
+                    quantity: item.quantity,
+                    note: `Held for booking ${booking.bookingId || ''}. Organiser: ${booking.mainContact?.name || 'n/a'}.`
+                });
+                if (created?.id) ids.push(created.id);
+                else failed.push(`${itemName} ${window.bumpInDate}`);
+            } catch {
+                failed.push(`${itemName} ${window.bumpInDate}`);
+            }
+        }
+    }
+
+    return {
+        ids,
+        calendarError: failed.length ? `Inventory calendar hold could not be created for ${failed.join(', ')}.` : null
+    };
 }
 
 export async function deleteCalendarEvent(eventId) {

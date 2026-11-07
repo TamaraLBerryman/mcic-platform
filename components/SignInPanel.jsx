@@ -1,7 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { createAccountWithPassword, sendPasswordReset, signInWithPassword } from '../app/lib/clientAuth';
+import { authFetch, createAccountWithPassword, signInWithPassword } from '../app/lib/clientAuth';
+import AffiliationFields, { EMPTY_AFFILIATION, affiliationError } from './AffiliationFields';
 
 function passwordError(error, creating) {
     const code = error?.code || '';
@@ -34,46 +35,57 @@ export default function SignInPanel({ onSuccess, onClose }) {
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
     const [error, setError] = useState('');
-    const [notice, setNotice] = useState('');
     const [working, setWorking] = useState(false);
+    const [showPassword, setShowPassword] = useState(false);
+    const [affiliation, setAffiliation] = useState(EMPTY_AFFILIATION);
+    const [name, setName] = useState('');
+    const [phone, setPhone] = useState('');
     const creating = mode === 'create';
 
     const submit = async (event) => {
         event.preventDefault();
         setError('');
-        setNotice('');
         if (creating && password !== confirmPassword) {
             setError('The two passwords do not match.');
             return;
         }
+        if (creating) {
+            if (!name.trim()) {
+                setError('Enter your full name.');
+                return;
+            }
+            if (!phone.trim()) {
+                setError('Enter your mobile phone.');
+                return;
+            }
+            const affiliationProblem = affiliationError(affiliation);
+            if (affiliationProblem) {
+                setError(affiliationProblem);
+                return;
+            }
+        }
         setWorking(true);
         try {
-            if (creating) await createAccountWithPassword(email, password);
-            else await signInWithPassword(email, password);
+            if (creating) {
+                try {
+                    await createAccountWithPassword(email, password);
+                } catch (err) {
+                    if (err?.code !== 'auth/email-already-in-use') throw err;
+                    await signInWithPassword(email, password);
+                }
+                const response = await authFetch('/api/auth/profile', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ...affiliation, name, phone })
+                });
+                const saved = await response.json();
+                if (!saved.success) throw new Error(saved.error || 'Affiliation could not be saved.');
+            } else {
+                await signInWithPassword(email, password);
+            }
             onSuccess();
         } catch (err) {
             setError(passwordError(err, creating));
-        } finally {
-            setWorking(false);
-        }
-    };
-
-    const resetPassword = async () => {
-        setError('');
-        setNotice('');
-        if (!email.trim()) {
-            setError('Enter your email, then choose Set a password.');
-            return;
-        }
-        setWorking(true);
-        try {
-            await sendPasswordReset(email);
-            setNotice(`Check ${email.trim()} for an email from Firebase. Open it to choose a password, then sign in here.`);
-        } catch (err) {
-            const code = err?.code || '';
-            setError(code === 'auth/user-not-found'
-                ? 'That email does not have an account yet. Choose Create one and use the admin email.'
-                : passwordError(err, false));
         } finally {
             setWorking(false);
         }
@@ -89,11 +101,6 @@ export default function SignInPanel({ onSuccess, onClose }) {
                     </button>
                 )}
             </div>
-            {creating && (
-                <p className="text-sm text-neutral-600 leading-relaxed">
-                    Choose an email and password. Founders and casual staff should use the email an admin has added for them, so the right access is applied.
-                </p>
-            )}
             <form onSubmit={submit} className="space-y-4">
                 <label className="block space-y-1">
                     <span className="text-xs font-bold uppercase tracking-wider text-gray-500">Email</span>
@@ -108,23 +115,34 @@ export default function SignInPanel({ onSuccess, onClose }) {
                         className="w-full p-3 border border-gray-200 text-sm rounded-sm outline-none focus:border-black"
                     />
                 </label>
-                <label className="block space-y-1">
-                    <span className="text-xs font-bold uppercase tracking-wider text-gray-500">Password</span>
-                    <input
-                        type="password"
-                        required
-                        minLength={6}
-                        autoComplete={creating ? 'new-password' : 'current-password'}
-                        value={password}
-                        onChange={(event) => setPassword(event.target.value)}
-                        className="w-full p-3 border border-gray-200 text-sm rounded-sm outline-none focus:border-black"
-                    />
-                </label>
+                <div className="block space-y-1">
+                    <label htmlFor="signin-password" className="text-xs font-bold uppercase tracking-wider text-gray-500">Password</label>
+                    <div className="relative">
+                        <input
+                            id="signin-password"
+                            type={showPassword ? 'text' : 'password'}
+                            required
+                            minLength={6}
+                            autoComplete={creating ? 'new-password' : 'current-password'}
+                            value={password}
+                            onChange={(event) => setPassword(event.target.value)}
+                            className="w-full p-3 pr-16 border border-gray-200 text-sm rounded-sm outline-none focus:border-black"
+                        />
+                        <button
+                            type="button"
+                            onClick={() => setShowPassword((visible) => !visible)}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-bold uppercase tracking-wider text-neutral-500 hover:text-black"
+                            aria-label={showPassword ? 'Hide password' : 'Show password'}
+                        >
+                            {showPassword ? 'Hide' : 'Show'}
+                        </button>
+                    </div>
+                </div>
                 {creating && (
                     <label className="block space-y-1">
                         <span className="text-xs font-bold uppercase tracking-wider text-gray-500">Confirm password</span>
                         <input
-                            type="password"
+                            type={showPassword ? 'text' : 'password'}
                             required
                             minLength={6}
                             autoComplete="new-password"
@@ -134,8 +152,36 @@ export default function SignInPanel({ onSuccess, onClose }) {
                         />
                     </label>
                 )}
+                {creating && (
+                    <>
+                        <label className="block space-y-1">
+                            <span className="text-xs font-bold uppercase tracking-wider text-gray-500">Full name</span>
+                            <input
+                                type="text"
+                                required
+                                autoComplete="name"
+                                value={name}
+                                onChange={(event) => setName(event.target.value)}
+                                placeholder="e.g. Jane Doe"
+                                className="w-full p-3 border border-gray-200 text-sm rounded-sm outline-none focus:border-black"
+                            />
+                        </label>
+                        <label className="block space-y-1">
+                            <span className="text-xs font-bold uppercase tracking-wider text-gray-500">Mobile phone</span>
+                            <input
+                                type="tel"
+                                required
+                                autoComplete="tel"
+                                value={phone}
+                                onChange={(event) => setPhone(event.target.value)}
+                                placeholder="e.g. 0400 000 000"
+                                className="w-full p-3 border border-gray-200 text-sm rounded-sm outline-none focus:border-black"
+                            />
+                        </label>
+                    </>
+                )}
+                {creating && <AffiliationFields value={affiliation} onChange={setAffiliation} />}
                 {error && <p className="text-sm font-bold text-red-700">{error}</p>}
-                {notice && <p className="text-sm font-bold text-neutral-800">{notice}</p>}
                 <button
                     type="submit"
                     disabled={working}
@@ -143,23 +189,12 @@ export default function SignInPanel({ onSuccess, onClose }) {
                 >
                     {working ? 'Please wait…' : (creating ? 'Create account' : 'Sign in')}
                 </button>
-                {!creating && (
-                    <button
-                        type="button"
-                        disabled={working}
-                        onClick={resetPassword}
-                        className="w-full text-xs font-bold uppercase tracking-wider text-neutral-600 hover:text-black"
-                    >
-                        Set a password
-                    </button>
-                )}
             </form>
             <button
                 type="button"
                 onClick={() => {
                     setMode(creating ? 'signin' : 'create');
                     setError('');
-                    setNotice('');
                     setPassword('');
                     setConfirmPassword('');
                 }}

@@ -3,7 +3,22 @@
 import { useEffect, useState } from 'react';
 import { authFetch, useSignedInUser } from '../app/lib/clientAuth';
 
-const signedOut = { signedIn: false, email: '', group: 'public', admin: false, founders: false, casual: false, staff: false };
+const signedOut = {
+    signedIn: false,
+    email: '',
+    group: 'public',
+    admin: false,
+    founders: false,
+    casual: false,
+    staff: false,
+    userType: '',
+    departmentType: '',
+    department: '',
+    unswDivision: '',
+    companyName: '',
+    name: '',
+    phone: ''
+};
 const STORAGE_KEY = 'mcicAccess';
 
 function cachedAccess(email) {

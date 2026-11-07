@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { sydneyLocalToDate, sydneyWallClock } from '../app/lib/eventReminders';
+import { pageIsHidden } from '../app/lib/sitePages';
+import { useHiddenPages } from './SitePages';
 
 export function useBoardFeed() {
     const [feed, setFeed] = useState({ ready: false, error: '', today: '', events: [] });
@@ -47,6 +49,7 @@ export function useSydneyNow() {
 
 export function BoardHeader({ title, eyebrow, children }) {
     const clock = useSydneyNow();
+    const { hiddenPages } = useHiddenPages();
     const shown = new Intl.DateTimeFormat('en-AU', {
         timeZone: 'Australia/Sydney',
         weekday: 'short',
@@ -60,8 +63,8 @@ export function BoardHeader({ title, eyebrow, children }) {
                 <p className="text-[10px] font-mono uppercase tracking-[0.35em] text-[#EAD64D]">{eyebrow}</p>
                 <h1 className="text-3xl sm:text-5xl font-black tracking-tight uppercase">{title}</h1>
                 <nav className="flex gap-4 mt-3 text-[10px] font-bold uppercase tracking-wider">
-                    <Link href="/boards" className="hover:text-[#EAD64D]">Event countdown</Link>
-                    <Link href="/boards/spaces" className="hover:text-[#EAD64D]">Spaces today</Link>
+                    {!pageIsHidden('/boards', hiddenPages) && <Link href="/boards" className="hover:text-[#EAD64D]">Event countdown</Link>}
+                    {!pageIsHidden('/boards/spaces', hiddenPages) && <Link href="/boards/spaces" className="hover:text-[#EAD64D]">Spaces today</Link>}
                 </nav>
             </div>
             <div className="text-left lg:text-right">

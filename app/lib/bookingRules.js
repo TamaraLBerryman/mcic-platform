@@ -138,11 +138,42 @@ function addDays(isoDate, days) {
     return localDateString(date);
 }
 
+function sameWeekdayInMonth(startIso, monthsAhead) {
+    const [year, month, day] = startIso.split('-').map(Number);
+    const weekday = new Date(year, month - 1, day).getDay();
+    const week = Math.ceil(day / 7);
+    const target = new Date(year, month - 1 + monthsAhead, 1);
+    const date = 1 + ((weekday - target.getDay() + 7) % 7) + (week - 1) * 7;
+    const lastDay = new Date(target.getFullYear(), target.getMonth() + 1, 0).getDate();
+    if (date > lastDay) return '';
+    target.setDate(date);
+    return localDateString(target);
+}
+
+export function isRepeatingPattern(pattern) {
+    return pattern === 'weekly' || pattern === 'fortnightly' || pattern === 'monthly';
+}
+
+export function repeatCadenceLabel(recurrence) {
+    const pattern = recurrence?.pattern;
+    if (pattern === 'fortnightly') return 'fortnightly';
+    if (pattern === 'monthly') return 'monthly';
+    if (pattern === 'weekly') {
+        const interval = Number(recurrence.interval) || 1;
+        return interval === 1 ? 'weekly' : `every ${interval} weeks`;
+    }
+    return '';
+}
+
 export function buildSeriesDates(startDate, options = {}) {
     const start = typeof startDate === 'string' ? startDate : localDateString(startDate);
-    if (!isIsoDate(start) || options.pattern !== 'weekly') return isIsoDate(start) ? [start] : [];
+    if (!isIsoDate(start) || !isRepeatingPattern(options.pattern)) return isIsoDate(start) ? [start] : [];
 
-    const interval = clampInt(options.interval, 1, MAX_SERIES_OCCURRENCES);
+    const intervalWeeks = options.pattern === 'fortnightly'
+        ? 2
+        : options.pattern === 'weekly'
+            ? clampInt(options.interval, 1, MAX_SERIES_OCCURRENCES)
+            : 0;
     const endType = options.endType || options.end?.type || 'after';
     const endDate = options.endDate || options.end?.date || '';
     const occurrences = clampInt(
@@ -154,13 +185,24 @@ export function buildSeriesDates(startDate, options = {}) {
     if (endType === 'on' && isIsoDate(endDate) && endDate < start) return [];
 
     const dates = [];
-    let cursor = start;
-    while (dates.length < MAX_SERIES_OCCURRENCES) {
+    let step = 0;
+    while (dates.length < MAX_SERIES_OCCURRENCES && step < MAX_SERIES_OCCURRENCES * 3) {
+        const cursor = options.pattern === 'monthly'
+            ? sameWeekdayInMonth(start, step)
+            : addDays(start, step * intervalWeeks * 7);
+        step += 1;
+        if (!cursor) {
+            if (endType === 'on' && isIsoDate(endDate)) {
+                const [year, month] = start.split('-').map(Number);
+                const monthStart = localDateString(new Date(year, month - 1 + step - 1, 1));
+                if (monthStart > endDate) break;
+            }
+            continue;
+        }
         if (endType === 'after' && dates.length >= occurrences) break;
         if (endType === 'on' && isIsoDate(endDate) && cursor > endDate) break;
         if (endType === 'on' && !isIsoDate(endDate) && dates.length >= 1) break;
         dates.push(cursor);
-        cursor = addDays(cursor, interval * 7);
     }
     return dates;
 }
@@ -185,11 +227,120 @@ export function partitionSeriesDates(dates, byDate, room, times, rangeLabel) {
         if (dateConflictsWithBusy(ranges, times)) {
             skippedDates.push({
                 date,
-                reason: `${room} is already booked at ${rangeLabel}`
+                reason: `${room} is already booked or held at ${rangeLabel}`
             });
         } else {
             bookedDates.push(date);
         }
     }
     return { bookedDates, skippedDates };
+}
+
+const ENTIRE_SPACE = 'MCIC Ground - Entire Space';
+const GROUND_HALVES = new Set(['MCIC Ground - Event Space', 'MCIC Ground - Design Space']);
+
+export function spacesConflict(left, right) {
+    if (!left || !right) return false;
+    if (left === right) return true;
+    if (left === ENTIRE_SPACE && GROUND_HALVES.has(right)) return true;
+    if (right === ENTIRE_SPACE && GROUND_HALVES.has(left)) return true;
+    return false;
+}
+
+function clockOverlap(start, end, otherStart, otherEnd) {
+    if (!start || !end || !otherStart || !otherEnd) return false;
+    return start < otherEnd && otherStart < end;
+}
+
+export function applyStoredHolds(byDate, bookings) {
+    (bookings || []).forEach((booking) => {
+        const status = booking?.status || 'PENDING';
+        if (status === 'DECLINED' || status === 'CANCELLED') return;
+        bookingWindows(booking).forEach((window) => {
+            const day = byDate?.[window.date];
+            if (!day || !window.start || !window.end) return;
+            Object.keys(day).forEach((room) => {
+                if (!spacesConflict(room, window.space)) return;
+                day[room].push({ start: window.start, end: window.end });
+            });
+        });
+    });
+    return byDate;
+}
+
+export function bookingWindows(booking) {
+    const holds = Array.isArray(booking?.tentativeHolds) && booking.tentativeHolds.length
+        ? booking.tentativeHolds
+        : [{
+            space: booking?.space,
+            bumpInDate: booking?.bumpInDate,
+            bumpIn: booking?.bumpIn,
+            bumpOut: booking?.bumpOut,
+            includeColonnadeAddon: booking?.includeColonnadeAddon
+        }];
+    return holds.flatMap((hold) => {
+        const windows = [{
+            space: hold.space,
+            date: hold.bumpInDate || '',
+            start: hold.bumpIn || '',
+            end: hold.bumpOut || ''
+        }];
+        if (hold.includeColonnadeAddon) {
+            windows.push({
+                space: 'MCIC Ground - Colonnade',
+                date: hold.bumpInDate || '',
+                start: hold.bumpIn || '',
+                end: hold.bumpOut || ''
+            });
+        }
+        return windows;
+    });
+}
+
+function windowIsTaken(target, approvedBookings) {
+    return (approvedBookings || []).some((booking) => (
+        bookingWindows(booking).some((other) => (
+            target.date
+            && target.date === other.date
+            && spacesConflict(target.space, other.space)
+            && clockOverlap(target.start, target.end, other.start, other.end)
+        ))
+    ));
+}
+
+export function holdAvailability(booking, approvedBookings) {
+    const approved = (approvedBookings || []).filter((item) => item && item.id !== booking?.id && item.status === 'APPROVED');
+    const holds = Array.isArray(booking?.tentativeHolds) && booking.tentativeHolds.length
+        ? booking.tentativeHolds
+        : [{
+            space: booking?.space,
+            bumpInDate: booking?.bumpInDate,
+            bumpIn: booking?.bumpIn,
+            bumpOut: booking?.bumpOut,
+            includeColonnadeAddon: booking?.includeColonnadeAddon
+        }];
+    return holds.map((hold) => (
+        windowIsTaken({
+            space: hold.space,
+            date: hold.bumpInDate || '',
+            start: hold.bumpIn || '',
+            end: hold.bumpOut || ''
+        }, approved) || (hold.includeColonnadeAddon && windowIsTaken({
+            space: 'MCIC Ground - Colonnade',
+            date: hold.bumpInDate || '',
+            start: hold.bumpIn || '',
+            end: hold.bumpOut || ''
+        }, approved))
+            ? 'Unavailable'
+            : 'Held'
+    ));
+}
+
+export function bookingQueueTag(booking, approvedBookings) {
+    if (booking?.status === 'APPROVED') return 'Accepted';
+    if (booking?.status === 'DECLINED') return 'Declined';
+    if (booking?.status === 'CANCELLED') return 'Cancelled';
+    const tags = holdAvailability(booking, approvedBookings);
+    if (!tags.length) return 'Held';
+    return tags.every((tag) => tag === 'Unavailable') ? 'Unavailable' : 'Held';
 }

@@ -1,5 +1,7 @@
-import { getCalendarClient } from './googleCalendar';
-import { isIsoDate } from './bookingRules';
+import { collection, getDocs } from 'firebase/firestore';
+import { getCalendarClient, isInventoryCalendarEvent } from './googleCalendar';
+import { db } from './firebase';
+import { applyStoredHolds, isIsoDate } from './bookingRules';
 
 const ROOMS = [
     'MCIC Ground - Entire Space',
@@ -58,6 +60,7 @@ export function busySlotsFromEvents(events, dateStr) {
     ROOMS.forEach(room => { busySlots[room] = []; });
 
     (events || []).forEach(event => {
+        if (isInventoryCalendarEvent(event)) return;
         const summary = event.summary || '';
         const desc = event.description || '';
         const slot = clockRangeForDate(event, dateStr);
@@ -107,4 +110,39 @@ export async function fetchBusySlotsForDates(dates) {
         byDate[dateStr] = busySlotsFromEvents(events, dateStr);
     });
     return byDate;
+}
+
+function emptyBusyByDate(dates) {
+    return Object.fromEntries(dates.map((date) => [
+        date,
+        Object.fromEntries(ROOMS.map((room) => [room, []]))
+    ]));
+}
+
+export async function availabilityForDates(dates) {
+    const unique = normaliseAvailabilityDates(dates);
+    if (!unique.length) {
+        const error = new Error('Date list required');
+        error.status = 400;
+        throw error;
+    }
+
+    let calendarLoaded = true;
+    let byDate;
+    try {
+        byDate = await fetchBusySlotsForDates(unique);
+    } catch (error) {
+        if (error?.status === 400) throw error;
+        calendarLoaded = false;
+        byDate = emptyBusyByDate(unique);
+    }
+
+    try {
+        const snapshot = await getDocs(collection(db, 'bookings'));
+        applyStoredHolds(byDate, snapshot.docs.map((item) => item.data()));
+    } catch (error) {
+        if (!calendarLoaded) throw error;
+    }
+
+    return { byDate, calendarLoaded };
 }

@@ -9,8 +9,21 @@ export async function siteSettings() {
     return {
         ticketing: data.ticketing !== false,
         tourVideoUrl: data.tourVideoUrl || '',
-        tourVideoPath: data.tourVideoPath || ''
+        tourVideoPath: data.tourVideoPath || '',
+        hiddenPages: Array.isArray(data.hiddenPages) ? data.hiddenPages.filter((path) => typeof path === 'string') : []
     };
+}
+
+export async function setPageHidden(path, hidden) {
+    const current = await siteSettings();
+    const next = new Set(current.hiddenPages);
+    if (hidden) next.add(path);
+    else next.delete(path);
+    await setDoc(SITE_DOC, {
+        hiddenPages: [...next],
+        updatedAt: new Date().toISOString()
+    }, { merge: true });
+    return siteSettings();
 }
 
 export async function setTicketing(enabled) {

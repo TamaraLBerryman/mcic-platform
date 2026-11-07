@@ -1,49 +1,11 @@
 "use client";
 
-import { useMemo, useState, useRef } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import Link from 'next/link';
 import Gate from '../../components/Gate';
-
-const pending = "Contents to be added";
-
-const kitchens = [
-  {
-    id: "k1",
-    name: "Kitchen 1",
-    image: "/kitchen-1.png",
-    zones: [
-      { id: "k1u1", name: "Upper cupboard 1", rect: [109, 160, 149, 191], items: "tea, sugar" },
-      { id: "k1u2", name: "Upper cupboard 2", rect: [259, 160, 159, 191], items: "almond milk, full cream milk, soy milk, oat milk, coffee" },
-      { id: "k1u3", name: "Upper cupboard 3", rect: [419, 160, 193, 191], items: pending },
-      { id: "k1u4", name: "Upper cupboard 4", rect: [613, 160, 193, 191], items: pending },
-      { id: "k1u5", name: "Upper cupboard 5", rect: [807, 160, 224, 191], items: pending },
-      { id: "k1d1", name: "Cutlery drawer", rect: [89, 588, 180, 47], items: pending },
-      { id: "k1l1", name: "Lower cupboard 1", rect: [89, 636, 180, 219], items: "paper bags, glad wrap, zip lock bags" },
-      { id: "k1l2", name: "Lower cupboard 2", rect: [270, 588, 147, 267], items: "disposable cutlery, takeaway boxes" },
-      { id: "k1l3", name: "Lower cupboard 3", rect: [418, 588, 169, 267], items: pending },
-      { id: "k1l4", name: "Lower cupboard 5", rect: [589, 588, 221, 267], items: "bin" },
-      { id: "k1fridge", name: "Fridge", rect: [1083, 201, 356, 688], items: pending },
-    ],
-  },
-  {
-    id: "k2",
-    name: "Kitchen 2",
-    image: "/kitchen-2.png",
-    zones: [
-      { id: "k2u1", name: "Upper cupboard 1", rect: [102, 132, 184, 190], items: "mugs, glasses, cups" },
-      { id: "k2u2", name: "Upper cupboard 2", rect: [287, 132, 219, 190], items: "plates, bowls, cake stands" },
-      { id: "k2u3", name: "Upper cupboard 3", rect: [507, 132, 214, 190], items: "plates, bowls, cake stands" },
-      { id: "k2u4", name: "Upper cupboard 4", rect: [722, 132, 227, 190], items: pending },
-      { id: "k2u5", name: "Upper cupboard 5", rect: [950, 132, 234, 190], items: pending },
-      { id: "k2u6", name: "Upper cupboard 6", rect: [1185, 132, 250, 190], items: pending },
-      { id: "k2l1", name: "Lower cupboard 1", rect: [282, 570, 212, 301], items: pending },
-      { id: "k2l2", name: "Lower cupboard 2", rect: [495, 570, 249, 301], items: "cleaning supplies" },
-      { id: "k2l3", name: "Lower cupboard 3", rect: [1002, 570, 231, 301], items: "bin" },
-      { id: "k2d1", name: "Right-hand drawer 1", rect: [1235, 570, 240, 70], items: "cutlery, knife, fork, spoon, tongs, bottle opener" },
-      { id: "k2d2", name: "Right-hand drawer 2", rect: [1235, 645, 240, 225], items: "tea station, large serving plates, cutting boards" },
-    ],
-  },
-];
+import { db } from '../lib/firebase';
+import { collection, onSnapshot } from 'firebase/firestore';
+import { KITCHENS, KITCHEN_PENDING, kitchenZones, saveLinkedKitchenItem } from '../lib/placeItems';
 
 function percentageRect([x, y, width, height]) {
   return {
@@ -59,20 +21,34 @@ function KitchenItemFinderPage() {
   const [selectedId, setSelectedId] = useState(null);
   const [focused, setFocused] = useState(false);
   const [error, setError] = useState("");
+  const [placeItems, setPlaceItems] = useState(null);
+  const [newName, setNewName] = useState("");
+  const [newZone, setNewZone] = useState(kitchenZones()[0]?.id || "");
+  const [adding, setAdding] = useState(false);
 
-  // Refs to scroll directly to the matched kitchen article
   const kitchenRefs = useRef({});
 
-  const zones = useMemo(
-    () => kitchens.flatMap((kitchen) => kitchen.zones.map((zone) => ({ ...zone, kitchenId: kitchen.id, kitchenName: kitchen.name }))),
-    [],
-  );
+  useEffect(() => {
+    const unsubscribe = onSnapshot(collection(db, "items"), (snapshot) => {
+      setPlaceItems(snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() })));
+    }, () => setPlaceItems([]));
+    return () => unsubscribe();
+  }, []);
+
+  const zones = useMemo(() => {
+    const loaded = Array.isArray(placeItems);
+    return KITCHENS.flatMap((kitchen) => kitchen.zones.map((zone) => {
+      const names = (placeItems || []).filter((item) => item.kitchenZone === zone.id && item.name).map((item) => item.name);
+      const items = names.length ? names.join(", ") : (loaded ? KITCHEN_PENDING : zone.items);
+      return { ...zone, items, kitchenId: kitchen.id, kitchenName: kitchen.name };
+    }));
+  }, [placeItems]);
 
   // Extract unique items mapped to zone location and kitchen name
   const items = useMemo(() => {
     const itemMap = [];
     zones.forEach((zone) => {
-      if (zone.items === pending) return;
+      if (zone.items === KITCHEN_PENDING) return;
       zone.items.split(",").map((item) => item.trim()).forEach((item) => {
         if (item) {
           itemMap.push({
@@ -122,11 +98,29 @@ function KitchenItemFinderPage() {
     const match = zones.find((zone) => zone.items.split(",").some((item) => item.trim().toLowerCase() === searchTerm))
       || zones.find((zone) => zone.items.toLowerCase().includes(searchTerm));
 
-    if (match) {
+    if (match && match.items !== KITCHEN_PENDING) {
       highlight(match.id, query);
     } else {
       setSelectedId(null);
       setError("No stored item matches that search yet.");
+    }
+  }
+
+  async function addKitchenItem(event) {
+    event.preventDefault();
+    const name = newName.trim();
+    if (!name || !newZone) return;
+    setAdding(true);
+    setError("");
+    try {
+      await saveLinkedKitchenItem(db, { name, zoneId: newZone });
+      setNewName("");
+      highlight(newZone, name);
+    } catch (err) {
+      console.error("Kitchen item was not saved:", err);
+      setError("The item could not be added.");
+    } finally {
+      setAdding(false);
     }
   }
 
@@ -141,6 +135,7 @@ function KitchenItemFinderPage() {
               Kitchen Search
             </h1>
             <p className="text-gray-600 text-xs sm:text-sm">Locate tea, mugs, cutlery etc. in kitchen cupboards.</p>
+            <p className="text-sm font-bold text-black pt-2">Fridge passcode: 308</p>
           </div>
         </header>
 
@@ -195,10 +190,37 @@ function KitchenItemFinderPage() {
           )}
         </div>
 
+        <form onSubmit={addKitchenItem} className="bg-white p-4 border border-gray-200 rounded-sm shadow-xs flex flex-col sm:flex-row gap-2">
+          <input
+            value={newName}
+            onChange={(event) => setNewName(event.target.value)}
+            placeholder="Add an item, e.g. tea"
+            aria-label="Item name"
+            className="min-w-0 flex-1 bg-gray-50 border border-gray-300 text-sm px-3.5 py-2.5 rounded-sm focus:outline-none focus:border-black font-medium text-black"
+          />
+          <select
+            value={newZone}
+            onChange={(event) => setNewZone(event.target.value)}
+            aria-label="Cupboard"
+            className="bg-white border border-gray-300 text-sm px-3 py-2.5 rounded-sm"
+          >
+            {kitchenZones().map((zone) => (
+              <option key={zone.id} value={zone.id}>{zone.kitchenName}, {zone.name}</option>
+            ))}
+          </select>
+          <button
+            type="submit"
+            disabled={adding}
+            className="bg-black text-white hover:bg-[#EAD64D] hover:text-black transition-colors px-6 py-2.5 rounded-sm font-bold text-xs uppercase tracking-wider shrink-0 cursor-pointer disabled:opacity-50"
+          >
+            {adding ? "Adding..." : "Add item"}
+          </button>
+        </form>
+
         {/* SIDE-BY-SIDE HORIZONTAL SCROLLABLE KITCHEN MAPS */}
         <div className="relative">
           <div className="flex gap-6 overflow-x-auto pb-4 pt-1 snap-x snap-mandatory scroll-smooth no-scrollbar">
-            {kitchens.map((kitchen) => {
+            {KITCHENS.map((kitchen) => {
               const selectedZone = kitchen.zones.find((zone) => zone.id === selectedId);
               return (
                 <article

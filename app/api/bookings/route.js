@@ -1,9 +1,9 @@
-import { addDoc, collection, doc, getDoc, updateDoc } from 'firebase/firestore';
+import { addDoc, collection, doc, getDoc, getDocs, setDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { emailFromRequest, hasAdminAccess } from '../../lib/verifyUser';
 import { siteSettings } from '../../lib/siteSettings';
-import { createBookingCalendarHolds } from '../../lib/googleCalendar';
-import { fetchBusySlotsForDates } from '../../lib/calendarAvailability';
+import { createBookingCalendarHolds, createBookingInventoryHolds } from '../../lib/googleCalendar';
+import { availabilityForDates } from '../../lib/calendarAvailability';
 import { normalizeEmailReminders } from '../../lib/eventReminders';
 import { confirmationText } from '../../lib/organiserEmails';
 import { sendPlainEmail } from '../../lib/mail';
@@ -13,7 +13,10 @@ import {
     dateConflictsWithBusy,
     isFoundersBooker,
     isIsoDate,
+    isRepeatingPattern,
     isUnswStaff,
+    bookingQueueTag,
+    holdAvailability,
     lockoutMessage,
     selectedTimesFromSlots
 } from '../../lib/bookingRules';
@@ -28,7 +31,7 @@ function sanitizeRecurrence(bookingData) {
     const start = isIsoDate(bookingData.bumpInDate) ? bookingData.bumpInDate : '';
     const incoming = bookingData.recurrence;
     const founders = isFoundersBooker(bookingData.userType, bookingData.department);
-    if (!founders || !incoming || incoming.pattern !== 'weekly') {
+    if (!founders || !incoming || !isRepeatingPattern(incoming.pattern)) {
         return {
             pattern: 'none',
             interval: 1,
@@ -53,8 +56,8 @@ function sanitizeRecurrence(bookingData) {
     });
 
     return {
-        pattern: 'weekly',
-        interval: clampOccurrenceCount(incoming.interval),
+        pattern: incoming.pattern,
+        interval: incoming.pattern === 'weekly' ? clampOccurrenceCount(incoming.interval) : 1,
         end,
         bookedDates: [...new Set((incoming.bookedDates || []).filter(isIsoDate))].slice(0, 52),
         skippedDates: skippedDates.slice(0, 52)
@@ -79,7 +82,18 @@ async function confirmSeriesHolds(record) {
     }
 
     try {
-        const byDate = await fetchBusySlotsForDates(record.recurrence.bookedDates);
+        const { byDate, calendarLoaded } = await availabilityForDates(record.recurrence.bookedDates);
+        if (!calendarLoaded) {
+            return {
+                recurrence: {
+                    ...record.recurrence,
+                    bookedDates: [],
+                    unconfirmedDates: record.recurrence.bookedDates
+                },
+                calendarError: 'Live availability could not be loaded, so repeating holds were not created.',
+                holdDates: []
+            };
+        }
         const bookedDates = [];
         const skippedDates = [...record.recurrence.skippedDates];
         const alreadySkipped = new Set(skippedDates.map(item => item.date));
@@ -91,7 +105,7 @@ async function confirmSeriesHolds(record) {
                 if (!alreadySkipped.has(date)) {
                     skippedDates.push({
                         date,
-                        reason: `${record.space} is already booked at ${rangeLabel}`
+                        reason: `${record.space} is already booked or held at ${rangeLabel}`
                     });
                 }
             } else {
@@ -119,6 +133,21 @@ async function confirmSeriesHolds(record) {
 
 function isTime(value) {
     return /^([01]\d|2[0-3]):[0-5]\d$/.test(String(value || ''));
+}
+
+async function inventoryNameMap() {
+    try {
+        const snapshot = await getDocs(collection(db, 'items'));
+        const names = {};
+        snapshot.docs.forEach(item => {
+            const name = item.data().name || item.id;
+            names[item.id] = name;
+            names[String(item.id).toUpperCase()] = name;
+        });
+        return names;
+    } catch {
+        return {};
+    }
 }
 
 function cleanTentativeHolds(holds, bookingData) {
@@ -185,11 +214,18 @@ export async function GET(request) {
             return Response.json({ success: false, error: 'This booking belongs to a different organiser.' }, { status: 403 });
         }
         const signOff = booking.signOff || null;
+        const approvedSnapshot = await getDocs(collection(db, 'bookings'));
+        const approved = approvedSnapshot.docs
+            .map(item => ({ id: item.id, ...item.data() }))
+            .filter(item => item.status === 'APPROVED');
+        const queued = { id: snapshot.id, ...booking };
         return Response.json({
             success: true,
             booking: {
                 id: snapshot.id,
                 ...booking,
+                queueTag: bookingQueueTag(queued, approved),
+                holdTags: holdAvailability(queued, approved),
                 signOff: signOff ? { fullName: signOff.fullName, date: signOff.date } : null
             }
         });
@@ -224,7 +260,7 @@ export async function POST(request) {
             ? normalizeEmailReminders(bookingData.emailReminders)
             : { enabled: false, reminders: [] };
         const tentativeHolds = cleanTentativeHolds(bookingData.tentativeHolds, bookingData);
-        if (tentativeHolds.length > 1 && bookingData.recurrence?.pattern === 'weekly') {
+        if (tentativeHolds.length > 1 && isRepeatingPattern(bookingData.recurrence?.pattern)) {
             return Response.json({ success: false, error: 'A repeating booking cannot also have tentative holds.' }, { status: 400 });
         }
         const record = {
@@ -238,7 +274,7 @@ export async function POST(request) {
                 : null,
             emailReminders,
             organiserEmail: bookingData.mainContact.email.trim().toLowerCase(),
-            casualStaffDetails: isFoundersBooker(bookingData.userType, bookingData.department)
+            casualStaffDetails: (isFoundersBooker(bookingData.userType, bookingData.department) || bookingData.foundersStaff)
                 ? (bookingData.casualStaffDetails || [])
                 : (bookingData.casualStaffDetails || []).map(row => ({ ...row, preferredStaff: '' })),
             siteOrigin: origin,
@@ -246,8 +282,21 @@ export async function POST(request) {
             createdAt: new Date().toISOString()
         };
         delete record.approvalUrl;
+        const rsaUpload = record.rsaChoice === 'upload' && record.rsaFileData
+            ? { fileName: record.rsaFileName || 'RSA card', fileData: record.rsaFileData }
+            : null;
+        delete record.rsaFileData;
 
         const bookingRef = await addDoc(collection(db, 'bookings'), record);
+        if (rsaUpload) {
+            await setDoc(doc(db, 'rsaCards', record.organiserEmail), {
+                email: record.organiserEmail,
+                fileName: rsaUpload.fileName,
+                fileData: rsaUpload.fileData,
+                uploadedAt: new Date().toISOString(),
+                expiryDate: ''
+            });
+        }
         const approvalUrl = `${origin}/admin/approve?id=${bookingRef.id}`;
 
         let publicEventId = null;
@@ -285,10 +334,10 @@ export async function POST(request) {
         }
 
         let recurrence = record.recurrence;
-        let holdDates = recurrence.pattern === 'weekly' ? [] : recurrence.bookedDates;
+        let holdDates = isRepeatingPattern(recurrence.pattern) ? [] : recurrence.bookedDates;
         let calendarError = null;
 
-        if (recurrence.pattern === 'weekly') {
+        if (isRepeatingPattern(recurrence.pattern)) {
             const confirmed = await confirmSeriesHolds(record);
             recurrence = confirmed.recurrence;
             calendarError = confirmed.calendarError;
@@ -321,6 +370,19 @@ export async function POST(request) {
             });
             googleEventIds = holds.ids;
             calendarError = calendarError || holds.calendarError;
+        }
+
+        const inventoryWindows = tentativeHolds.length
+            ? tentativeHolds
+            : holdDates.map(date => ({ bumpInDate: date, bumpIn: record.bumpIn, bumpOut: record.bumpOut }));
+        const inventoryHolds = await createBookingInventoryHolds({
+            ...record,
+            bookingId: bookingRef.id,
+            inventoryWindows
+        }, await inventoryNameMap());
+        googleEventIds.push(...inventoryHolds.ids);
+        if (inventoryHolds.calendarError) {
+            calendarError = [calendarError, inventoryHolds.calendarError].filter(Boolean).join(' ');
         }
 
         const googleEventId = googleEventIds[0] || null;

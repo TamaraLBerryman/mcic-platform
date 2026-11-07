@@ -66,12 +66,9 @@ export const ROOM_INCLUSIONS = {
         'Open Co-working Setup',
         'Shared Kitchenette Access'
     ],
-    'MCIC Ground - Colonnade': [
-        'Covered Outdoor Walkway outside MCIC Event & Design Spaces'
-    ],
-    'MCIC Ground - AI Makerspace': [
-        'Our AI Makerspace is a space to test and refine AI technologies.'
-    ]
+    'MCIC Ground - Colonnade': [],
+    'MCIC Ground - AI Makerspace': [],
+    'MCIC Ground - AI Makerspace - COMING SOON': []
 };
 
 export const CASUAL_STAFF_LIST = [

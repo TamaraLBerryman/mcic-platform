@@ -15,6 +15,34 @@ export function allows(access, level) {
     return false;
 }
 
+export const ITEM_ACCESS_OPTIONS = [
+    ['account', 'Any signed-in account'],
+    ['founders', 'Founders general staff'],
+    ['casual', 'Casual staff'],
+    ['admin', 'Admin']
+];
+
+const ITEM_ACCESS_IDS = new Set(ITEM_ACCESS_OPTIONS.map(([id]) => id));
+
+export function itemAccessLevels(viewAccess) {
+    if (Array.isArray(viewAccess)) {
+        const levels = viewAccess.filter((level) => ITEM_ACCESS_IDS.has(level));
+        return levels.length ? levels : ['account'];
+    }
+    if (viewAccess === 'staff') return ['founders', 'casual'];
+    if (ITEM_ACCESS_IDS.has(viewAccess)) return [viewAccess];
+    return ['account'];
+}
+
+export function canViewItem(access, viewAccess) {
+    return itemAccessLevels(viewAccess).some((level) => allows(access, level));
+}
+
+export function itemAccessLabel(viewAccess) {
+    const labels = Object.fromEntries(ITEM_ACCESS_OPTIONS);
+    return itemAccessLevels(viewAccess).map((level) => labels[level]).join(', ');
+}
+
 export function accessFromMember(email, group, envAdmin) {
     const admin = Boolean(envAdmin) || group === 'admin';
     const founders = admin || group === 'founders';

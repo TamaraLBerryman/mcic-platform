@@ -1,6 +1,6 @@
 // app/api/calendar/availability/route.js
 import { NextResponse } from 'next/server';
-import { fetchBusySlotsForDates, normaliseAvailabilityDates } from '../../../lib/calendarAvailability';
+import { availabilityForDates, normaliseAvailabilityDates } from '../../../lib/calendarAvailability';
 
 function availabilityError(error) {
     const status = error?.status === 400 ? 400 : 500;
@@ -20,7 +20,7 @@ export async function GET(request) {
     }
 
     try {
-        const byDate = await fetchBusySlotsForDates([dateStr]);
+        const { byDate } = await availabilityForDates([dateStr]);
         return NextResponse.json({ busySlots: byDate[dateStr] || {} });
     } catch (error) {
         return availabilityError(error);
@@ -41,8 +41,12 @@ export async function POST(request) {
     }
 
     try {
-        const byDate = await fetchBusySlotsForDates(dates);
-        return NextResponse.json({ byDate, capped: dates.length >= 52 && (body.dates || []).length > dates.length });
+        const { byDate, calendarLoaded } = await availabilityForDates(dates);
+        return NextResponse.json({
+            byDate,
+            calendarLoaded,
+            capped: dates.length >= 52 && (body.dates || []).length > dates.length
+        });
     } catch (error) {
         return availabilityError(error);
     }
